@@ -1,0 +1,20 @@
+# Python / Flask
+__pycache__/
+*.pyc
+instance/
+.env
+
+# Node / React
+frontend/node_modules/
+frontend/dist/
+
+# Docker
+*.log
+*.pid
+.env.docker
+docker-compose.override.yml
+
+# System files
+.DS_Store
+.vscode/
+.idea/
