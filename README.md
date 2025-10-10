@@ -24,25 +24,27 @@ El sistema garantiza la **integridad, trazabilidad y disponibilidad** de la info
 
 El sistema sigue una estructura **frontend–backend desacoplada**, comunicada por API REST y contenedorizada con Docker Compose.
 
-📦 Historia-Clinica-CAU-Full-API
-├── frond_historias_clinicas/        # Frontend Vue 3 (Vite + PrimeVue + Sakai)
-│   ├── src/                         # Componentes, vistas y lógica de UI
-│   ├── public/                      # Recursos estáticos
-│   └── vite.config.mjs              # Configuración de build
+```bash
+📦 Historia-Clinica-CAU-Full-API/
+├── frond_historias_clinicas/                # Frontend Vue 3 (Vite + PrimeVue + Sakai)
+│   ├── src/                                 # Componentes, vistas y lógica de UI
+│   ├── public/                              # Recursos estáticos
+│   └── vite.config.mjs                      # Configuración de build
 │
-├── historia_clinica_bfa back antes de intentar migrar a react/
-│   ├── app/                         # Código backend Flask
-│   │   ├── main.py                  # Entry point (Flask)
-│   │   ├── routes/                  # Rutas API (pacientes, turnos, usuarios, blockchain)
-│   │   ├── auth.py                  # Manejo de login y roles
-│   │   ├── database.py              # Conexión MySQL
-│   │   └── utils/                   # Hash, PDF, blockchain, etc.
-│   ├── docker-compose.yml           # Orquestación de servicios backend
-│   ├── db/init.sql                  # Estructura base de datos
-│   ├── bfa-node/                    # Nodo Geth conectado a BFA
-│   └── reset.sh / reset_web.sh      # Scripts de mantenimiento
+├── historia_clinica_bfa/                    # Backend Flask
+│   ├── app/                                 # Código backend Flask
+│   │   ├── main.py                          # Entry point (Flask)
+│   │   ├── routes/                          # Rutas API (pacientes, turnos, usuarios, blockchain)
+│   │   ├── auth.py                          # Manejo de login y roles
+│   │   ├── database.py                      # Conexión MySQL
+│   │   └── utils/                           # Hash, PDF, blockchain, etc.
+│   ├── docker-compose.yml                   # Orquestación de servicios backend
+│   ├── db/init.sql                          # Estructura base de datos
+│   ├── bfa-node/                            # Nodo Geth conectado a BFA
+│   └── reset.sh / reset_web.sh              # Scripts de mantenimiento
 │
-└── docker-compose.yml               # Entorno integrado Flask + MySQL + Nginx
+└── docker-compose.yml                       # Entorno integrado Flask + MySQL + Nginx
+
 
 ---
 
