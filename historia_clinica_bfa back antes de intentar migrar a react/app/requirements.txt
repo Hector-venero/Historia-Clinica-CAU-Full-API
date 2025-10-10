@@ -1,0 +1,8 @@
+Flask
+Flask-Login
+mysql-connector-python
+reportlab
+web3==6.15.0
+eth-tester
+Flask-Mail
+flask-cors

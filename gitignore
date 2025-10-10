@@ -1,20 +1,57 @@
-# Python / Flask
+# =====================================
+# 🔹 PYTHON / FLASK
+# =====================================
 __pycache__/
 *.pyc
+*.pyo
 instance/
 .env
+*.env
+.env.*
 
-# Node / React
-frontend/node_modules/
-frontend/dist/
+# =====================================
+# 🔹 NODE / VUE
+# =====================================
+frond_historias_clinicas/**/node_modules/
+frond_historias_clinicas/**/dist/
+frond_historias_clinicas/**/.vite/
 
-# Docker
+# =====================================
+# 🔹 DOCKER
+# =====================================
 *.log
 *.pid
 .env.docker
 docker-compose.override.yml
+**/db_data/
+**/mysql-data/
+**/pgdata/
+**/.mysql/
 
-# System files
+# =====================================
+# 🔹 SISTEMA / IDE
+# =====================================
 .DS_Store
 .vscode/
 .idea/
+*.sublime-project
+*.sublime-workspace
+
+# =====================================
+# 🔹 ARCHIVOS BINARIOS Y TEMPORALES
+# =====================================
+*.tmp
+*.swp
+*.out
+
+# =====================================
+# 🔹 BFA / Blockchain local
+# =====================================
+**/bfa-node/nucleo/test2network/geth/
+**/bfa-node/nucleo/test2network/keystore/
+
+# =====================================
+# 🔹 MIGRACIONES o DATOS TEMPORALES
+# =====================================
+migrations/
+db/usuarios_roles.sql

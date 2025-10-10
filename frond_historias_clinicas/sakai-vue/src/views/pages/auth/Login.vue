@@ -1,0 +1,75 @@
+<script setup>
+import logoUnsam from '@/assets/logo_unsam_sin_letras.png'
+import FloatingConfigurator from '@/components/FloatingConfigurator.vue'
+import axios from 'axios'
+import { ref } from 'vue'
+import { useRouter } from 'vue-router'
+
+const usuario = ref('')
+const password = ref('')
+const checked = ref(false)
+const router = useRouter()
+
+const login = async () => {
+  try {
+    const res = await axios.post('/api/login', {
+      username: usuario.value,
+      password: password.value
+    }, { withCredentials: true })
+
+    localStorage.setItem('loggedIn', 'true')
+    router.push('/')
+  } catch (error) {
+    console.error('Error al iniciar sesión:', error)
+    alert('Credenciales incorrectas o error de red')
+  }
+}
+</script>
+
+<template>
+  <FloatingConfigurator />
+  <div class="bg-surface-50 dark:bg-surface-950 flex items-center justify-center min-h-screen min-w-[100vw] overflow-hidden">
+    <div class="flex flex-col items-center justify-center">
+      <div style="border-radius: 56px; padding: 0.3rem; background: linear-gradient(180deg, var(--primary-color) 10%, rgba(33, 150, 243, 0) 30%)">
+        <div class="w-full bg-surface-0 dark:bg-surface-900 py-20 px-8 sm:px-20" style="border-radius: 53px">
+          <div class="text-center mb-8">
+            <img :src="logoUnsam" alt="Logo CAU" class="mb-6 w-20 mx-auto" />
+            <div class="text-surface-900 dark:text-surface-0 text-3xl font-medium mb-4">
+              Bienvenido al Sistema de <br />Historias Clínicas del CAU
+            </div>
+            <span class="text-muted-color font-medium">Iniciá sesión para continuar</span>
+          </div>
+
+          <div>
+            <label for="usuario1" class="block text-surface-900 dark:text-surface-0 text-xl font-medium mb-2">Usuario</label>
+            <InputText id="usuario1" type="text" placeholder="Usuario" class="w-full md:w-[30rem] mb-8" v-model="usuario" />
+
+            <label for="password1" class="block text-surface-900 dark:text-surface-0 font-medium text-xl mb-2">Contraseña</label>
+            <Password id="password1" v-model="password" placeholder="Contraseña" :toggleMask="true" class="mb-4" fluid :feedback="false"></Password>
+
+            <div class="flex items-center justify-between mt-2 mb-8 gap-8">
+              <div class="flex items-center">
+                <Checkbox v-model="checked" id="rememberme1" binary class="mr-2"></Checkbox>
+                <label for="rememberme1">Recordarme</label>
+              </div>
+              <span class="font-medium no-underline ml-2 text-right cursor-pointer text-primary">¿Olvidaste tu contraseña?</span>
+            </div>
+            <Button label="Ingresar" class="w-full" @click="login"></Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<style scoped>
+.pi-eye {
+  transform: scale(1.6);
+  margin-right: 1rem;
+}
+
+.pi-eye-slash {
+  transform: scale(1.6);
+  margin-right: 1rem;
+}
+</style>
