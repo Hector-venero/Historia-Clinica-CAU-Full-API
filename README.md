@@ -44,6 +44,7 @@ El sistema sigue una estructura **frontend–backend desacoplada**, comunicada p
 │   └── reset.sh / reset_web.sh              # Scripts de mantenimiento
 │
 └── docker-compose.yml                       # Entorno integrado Flask + MySQL + Nginx
+```
 
 ---
 
@@ -69,6 +70,8 @@ El sistema sigue una estructura **frontend–backend desacoplada**, comunicada p
 git clone https://github.com/Hector-venero/Historia-Clinica-CAU-Full-API.git
 cd Historia-Clinica-CAU-Full-API
 ```
+
+---
 
 ### 2️⃣ Configurar entorno (.env)
 
