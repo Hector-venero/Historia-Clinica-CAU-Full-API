@@ -70,8 +70,6 @@ git clone https://github.com/Hector-venero/Historia-Clinica-CAU-Full-API.git
 cd Historia-Clinica-CAU-Full-API
 ```
 
----
-
 ### 2️⃣ Configurar entorno (.env)
 
 Crear un archivo `.env` dentro del backend con las variables:
