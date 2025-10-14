@@ -45,7 +45,6 @@ El sistema sigue una estructura **frontend–backend desacoplada**, comunicada p
 │
 └── docker-compose.yml                       # Entorno integrado Flask + MySQL + Nginx
 
-
 ---
 
 ## 🧰 Tecnologías Utilizadas
