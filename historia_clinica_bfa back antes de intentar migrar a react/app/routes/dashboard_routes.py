@@ -192,22 +192,23 @@ def get_dashboard_semanal():
             """, (hoy, hasta_7_dias))
         ausencias = cursor.fetchall()
 
+
         # --- Normalizar datos ---
-        labels = [(hoy + timedelta(days=i)).strftime("%d/%m") for i in range(7)]
+        labels = []
         valores_turnos = []
         valores_ausencias = []
 
-        for dia_str in labels:
-            dia_dt = datetime.strptime(dia_str, "%d/%m").date()
-            turno = next((t["total"] for t in turnos if t["dia"] == dia_dt), 0)
-            ausencia = next((a["total"] for a in ausencias if a["dia"] == dia_dt), 0)
+        for i in range(7):
+            dia = hoy + timedelta(days=i)
+            labels.append(dia.strftime("%d/%m"))
+            turno = next((t["total"] for t in turnos if t["dia"] == dia), 0)
+            ausencia = next((a["total"] for a in ausencias if a["dia"] == dia), 0)
             valores_turnos.append(turno)
             valores_ausencias.append(ausencia)
 
         return jsonify({
             "labels": labels,
-            "turnos": valores_turnos,
-            "ausencias": valores_ausencias
+            "turnos": valores_turnos
         })
 
     except Exception as e:

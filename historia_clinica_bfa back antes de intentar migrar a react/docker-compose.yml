@@ -10,7 +10,7 @@ services:
       - ./app:/app
     depends_on:
       - db
-      - bfa-node  # 👈 importante
+      - bfa-node
     environment:
       - FLASK_ENV=development
       - FLASK_APP=main.py
@@ -27,9 +27,12 @@ services:
   db:
     image: mysql:8.0
     container_name: historia_db
+    restart: always
     environment:
       MYSQL_ROOT_PASSWORD: root
       MYSQL_DATABASE: hc_bfa
+      TZ: America/Argentina/Buenos_Aires  
+    command: --default-time-zone='America/Argentina/Buenos_Aires'  
     volumes:
       - db_data:/var/lib/mysql
       - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql

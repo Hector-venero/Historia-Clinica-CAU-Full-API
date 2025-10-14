@@ -10,7 +10,7 @@ const loading = ref(true)
 const error = ref(null)
 const dashboard = ref(null)
 
-// Datos del gráfico
+// Datos del gráfico (solo turnos)
 const chartData = ref({ labels: [], datasets: [] })
 const chartOptions = ref({})
 
@@ -26,10 +26,10 @@ const fetchDashboard = async () => {
     ])
 
     dashboard.value = resDashboard.data
-    const { labels, turnos, ausencias } = resSemanal.data
+    const { labels, turnos } = resSemanal.data
 
-    // Colores institucionales UNSAM
-    const colores = turnos.map(v => (v > 5 ? '#00936B' : '#3DB5E6')) // verde UNSAM si >5 turnos, celeste si no
+    // ✅ Solo turnos — sin ausencias
+    const colores = turnos.map(v => (v > 5 ? '#00936B' : '#3DB5E6')) // verde UNSAM si >5, celeste si no
 
     chartData.value = {
       labels,
@@ -40,13 +40,6 @@ const fetchDashboard = async () => {
           backgroundColor: colores,
           borderRadius: 8,
           hoverBackgroundColor: '#0073A7',
-          borderWidth: 0
-        },
-        {
-          label: 'Ausencias / bloqueos',
-          data: ausencias,
-          backgroundColor: '#B0BEC5',
-          borderRadius: 8,
           borderWidth: 0
         }
       ]
@@ -72,20 +65,14 @@ const fetchDashboard = async () => {
           bodyFont: { size: 13 },
           callbacks: {
             label: (context) => {
-              const tipo = context.dataset.label
               const valor = context.parsed.y
-              return `${tipo}: ${valor}`
-            },
-            afterBody: (context) => {
-              if (context.length === 2) {
-                return `Total día: ${context[0].parsed.y + context[1].parsed.y}`
-              }
+              return `Turnos: ${valor}`
             }
           }
         },
         title: {
           display: true,
-          text: 'Turnos y ausencias — próximos 7 días',
+          text: 'Turnos programados — próximos 7 días',
           font: { size: 16, weight: 'bold' },
           color: '#1E3A8A'
         }
@@ -104,7 +91,7 @@ const fetchDashboard = async () => {
         y: {
           title: {
             display: true,
-            text: 'Cantidad',
+            text: 'Cantidad de turnos',
             color: '#374151',
             font: { weight: 'bold' }
           },
@@ -121,7 +108,6 @@ const fetchDashboard = async () => {
     loading.value = false
   }
 }
-
 // ------------------------------
 // 🚀 Inicialización
 // ------------------------------
@@ -214,14 +200,21 @@ onMounted(fetchDashboard)
       </div>
 
       <!-- ===============================
-           GRÁFICO UNSAM PRO (PRÓXIMOS 7 DÍAS)
+          GRÁFICO UNSAM PRO (PRÓXIMOS 7 DÍAS)
       ================================== -->
       <div class="col-span-12 lg:col-span-8">
         <div class="card shadow-md border border-gray-100 bg-white rounded-xl p-5">
           <h2 class="text-xl font-semibold mb-4 text-[#003B70]">
-            📈 Actividad médica (próximos 7 días)
+            📈 Turnos programados (próximos 7 días)
           </h2>
-          <Chart type="bar" :data="chartData" :options="chartOptions" class="h-80" />
+          <Chart
+            v-if="chartData && chartData.labels.length > 0"
+            type="bar"
+            :data="chartData"
+            :options="chartOptions"
+            class="h-80"
+          />
+          <p v-else class="text-gray-500">Sin datos disponibles para el gráfico.</p>
         </div>
       </div>
 
