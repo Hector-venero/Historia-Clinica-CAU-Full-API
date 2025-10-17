@@ -73,6 +73,51 @@
           ></textarea>
         </div>
 
+        <!-- 🔹 Nueva sección: Tanda de turnos -->
+        <div class="mt-6 border-t pt-4">
+          <label class="flex items-center gap-2 text-gray-700 font-semibold cursor-pointer">
+            <input type="checkbox" v-model="esTanda" class="accent-blue-600 w-5 h-5" />
+            Crear tanda de turnos (kinesiología, rehabilitación, etc.)
+          </label>
+
+          <transition name="fade">
+            <div v-if="esTanda" class="mt-4 space-y-4 bg-blue-50 p-4 rounded-xl border border-blue-100">
+              <div>
+                <label class="block mb-2 font-semibold text-gray-700">Cantidad de turnos</label>
+                <input
+                  v-model.number="cantidad"
+                  type="number"
+                  min="1"
+                  class="w-full p-3 border rounded-xl shadow-sm focus:ring-2 focus:ring-blue-500"
+                  placeholder="Ejemplo: 10"
+                />
+              </div>
+
+              <div>
+                <label class="block mb-2 font-semibold text-gray-700">Días de la semana</label>
+                <div class="grid grid-cols-3 gap-2">
+                  <label
+                    v-for="(dia, idx) in diasSemana"
+                    :key="idx"
+                    class="flex items-center space-x-2"
+                  >
+                    <input
+                      type="checkbox"
+                      v-model="diasSeleccionados"
+                      :value="dia"
+                      class="accent-blue-600 w-5 h-5"
+                    />
+                    <span>{{ dia }}</span>
+                  </label>
+                </div>
+                <p class="text-gray-500 text-sm mt-1">
+                  Seleccioná los días en que se repetirá el turno
+                </p>
+              </div>
+            </div>
+          </transition>
+        </div>
+
         <!-- Botón -->
         <div class="flex justify-center">
           <button
@@ -108,6 +153,12 @@ const motivo = ref('')
 const mensaje = ref('')
 const error = ref('')
 const profesionales = ref([])
+
+// 🔹 Campos nuevos para tanda
+const esTanda = ref(false)
+const cantidad = ref(10)
+const diasSemana = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"]
+const diasSeleccionados = ref([])
 
 onMounted(async () => {
   try {
@@ -153,17 +204,25 @@ async function crearTurno() {
     return
   }
 
+  const endpoint = esTanda.value ? '/api/turnos/tanda' : '/api/turnos'
+  const payload = {
+    paciente_id: pacienteId.value,
+    usuario_id: usuarioId.value,
+    fecha: fecha.value,
+    motivo: motivo.value
+  }
+
+  if (esTanda.value) {
+    payload.cantidad = cantidad.value
+    payload.dias_semana = diasSeleccionados.value
+  }
+
   try {
-    const resp = await fetch('/api/turnos', {
+    const resp = await fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
-      body: JSON.stringify({
-        paciente_id: pacienteId.value,
-        usuario_id: usuarioId.value,
-        fecha: fecha.value,
-        motivo: motivo.value
-      })
+      body: JSON.stringify(payload)
     })
 
     if (!resp.ok) {
@@ -181,8 +240,22 @@ async function crearTurno() {
     motivo.value = ''
     searchPaciente.value = ''
     pacienteSeleccionado.value = ''
+    esTanda.value = false
+    diasSeleccionados.value = []
   } catch (e) {
     error.value = e.message
   }
 }
 </script>
+
+<style scoped>
+.fade-enter-active,
+.fade-leave-active {
+  transition: all 0.3s ease;
+}
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+  transform: translateY(-5px);
+}
+</style>

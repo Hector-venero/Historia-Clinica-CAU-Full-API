@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify
 from flask_login import login_required, current_user
-from datetime import datetime
+from datetime import datetime, timedelta
 from app.database import get_connection
 from app.utils.permisos import requiere_rol
 from app import mail
@@ -252,3 +252,69 @@ def editar_turno(id):
     cursor.close()
     conn.close()
     return jsonify({"message": "Turno actualizado correctamente ✅"})
+
+# ==========================================================
+# 🧩 Crear tanda de turnos (kinesiología, rehabilitación, etc.)
+# ==========================================================
+@bp_turnos.route('/api/turnos/tanda', methods=['POST'])
+@login_required
+@requiere_rol('director', 'profesional', 'administrativo')
+def crear_turnos_tanda():
+    try:
+        data = request.get_json()
+        paciente_id = data.get("paciente_id")
+        usuario_id = data.get("usuario_id")
+        motivo = data.get("motivo", "")
+        fecha_inicial = datetime.fromisoformat(data.get("fecha"))
+        cantidad = int(data.get("cantidad", 1))
+        dias_semana = data.get("dias_semana", [])
+
+        if not (paciente_id and usuario_id and fecha_inicial and dias_semana):
+            return jsonify({"error": "Faltan datos requeridos"}), 400
+
+        # 🔒 Restricción: un profesional solo puede asignarse turnos a sí mismo
+        if current_user.rol == 'profesional' and usuario_id != current_user.id:
+            return jsonify({"error": "No puede asignar turnos a otros profesionales"}), 403
+
+        # Mapear nombres de días a índices
+        dias_map = {
+            "Lunes": 0,
+            "Martes": 1,
+            "Miércoles": 2,
+            "Jueves": 3,
+            "Viernes": 4,
+            "Sábado": 5,
+            "Domingo": 6
+        }
+        dias_indices = [dias_map[d] for d in dias_semana if d in dias_map]
+
+        conn = get_connection()
+        cursor = conn.cursor()
+
+        turnos_creados = 0
+        fecha_actual = fecha_inicial
+
+        while turnos_creados < cantidad:
+            if fecha_actual.weekday() in dias_indices:
+                # Validar disponibilidad del médico antes de insertar
+                if not medico_disponible(usuario_id, fecha_actual.isoformat()):
+                    fecha_actual += timedelta(days=1)
+                    continue
+
+                cursor.execute("""
+                    INSERT INTO turnos (paciente_id, usuario_id, fecha, motivo)
+                    VALUES (%s, %s, %s, %s)
+                """, (paciente_id, usuario_id, fecha_actual, motivo))
+                turnos_creados += 1
+
+            fecha_actual += timedelta(days=1)
+
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+        return jsonify({"message": f"Se crearon {turnos_creados} turnos correctamente ✅"}), 201
+
+    except Exception as e:
+        print("Error al crear tanda de turnos:", e)
+        return jsonify({"error": "Error al crear tanda de turnos"}), 500
