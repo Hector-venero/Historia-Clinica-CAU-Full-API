@@ -1,1 +1,100 @@
-historia_clinica_bfa back antes de intentar migrar a react/bfa-node/
+# =====================================
+# 🐍 PYTHON / FLASK
+# =====================================
+__pycache__/
+*.pyc
+*.pyo
+instance/
+.env
+*.env
+.env.*
+*.sqlite3
+*.db
+venv/
+migrations/
+*.log
+*.tmp
+
+# Archivos de subida o generados por usuarios
+app/uploads/
+**/uploads/
+
+# =====================================
+# 🧱 BLOCKCHAIN FEDERAL ARGENTINA / BFA
+# =====================================
+bfa-node/nucleo/test2network/geth/
+bfa-node/nucleo/test2network/keystore/
+bfa-node/nucleo/test2network/*.log
+bfa-node/nucleo/test2network/*.json
+bfa-node/nucleo/test2network/geth.ipc
+bfa-node/nucleo/test2network/static-nodes.json
+
+# Ignorar también contenedores locales del nodo
+bfa-node/nucleo/
+bfa-node/container/
+bfa-node/keystore/
+bfa-node/geth/
+
+# =====================================
+# ⚙️ DOCKER
+# =====================================
+*.pid
+*.sock
+*.tar
+docker-compose.override.yml
+**/db_data/
+**/mysql-data/
+**/pgdata/
+**/.mysql/
+.env.docker
+db/usuarios_roles.sql
+
+# =====================================
+# ⚛️ NODE / VUE FRONTEND
+# =====================================
+frond_historias_clinicas/**/node_modules/
+frond_historias_clinicas/**/dist/
+frond_historias_clinicas/**/.vite/
+frond_historias_clinicas/**/.cache/
+frond_historias_clinicas/**/coverage/
+frond_historias_clinicas/**/yarn-error.log
+frond_historias_clinicas/**/.package-lock.json
+frond_historias_clinicas/**/.vue-global-types/
+
+# =====================================
+# 🧰 IDE / SISTEMA
+# =====================================
+.DS_Store
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+Thumbs.db
+
+# =====================================
+# 🚀 COMPILADOS Y TEMPORALES
+# =====================================
+*.out
+*.swp
+*.bak
+*.orig
+*.tmp
+*.log
+
+# =====================================
+# 🧾 ARCHIVOS / CARPETAS A IGNORAR ADICIONALMENTE
+# =====================================
+
+# Logs del sistema
+logs/
+tmp/
+cache/
+__cache__/
+
+# Backups o versiones antiguas
+*~ 
+*.old
+*.backup
+
+# Evitar advertencias del test2network
+test2network/
