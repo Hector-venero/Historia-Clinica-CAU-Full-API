@@ -15,6 +15,10 @@ migrations/
 *.log
 *.tmp
 
+# Archivos de subida o generados por usuarios
+app/uploads/
+**/uploads/
+
 # =====================================
 # 🧱 BLOCKCHAIN FEDERAL ARGENTINA / BFA
 # =====================================
@@ -24,6 +28,12 @@ bfa-node/nucleo/test2network/*.log
 bfa-node/nucleo/test2network/*.json
 bfa-node/nucleo/test2network/geth.ipc
 bfa-node/nucleo/test2network/static-nodes.json
+
+# Ignorar también contenedores locales del nodo
+bfa-node/nucleo/
+bfa-node/container/
+bfa-node/keystore/
+bfa-node/geth/
 
 # =====================================
 # ⚙️ DOCKER
@@ -48,6 +58,8 @@ frond_historias_clinicas/**/.vite/
 frond_historias_clinicas/**/.cache/
 frond_historias_clinicas/**/coverage/
 frond_historias_clinicas/**/yarn-error.log
+frond_historias_clinicas/**/.package-lock.json
+frond_historias_clinicas/**/.vue-global-types/
 
 # =====================================
 # 🧰 IDE / SISTEMA
@@ -67,3 +79,22 @@ Thumbs.db
 *.bak
 *.orig
 *.tmp
+*.log
+
+# =====================================
+# 🧾 ARCHIVOS / CARPETAS A IGNORAR ADICIONALMENTE
+# =====================================
+
+# Logs del sistema
+logs/
+tmp/
+cache/
+__cache__/
+
+# Backups o versiones antiguas
+*~ 
+*.old
+*.backup
+
+# Evitar advertencias del test2network
+test2network/
