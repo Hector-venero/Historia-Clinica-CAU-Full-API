@@ -128,6 +128,23 @@ CREATE TABLE disponibilidades (
     FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE
 );
 
+CREATE TABLE grupos_profesionales (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    nombre VARCHAR(100) NOT NULL,
+    descripcion TEXT,
+    color VARCHAR(20) DEFAULT '#00936B', -- para diferenciar en el calendario
+    creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE grupo_miembros (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    grupo_id INT NOT NULL,
+    usuario_id INT NOT NULL,
+    FOREIGN KEY (grupo_id) REFERENCES grupos_profesionales(id) ON DELETE CASCADE,
+    FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE
+);
+
+
 -- Índices útiles
 CREATE INDEX idx_pacientes_dni ON pacientes (dni);
 CREATE INDEX idx_pacientes_nombre ON pacientes (nombre);

@@ -95,6 +95,25 @@ const router = createRouter({
           name: 'disponibilidadProfesional',
           component: () => import('@/views/pages/disponibilidades/DisponibilidadProfesional.vue')
         },
+        // 📌 Grupos
+        {
+          path: '/grupos',
+          name: 'GruposProfesionales',
+          component: () => import('../views/pages/grupos/GruposProfesionales.vue'),
+          meta: { requiresAuth: true }
+        },
+        {
+          path: '/calendario-grupo/:grupoId',
+          name: 'CalendarioGrupo',
+          component: () => import('../views/pages/turnos/CalendarioGrupo.vue'),
+          meta: { requiresAuth: true }
+        },
+        {
+          path: '/grupos/crear',
+          name: 'CrearGrupo',
+          component: () => import('../views/pages/grupos/CrearGrupo.vue'),
+          meta: { requiresAuth: true }
+        },
         // 📌 Blockchain
         {
           path: 'blockchain/verificar',

@@ -73,6 +73,7 @@ from app.routes.blockchain_routes import bp_blockchain
 from app.routes.ausencias_routes import bp_ausencias
 from app.routes.dashboard_routes import bp_dashboard  
 from app.routes.disponibilidades_routes import bp_disponibilidades
+from app.routes.grupos_routes import bp_grupos
 
 # Registrar blueprints
 app.register_blueprint(bp_auth)        # -> /api/login, /api/logout
@@ -83,3 +84,4 @@ app.register_blueprint(bp_turnos)      # -> /api/turnos
 app.register_blueprint(bp_ausencias)   # -> /api/ausencias
 app.register_blueprint(bp_dashboard)   # -> /api/dashboard
 app.register_blueprint(bp_disponibilidades)
+app.register_blueprint(bp_grupos)

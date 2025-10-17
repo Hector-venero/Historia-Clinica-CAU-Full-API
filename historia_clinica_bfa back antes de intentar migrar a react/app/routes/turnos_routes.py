@@ -318,3 +318,22 @@ def crear_turnos_tanda():
     except Exception as e:
         print("Error al crear tanda de turnos:", e)
         return jsonify({"error": "Error al crear tanda de turnos"}), 500
+
+@bp_turnos.route('/api/turnos/grupo/<int:grupo_id>', methods=['GET'])
+@login_required
+def turnos_por_grupo(grupo_id):
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("""
+        SELECT t.id, t.fecha, t.motivo, p.nombre AS paciente, u.nombre AS profesional
+        FROM turnos t
+        JOIN pacientes p ON t.paciente_id = p.id
+        JOIN usuarios u ON t.usuario_id = u.id
+        JOIN grupo_miembros gm ON gm.usuario_id = u.id
+        WHERE gm.grupo_id = %s
+        ORDER BY t.fecha ASC
+    """, (grupo_id,))
+    turnos = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    return jsonify(turnos)
