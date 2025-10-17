@@ -8,6 +8,65 @@ from flask_mail import Message
 
 bp_turnos = Blueprint("turnos", __name__)
 
+# ==========================================================
+# 🔹 Función auxiliar: Verificar disponibilidad del médico
+# ==========================================================
+def medico_disponible(usuario_id, fecha_turno):
+    """Verifica si el médico está disponible en la fecha y hora indicadas."""
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+
+    fecha_dt = datetime.fromisoformat(fecha_turno)
+    hora = fecha_dt.strftime("%H:%M:%S")
+    dia_semana = fecha_dt.strftime("%A")
+    dias = {
+        "Monday": "Lunes",
+        "Tuesday": "Martes",
+        "Wednesday": "Miércoles",
+        "Thursday": "Jueves",
+        "Friday": "Viernes",
+        "Saturday": "Sábado",
+        "Sunday": "Domingo"
+    }
+    dia_es = dias.get(dia_semana, "Lunes")
+
+    # 🔹 Verificar disponibilidad habitual
+    cursor.execute("""
+        SELECT 1 FROM disponibilidades
+        WHERE usuario_id = %s
+        AND dia_semana = %s
+        AND %s BETWEEN hora_inicio AND hora_fin
+        AND activo = 1
+    """, (usuario_id, dia_es, hora))
+    disponible = cursor.fetchone()
+
+    # 🔹 Verificar ausencia
+    cursor.execute("""
+        SELECT 1 FROM ausencias
+        WHERE usuario_id = %s
+        AND %s BETWEEN fecha_inicio AND fecha_fin
+    """, (usuario_id, fecha_turno))
+    ausente = cursor.fetchone()
+
+    # 🔹 Verificar si ya tiene un turno en ese mismo horario (±30 min)
+    cursor.execute("""
+        SELECT 1 FROM turnos
+        WHERE usuario_id = %s
+        AND DATE(fecha) = DATE(%s)
+        AND ABS(TIMESTAMPDIFF(MINUTE, fecha, %s)) < 30
+    """, (usuario_id, fecha_turno, fecha_turno))
+    ocupado = cursor.fetchone()
+
+    cursor.close()
+    conn.close()
+
+    # Devuelve True solo si está disponible y no ausente u ocupado
+    return bool(disponible) and not ausente and not ocupado
+
+
+# ==========================================================
+# 📅 Rutas de Turnos
+# ==========================================================
 @bp_turnos.route('/api/turnos', methods=['GET', 'POST'])
 @login_required
 @requiere_rol('director', 'profesional', 'administrativo')
@@ -70,17 +129,11 @@ def api_turnos():
             return jsonify({"error": "No puede asignar turnos a otros profesionales"}), 403
         
         try:
-            # ✅ Validar que el profesional no tenga una ausencia en esa fecha
-            cursor.execute("""
-                SELECT 1
-                FROM ausencias
-                WHERE usuario_id = %s
-                AND %s BETWEEN fecha_inicio AND fecha_fin
-            """, (usuario_id, fecha))
-            if cursor.fetchone():
-                return jsonify({"error": "El profesional tiene la agenda bloqueada en esa fecha"}), 400
+            # ✅ Validar disponibilidad y ausencias del médico
+            if not medico_disponible(usuario_id, fecha):
+                return jsonify({"error": "El profesional no está disponible en esa fecha u horario"}), 400
 
-            # ✅ Insertar turno si no hay bloqueo
+            # ✅ Insertar turno si todo está OK
             cursor.execute("""
                 INSERT INTO turnos (paciente_id, usuario_id, fecha, motivo)
                 VALUES (%s, %s, %s, %s)
@@ -123,6 +176,7 @@ Centro Asistencial Universitario
                     print("⚠️ Error enviando mail:", e)
 
             return jsonify({"message": "Turno creado correctamente ✅"}), 201
+
         except Exception as e:
             conn.rollback()
             return jsonify({"error": str(e)}), 500
@@ -130,6 +184,10 @@ Centro Asistencial Universitario
             cursor.close()
             conn.close()
 
+
+# ==========================================================
+# 🗑️ Eliminar turno
+# ==========================================================
 @bp_turnos.route('/api/turnos/<int:id>', methods=['DELETE'])
 @login_required
 @requiere_rol('director', 'profesional', 'administrativo')
@@ -155,6 +213,10 @@ def eliminar_turno(id):
     conn.close()
     return jsonify({"message": "Turno eliminado correctamente ✅"})
 
+
+# ==========================================================
+# ✏️ Editar turno
+# ==========================================================
 @bp_turnos.route('/api/turnos/<int:id>', methods=['PUT'])
 @login_required
 @requiere_rol('director', 'profesional', 'administrativo')

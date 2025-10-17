@@ -143,38 +143,36 @@
 </template>
 
 <script setup>
+import { ref, watch } from 'vue'
 import pacienteService from '@/service/pacienteService'
-import { ref } from 'vue'
 
-const paciente = ref({
-  nro_hc: '',
-  nombre: '',
-  apellido: '',
-  dni: '',
-  fecha_nacimiento: '',
-  sexo: '',
-  nacionalidad: '',
-  ocupacion: '',
-  direccion: '',
-  codigo_postal: '',
-  telefono: '',
-  celular: '',
-  email: '',
-  contacto: '',
-  cobertura: '',
-  cert_discapacidad: '',
-  nro_certificado: '',
-  derivado_por: '',
-  diagnostico: '',
-  motivo_derivacion: '',
-  medico_cabecera: '',
-  comentarios: ''
+// Props
+const props = defineProps({
+  paciente: {
+    type: Object,
+    default: () => ({})
+  },
+  onSubmit: {
+    type: Function,
+    required: false
+  },
+  submitText: {
+    type: String,
+    default: 'Registrar'
+  }
 })
 
+const paciente = ref({ ...props.paciente }) // copiamos para mantener reactividad
 const mensaje = ref('')
 const tipoMensaje = ref('')
 const intentadoEnviar = ref(false)
 
+// Si las props cambian (por ejemplo, al montar EditarPaciente.vue), actualizamos los campos
+watch(() => props.paciente, (nuevo) => {
+  paciente.value = { ...nuevo }
+}, { deep: true })
+
+// Función principal: o registrar o actualizar
 const registrar = async () => {
   intentadoEnviar.value = true
 
@@ -192,42 +190,27 @@ const registrar = async () => {
       formData.append(key, paciente.value[key])
     }
 
-    const response = await pacienteService.crearPaciente(formData)
-
-    if (response.data && response.data.message) {
-      mensaje.value = response.data.message
+    // Si hay función onSubmit, la usamos (caso editar)
+    if (props.onSubmit) {
+      await props.onSubmit(paciente.value)
+      mensaje.value = '✅ Paciente actualizado correctamente.'
       tipoMensaje.value = 'success'
-      paciente.value = {
-        nro_hc: '',
-        nombre: '',
-        apellido: '',
-        dni: '',
-        fecha_nacimiento: '',
-        sexo: '',
-        nacionalidad: '',
-        ocupacion: '',
-        direccion: '',
-        codigo_postal: '',
-        telefono: '',
-        celular: '',
-        email: '',
-        contacto: '',
-        cobertura: '',
-        cert_discapacidad: '',
-        nro_certificado: '',
-        derivado_por: '',
-        diagnostico: '',
-        motivo_derivacion: '',
-        medico_cabecera: '',
-        comentarios: ''
-      }
-      intentadoEnviar.value = false
-    } else if (response.data && response.data.error) {
-      mensaje.value = response.data.error
-      tipoMensaje.value = 'error'
     } else {
-      mensaje.value = '⚠️ Error inesperado al registrar paciente.'
-      tipoMensaje.value = 'error'
+      // Si no hay onSubmit, registramos nuevo paciente
+      const response = await pacienteService.crearPaciente(formData)
+
+      if (response.data && response.data.message) {
+        mensaje.value = response.data.message
+        tipoMensaje.value = 'success'
+        paciente.value = {}
+        intentadoEnviar.value = false
+      } else if (response.data && response.data.error) {
+        mensaje.value = response.data.error
+        tipoMensaje.value = 'error'
+      } else {
+        mensaje.value = '⚠️ Error inesperado al registrar paciente.'
+        tipoMensaje.value = 'error'
+      }
     }
   } catch (error) {
     console.error(error)

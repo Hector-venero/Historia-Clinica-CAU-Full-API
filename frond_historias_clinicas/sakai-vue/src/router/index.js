@@ -50,6 +50,12 @@ const router = createRouter({
           component: () => import('@/views/pages/historias/HistoriaPaciente.vue'),
           props: true
         },
+        {
+          path: 'pacientes/:id/evolucion/:evoId',
+          name: 'evolucionDetalle',
+          component: () => import('@/views/pages/evolucion/EvolucionDetalle.vue'),
+          props: true
+        },
         // 📌 Turnos
         {
           path: 'turnos',
@@ -82,6 +88,12 @@ const router = createRouter({
           name: 'editarUsuario',
           component: () => import('@/views/pages/usuarios/EditarUsuario.vue'),
           props: true
+        },
+        // 📌 Disponibilidades
+        {
+          path: 'disponibilidad',
+          name: 'disponibilidadProfesional',
+          component: () => import('@/views/pages/disponibilidades/DisponibilidadProfesional.vue')
         },
         // 📌 Blockchain
         {

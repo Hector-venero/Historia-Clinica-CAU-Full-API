@@ -1,39 +1,52 @@
 import { createApp } from 'vue'
 import App from './App.vue'
 import router from './router'
-
+import { createPinia } from 'pinia'
 import Aura from '@primeuix/themes/aura'
 import PrimeVue from 'primevue/config'
 import ConfirmationService from 'primevue/confirmationservice'
 import ToastService from 'primevue/toastservice'
 
+// Componentes globales
 import Button from 'primevue/button'
 import Dialog from 'primevue/dialog'
 
-// ✅ Importar estilos globales de PrimeVue y PrimeIcons
+// Estilos
 import 'primeicons/primeicons.css'
-//import 'primevue/resources/primevue.min.css'
-//import 'primevue/resources/themes/lara-light-indigo/theme.css'; // O el tema que uses
-
-// ✅ Tus estilos globales
 import '@/assets/styles.scss'
 
-const app = createApp(App)
+// 🧩 Importar el store del usuario
+import { useUserStore } from '@/stores/user'
 
-app.use(router)
-app.use(PrimeVue, {
+async function bootstrap() {
+  const app = createApp(App)
+  const pinia = createPinia()
+
+  app.use(pinia)
+  app.use(router)
+  app.use(PrimeVue, {
     theme: {
-        preset: Aura,
-        options: {
-            darkModeSelector: '.app-dark'
-        }
+      preset: Aura,
+      options: { darkModeSelector: '.app-dark' }
     }
-})
-app.use(ToastService)
-app.use(ConfirmationService)
+  })
+  app.use(ToastService)
+  app.use(ConfirmationService)
 
-// ✅ Registrar componentes globales
-app.component('Dialog', Dialog)
-app.component('Button', Button)
+  app.component('Dialog', Dialog)
+  app.component('Button', Button)
 
-app.mount('#app')
+  // 🧠 Obtener los datos del usuario antes de montar la app
+  const userStore = useUserStore()
+  try {
+    await userStore.fetchUser()
+    console.log('✅ Usuario cargado:', userStore.nombre, '| Rol:', userStore.rol)
+  } catch (err) {
+    console.warn('⚠️ No se pudo cargar el usuario al iniciar:', err)
+  }
+
+  // 🔥 Ahora que el store tiene el rol, montamos la app
+  app.mount('#app')
+}
+
+bootstrap()

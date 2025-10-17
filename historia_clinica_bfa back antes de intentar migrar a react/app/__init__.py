@@ -71,14 +71,15 @@ from app.routes.historias_routes import bp_historias
 from app.routes.turnos_routes import bp_turnos
 from app.routes.blockchain_routes import bp_blockchain
 from app.routes.ausencias_routes import bp_ausencias
-from app.routes.dashboard_routes import bp_dashboard  # ✅ este va después de crear la app
+from app.routes.dashboard_routes import bp_dashboard  
+from app.routes.disponibilidades_routes import bp_disponibilidades
 
 # Registrar blueprints
-app.register_blueprint(bp_auth)
-app.register_blueprint(bp_usuarios)
-app.register_blueprint(bp_pacientes)
-app.register_blueprint(bp_historias)
-app.register_blueprint(bp_turnos)
-app.register_blueprint(bp_blockchain)
-app.register_blueprint(bp_ausencias)
-app.register_blueprint(bp_dashboard)  # ✅ acá recién
+app.register_blueprint(bp_auth)        # -> /api/login, /api/logout
+app.register_blueprint(bp_usuarios)    # -> /api/usuarios
+app.register_blueprint(bp_pacientes)   # -> /api/pacientes
+app.register_blueprint(bp_historias)   # -> /api/pacientes/<id>/historias
+app.register_blueprint(bp_turnos)      # -> /api/turnos
+app.register_blueprint(bp_ausencias)   # -> /api/ausencias
+app.register_blueprint(bp_dashboard)   # -> /api/dashboard
+app.register_blueprint(bp_disponibilidades)

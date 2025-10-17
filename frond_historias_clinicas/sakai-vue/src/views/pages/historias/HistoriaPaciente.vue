@@ -4,7 +4,7 @@ import Toast from 'primevue/toast'
 import { useToast } from 'primevue/usetoast'
 import { onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
-import historiaService from '@/service/historiaService'   // ✅ usar tu servicio
+import historiaService from '@/service/historiaService'
 import axios from 'axios'
 
 const route = useRoute()
@@ -22,43 +22,41 @@ const showForm = ref(false)
 const fecha = ref(new Date().toISOString().split('T')[0])
 const contenido = ref('')
 const archivos = ref([])
+const fileUploader = ref(null)
 
+/**
+ * Carga los datos del paciente, sus historias y evoluciones
+ */
 const fetchHistoria = async () => {
   try {
     loading.value = true
-    // 🔹 paciente básico
+
     const resPaciente = await axios.get(`/api/pacientes/${pacienteId}`, { withCredentials: true })
     paciente.value = resPaciente.data
 
-    // 🔹 historias clínicas vía service
     const resHistorias = await historiaService.getHistorias(pacienteId)
     historias.value = resHistorias.data
 
-    // 🔹 evoluciones
     const resEvoluciones = await axios.get(`/api/pacientes/${pacienteId}/evoluciones`, { withCredentials: true })
     evoluciones.value = resEvoluciones.data
   } catch (err) {
-    error.value = 'Error cargando la historia clínica.'
     console.error(err)
+    error.value = 'Error cargando la historia clínica.'
   } finally {
     loading.value = false
   }
 }
 
-const onFileSelect = (event) => {
-  archivos.value = event.files
-}
-
-const fileUploader = ref(null)
-
+/**
+ * Guarda una nueva evolución
+ */
 const guardarEvolucion = async () => {
   try {
     const formData = new FormData()
     formData.append('fecha', fecha.value)
     formData.append('contenido', contenido.value)
-
-    for (let i = 0; i < archivos.value.length; i++) {
-      formData.append('archivos', archivos.value[i])
+    for (const archivo of archivos.value) {
+      formData.append('archivos', archivo)
     }
 
     await axios.post(`/api/pacientes/${pacienteId}/evolucion`, formData, {
@@ -71,7 +69,7 @@ const guardarEvolucion = async () => {
     showForm.value = false
     contenido.value = ''
     archivos.value = []
-    fileUploader.value.clear()
+    fileUploader.value?.clear()
 
     await fetchHistoria()
   } catch (err) {
@@ -80,88 +78,154 @@ const guardarEvolucion = async () => {
   }
 }
 
-onMounted(() => {
-  fetchHistoria()
-})
+/**
+ * Exporta toda la historia clínica en PDF
+ */
+const descargarHistoriaPDF = async () => {
+  try {
+    toast.add({ severity: 'info', summary: 'Generando PDF...', life: 2000 })
+    const res = await axios.get(`/api/pacientes/${pacienteId}/historia/pdf`, {
+      responseType: 'blob',
+      withCredentials: true
+    })
+    const url = window.URL.createObjectURL(new Blob([res.data]))
+    const link = document.createElement('a')
+    link.href = url
+    link.setAttribute('download', `historia_paciente_${pacienteId}.pdf`)
+    document.body.appendChild(link)
+    link.click()
+  } catch (err) {
+    console.error(err)
+    toast.add({ severity: 'error', summary: 'Error', detail: 'No se pudo generar el PDF', life: 3000 })
+  }
+}
+
+/**
+ * Exporta una evolución individual en PDF
+ */
+const descargarEvolucionPDF = async (evoId) => {
+  try {
+    toast.add({ severity: 'info', summary: 'Generando PDF...', life: 2000 })
+    const res = await axios.get(`/api/pacientes/${pacienteId}/evolucion/${evoId}/pdf`, {
+      responseType: 'blob',
+      withCredentials: true
+    })
+    const url = window.URL.createObjectURL(new Blob([res.data]))
+    const link = document.createElement('a')
+    link.href = url
+    link.setAttribute('download', `evolucion_${evoId}.pdf`)
+    document.body.appendChild(link)
+    link.click()
+  } catch (err) {
+    console.error(err)
+    toast.add({ severity: 'error', summary: 'Error', detail: 'No se pudo generar el PDF', life: 3000 })
+  }
+}
+
+const onFileSelect = (event) => {
+  archivos.value = event.files
+}
+
+onMounted(fetchHistoria)
 </script>
 
 <template>
-  <div class="p-4">
+  <div class="p-4 md:p-8 bg-gray-50 min-h-screen">
     <Toast />
 
-    <h1 class="text-2xl font-bold mb-4">
+    <h1 class="text-3xl font-bold mb-4 text-gray-800 flex items-center">
+      <i class="pi pi-user mr-3 text-blue-600"></i>
       Historia Clínica de {{ paciente?.apellido?.toUpperCase() }} {{ paciente?.nombre?.toUpperCase() }}
     </h1>
 
-    <p v-if="loading">Cargando...</p>
+    <p v-if="loading" class="text-gray-500">Cargando...</p>
     <p v-if="error" class="text-red-500">{{ error }}</p>
 
-    <div v-if="paciente && !loading" class="mb-6 border p-4 rounded bg-gray-50">
-      <p><strong>DNI:</strong> {{ paciente.dni }}</p>
-      <p><strong>Cobertura:</strong> {{ paciente?.cobertura }}</p>
-      <p><strong>Nro HC:</strong> {{ paciente.nro_hc }}</p>
-    </div>
-
-    <!-- 🔹 HISTORIAS CLÍNICAS -->
-    <div v-if="historias.length">
-      <h2 class="text-xl font-semibold mt-6 mb-2">Historias Clínicas</h2>
-      <div v-for="h in historias" :key="h.id" class="border p-4 rounded mb-3 bg-white shadow">
-        <p><strong>Fecha:</strong> {{ new Date(h.fecha).toLocaleString() }}</p>
-        <p><strong>Motivo:</strong> {{ h.motivo_consulta }}</p>
-        <p><strong>Diagnóstico:</strong> {{ h.diagnostico }}</p>
-        <p>
-          <strong>Hash:</strong>
-          <span class="font-mono">{{ h.hash?.slice(0, 15) }}...</span>
-        </p>
-        <p>
-          <strong>Estado:</strong>
-          <span v-if="h.tx_hash" class="text-green-600 font-semibold">🟢 Registrado en Blockchain</span>
-          <span v-else class="text-red-600 font-semibold">🔴 No registrado</span>
-        </p>
+    <!-- 📋 Datos del paciente -->
+    <div v-if="paciente && !loading" class="mb-6 border p-4 rounded-2xl bg-white shadow-sm">
+      <div class="grid md:grid-cols-2 gap-2 text-gray-700 text-sm">
+        <p><strong>DNI:</strong> {{ paciente.dni }}</p>
+        <p><strong>Cobertura:</strong> {{ paciente?.cobertura || '-' }}</p>
+        <p><strong>Nº HC:</strong> {{ paciente.nro_hc }}</p>
+        <p><strong>Fecha de nacimiento:</strong> {{ paciente.fecha_nacimiento || '-' }}</p>
       </div>
     </div>
 
-    <!-- 🔹 EVOLUCIONES -->
-    <div v-if="evoluciones.length === 0 && !loading">
-      <p>No hay evoluciones registradas aún.</p>
-    </div>
+    <!-- 🧠 EVOLUCIONES -->
+    <div v-if="!loading">
+      <div class="flex flex-wrap justify-between items-center mt-6 mb-3 gap-2">
+        <h2 class="text-xl font-semibold text-gray-800 flex items-center">
+          <i class="pi pi-book mr-2 text-blue-500"></i> Evoluciones
+        </h2>
 
-    <div v-else>
-      <h2 class="text-xl font-semibold mt-6 mb-2">Evoluciones</h2>
+        <div class="flex flex-wrap justify-end gap-2">
+          <button
+            @click="descargarHistoriaPDF"
+            class="flex items-center bg-blue-600 text-white px-4 py-2 rounded-lg shadow-sm hover:bg-blue-700 transition text-sm"
+          >
+            <i class="pi pi-file-pdf mr-2"></i> Exportar Historia Completa
+          </button>
+
+          <button
+            @click="showForm = !showForm"
+            class="flex items-center bg-green-600 text-white px-4 py-2 rounded-lg shadow-sm hover:bg-green-700 transition text-sm"
+          >
+            <i class="pi pi-plus mr-2"></i> {{ showForm ? 'Cancelar' : 'Agregar Evolución' }}
+          </button>
+        </div>
+      </div>
+
+      <!-- Si no hay evoluciones -->
+      <p v-if="evoluciones.length === 0" class="text-gray-500 mt-3">No hay evoluciones registradas aún.</p>
+
+      <!-- Cards de evoluciones -->
       <div
         v-for="evo in evoluciones"
         :key="evo.id"
-        class="border rounded-lg mb-4 p-4 shadow bg-white"
+        class="border rounded-2xl mb-4 p-5 shadow-sm bg-white hover:shadow-md transition cursor-pointer"
       >
-        <h3 class="text-lg font-semibold">Fecha: {{ new Date(evo.fecha).toLocaleDateString() }}</h3>
-        <p>{{ evo.contenido }}</p>
-        <div v-if="evo.archivos && evo.archivos.length">
-          <strong>Archivos adjuntos:</strong>
-          <ul>
-            <li v-for="archivo in evo.archivos" :key="archivo.nombre">
-              <a :href="archivo.url" target="_blank">{{ archivo.nombre }}</a>
-            </li>
-          </ul>
+        <div class="flex justify-between text-sm text-gray-600 mb-2">
+          <span class="font-medium">{{ new Date(evo.fecha).toLocaleDateString() }}</span>
+          <span>{{ evo.nombre_usuario }} — {{ evo.especialidad_usuario || 'Director' }}</span>
+        </div>
+        <p class="text-gray-800 text-sm mb-4 line-clamp-3">{{ evo.contenido }}</p>
+
+        <div class="flex justify-end gap-3">
+          <button
+            @click="$router.push({ name: 'evolucionDetalle', params: { id: pacienteId, evoId: evo.id } })"
+            class="text-blue-600 hover:text-blue-800 text-sm flex items-center"
+          >
+            <i class="pi pi-eye mr-1"></i> Ver Detalle
+          </button>
+          <button
+            @click="descargarEvolucionPDF(evo.id)"
+            class="text-red-600 hover:text-red-800 text-sm flex items-center"
+          >
+            <i class="pi pi-file-pdf mr-1"></i> Exportar PDF
+          </button>
         </div>
       </div>
     </div>
 
-    <!-- 🔹 FORMULARIO NUEVA EVOLUCIÓN -->
-    <button
-      @click="showForm = !showForm"
-      class="p-button p-component bg-green-500 text-white mt-6"
+    <!-- 📝 FORMULARIO NUEVA EVOLUCIÓN -->
+    <div
+      v-if="showForm"
+      class="mt-6 border p-4 rounded-2xl bg-white shadow-sm animate-fade-in"
     >
-      {{ showForm ? 'Cancelar' : 'Agregar Evolución' }}
-    </button>
+      <h3 class="text-lg font-semibold text-gray-700 mb-4">Registrar nueva evolución</h3>
 
-    <div v-if="showForm" class="mt-6 border p-4 rounded bg-white">
-      <label for="fecha" class="block font-medium mb-2">Fecha</label>
+      <label for="fecha" class="block font-medium mb-2 text-gray-700">Fecha</label>
       <input type="date" v-model="fecha" class="p-2 border rounded w-full mb-4" />
 
-      <label for="contenido" class="block font-medium mb-2">Evolución</label>
-      <textarea v-model="contenido" rows="5" class="p-2 border rounded w-full mb-4" placeholder="Escribí la evolución clínica..."></textarea>
+      <label for="contenido" class="block font-medium mb-2 text-gray-700">Evolución</label>
+      <textarea
+        v-model="contenido"
+        rows="5"
+        class="p-2 border rounded w-full mb-4"
+        placeholder="Escribí la evolución clínica..."
+      ></textarea>
 
-      <label class="block font-medium mb-2">Archivos adjuntos</label>
+      <label class="block font-medium mb-2 text-gray-700">Archivos adjuntos</label>
       <FileUpload
         ref="fileUploader"
         name="archivos"
@@ -173,13 +237,34 @@ onMounted(() => {
         class="mb-4"
       />
 
-      <button @click="guardarEvolucion" class="p-button p-component bg-blue-600 text-white">
-        Guardar Evolución
+      <button
+        @click="guardarEvolucion"
+        class="bg-blue-600 text-white px-5 py-2 rounded-lg shadow-sm hover:bg-blue-700 transition flex items-center"
+      >
+        <i class="pi pi-save mr-2"></i> Guardar Evolución
       </button>
     </div>
   </div>
 </template>
 
 <style scoped>
-/* Opcional: personalización extra */
+.line-clamp-3 {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.animate-fade-in {
+  animation: fadeIn 0.4s ease-in-out;
+}
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
 </style>

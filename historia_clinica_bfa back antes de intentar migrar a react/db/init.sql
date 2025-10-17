@@ -2,6 +2,9 @@
 CREATE DATABASE IF NOT EXISTS hc_bfa;
 USE hc_bfa;
 
+SET GLOBAL time_zone = '-3:00';
+SET time_zone = '-3:00';
+
 -- Eliminar tablas si existen (para desarrollo)
 DROP TABLE IF EXISTS historias;
 DROP TABLE IF EXISTS turnos;
@@ -34,12 +37,13 @@ CREATE TABLE pacientes (
     nacionalidad VARCHAR(50),
     ocupacion VARCHAR(100),
     direccion VARCHAR(255),
+    codigo_postal VARCHAR(20),
     telefono VARCHAR(50),
     celular VARCHAR(50),
     email VARCHAR(100),
     contacto VARCHAR(100),
     cobertura VARCHAR(100),
-    cert_discapacidad ENUM('Si', 'No') DEFAULT NULL,
+    cert_discapacidad ENUM('Sí', 'No') DEFAULT NULL,
     nro_certificado VARCHAR(50),
     derivado_por VARCHAR(100),
     diagnostico TEXT,
@@ -112,6 +116,16 @@ CREATE TABLE ausencias (
     motivo VARCHAR(255),
     creado_por INT NOT NULL,           -- usuario que lo cargó
     FOREIGN KEY (usuario_id) REFERENCES usuarios(id)
+);
+
+CREATE TABLE disponibilidades (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    usuario_id INT NOT NULL,  -- médico o profesional
+    dia_semana ENUM('Lunes','Martes','Miercoles','Jueves','Viernes','Sabado') NOT NULL,
+    hora_inicio TIME NOT NULL,
+    hora_fin TIME NOT NULL,
+    activo BOOLEAN DEFAULT TRUE,
+    FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE
 );
 
 -- Índices útiles
