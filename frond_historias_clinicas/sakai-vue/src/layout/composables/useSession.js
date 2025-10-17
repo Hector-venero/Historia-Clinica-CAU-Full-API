@@ -1,37 +1,51 @@
-import { ref } from 'vue';
+import { ref } from 'vue'
 
-const user = ref(null);
-const loading = ref(false);
-const error = ref('');
+const user = ref(null)
+const loading = ref(false)
+const error = ref('')
 
 export function useSession() {
   async function loadCurrentUser(force = false) {
-    if (user.value && !force) return user.value;
+    // Evita recargar si ya está en memoria
+    if (user.value && !force) return user.value
 
-    loading.value = true;
-    error.value = '';
+    loading.value = true
+    error.value = ''
+
     try {
-      const resp = await fetch('/api/user', { credentials: 'include' });
-      if (!resp.ok) throw new Error(`Error ${resp.status}`);
-      const data = await resp.json();
+      const resp = await fetch('/api/user', { credentials: 'include' })
+
+      // ✅ Si el usuario no está autenticado, no lo tratamos como error fatal
+      if (resp.status === 401) {
+        user.value = null
+        return null
+      }
+
+      if (!resp.ok) throw new Error(`Error ${resp.status}`)
+
+      const data = await resp.json()
       user.value = {
         nombre: data?.nombre || data?.name || data?.username || 'Usuario',
         username: data?.username || '',
         email: data?.email || '',
         rol: data?.rol || data?.role || ''
-      };
-      return user.value;
+      }
+
+      return user.value
     } catch (e) {
-      error.value = e?.message || 'No se pudo obtener el usuario';
-      user.value = null;
+      // ✅ Captura controlada
+      console.warn('⚠️ No se pudo obtener el usuario actual:', e)
+      error.value = e?.message || 'No se pudo obtener el usuario'
+      user.value = null
+      return null
     } finally {
-      loading.value = false;
+      loading.value = false
     }
   }
 
   function clearUser() {
-    user.value = null;
+    user.value = null
   }
 
-  return { user, loading, error, loadCurrentUser, clearUser };
+  return { user, loading, error, loadCurrentUser, clearUser }
 }

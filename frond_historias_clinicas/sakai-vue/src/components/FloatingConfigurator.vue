@@ -1,33 +1,37 @@
 <script setup>
-import AppConfigurator from '@/layout/AppConfigurator.vue'
+import { onMounted } from 'vue'
 import { useLayout } from '@/layout/composables/layout'
+import AppConfigurator from '@/layout/AppConfigurator.vue'
 
 const { toggleDarkMode, isDarkTheme } = useLayout()
 
 /**
- * Sincroniza el modo oscuro de PrimeVue con las variables del layout SCSS
- * y agrega las clases correctas en <html> para activar el tema.
+ * Alterna entre modo oscuro y claro
+ * y sincroniza con las clases globales y localStorage.
  */
 const handleToggleDark = () => {
-  toggleDarkMode()
-
   const html = document.documentElement
 
-  if (isDarkTheme.value) {
-    // Cambiar a modo claro
-    html.classList.remove('app-dark')
-    html.style.colorScheme = 'light'
-    localStorage.setItem('theme', 'light')
-  } else {
-    // Cambiar a modo oscuro
+  // Primero alterna en PrimeVue
+  toggleDarkMode()
+
+  // Luego ajusta las clases del DOM según el nuevo estado
+  const newTheme = isDarkTheme.value ? 'light' : 'dark' // valor antes del cambio
+  const appliedTheme = newTheme === 'dark' ? 'app-dark' : ''
+
+  if (newTheme === 'dark') {
     html.classList.add('app-dark')
     html.style.colorScheme = 'dark'
     localStorage.setItem('theme', 'dark')
+  } else {
+    html.classList.remove('app-dark')
+    html.style.colorScheme = 'light'
+    localStorage.setItem('theme', 'light')
   }
 }
 
 /**
- * Al cargar, mantiene el tema anterior si estaba guardado en localStorage
+ * Al montar, aplica el tema guardado previamente.
  */
 onMounted(() => {
   const html = document.documentElement
@@ -57,7 +61,7 @@ onMounted(() => {
       v-tooltip.bottom="isDarkTheme ? 'Modo Claro' : 'Modo Oscuro'"
     />
 
-    <!-- Configuración visual -->
+    <!-- Panel de configuración visual -->
     <div class="relative">
       <Button
         icon="pi pi-palette"
