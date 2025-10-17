@@ -98,3 +98,6 @@ __cache__/
 
 # Evitar advertencias del test2network
 test2network/
+# Evitar submódulos de BFA-node
+historia_clinica_bfa back antes de intentar migrar a react/bfa-node/container/
+historia_clinica_bfa back antes de intentar migrar a react/bfa-node/nucleo/
