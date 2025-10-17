@@ -1,4 +1,4 @@
-from flask import Blueprint, request, jsonify, session, url_for
+from flask import Blueprint, request, jsonify, session, url_for, current_app
 from flask_login import login_user, logout_user, login_required, current_user
 from app.auth import Usuario
 from werkzeug.security import generate_password_hash
@@ -6,9 +6,17 @@ import secrets
 from app import mail
 from flask_mail import Message
 from app.database import get_connection
+from itsdangerous import URLSafeTimedSerializer, SignatureExpired, BadSignature
 
 bp_auth = Blueprint("auth", __name__)
 
+# 🔹 Función auxiliar para crear el serializador cuando Flask ya está listo
+def get_serializer():
+    return URLSafeTimedSerializer(current_app.secret_key)
+
+# =====================================================
+# 1️⃣ Login
+# =====================================================
 @bp_auth.route('/api/login', methods=['POST'])
 def api_login():
     data = request.json
@@ -31,12 +39,20 @@ def api_login():
         })
     return jsonify({'error': 'Credenciales incorrectas ❌'}), 401
 
+
+# =====================================================
+# 2️⃣ Logout
+# =====================================================
 @bp_auth.route('/api/logout', methods=['POST'])
 @login_required
 def api_logout():
     logout_user()
     return jsonify({'message': 'Logout exitoso ✅'})
 
+
+# =====================================================
+# 3️⃣ Usuario logueado
+# =====================================================
 @bp_auth.route('/api/user', methods=['GET'])
 @login_required
 def api_user():
@@ -48,10 +64,15 @@ def api_user():
         "rol": current_user.rol
     })
 
+
+# =====================================================
+# 4️⃣ Enviar enlace de recuperación
+# =====================================================
 @bp_auth.route('/api/recover', methods=['POST'])
 def api_recover():
+    s = get_serializer()  # ✅ se genera dentro del contexto
     data = request.json
-    email = data.get('email').strip().lower()
+    email = data.get('email', '').strip().lower()
 
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
@@ -59,48 +80,57 @@ def api_recover():
     usuario = cursor.fetchone()
     conn.close()
 
-    if usuario:
-        token = secrets.token_urlsafe(32)
-        session['reset_token'] = token
-        session['reset_user'] = usuario['username']
-        reset_url = url_for('api_reset_password', token=token, _external=True)
-
-        msg = Message("Recuperación de contraseña", recipients=[email])
-        msg.body = (
-            f"Hola,\n\n"
-            f"Recibimos una solicitud para restablecer la contraseña del usuario asociado al correo {email}.\n\n"
-            f"Si fuiste vos, hacé clic en el siguiente enlace:\n\n"
-            f"{reset_url}\n\n"
-            f"Si no realizaste esta solicitud, podés ignorar este mensaje.\n\n"
-            f"Gracias,\nSistema HC"
-        )
-        mail.send(msg)
-
-        return jsonify({'message': 'Email enviado con enlace para restablecer contraseña ✅'})
-    else:
+    if not usuario:
         return jsonify({'error': 'No se encontró un usuario con ese email'}), 404
 
+    # Generar token válido por 1 hora
+    token = s.dumps(email, salt='reset-password')
+
+    reset_url = f"http://localhost:5173/reset/{token}"
+    msg = Message("Recuperación de contraseña - Historia Clínica CAU", recipients=[email])
+    msg.body = (
+        f"Hola {usuario['nombre']},\n\n"
+        f"Recibimos una solicitud para restablecer tu contraseña.\n"
+        f"Para continuar, hacé clic en el siguiente enlace:\n\n"
+        f"{reset_url}\n\n"
+        f"Este enlace expirará en 1 hora.\n\n"
+        f"Si no realizaste esta solicitud, podés ignorar este mensaje.\n\n"
+        f"Gracias,\nSistema de Historias Clínicas del CAU"
+    )
+    mail.send(msg)
+
+    return jsonify({'message': 'Se envió un correo con el enlace para restablecer tu contraseña ✅'}), 200
+
+
+# =====================================================
+# 5️⃣ Restablecer contraseña
+# =====================================================
 @bp_auth.route('/api/reset/<token>', methods=['POST'])
 def api_reset_password(token):
-    if session.get('reset_token') != token:
-        return jsonify({'error': 'Token inválido o expirado'}), 403
+    s = get_serializer()  # ✅ también aquí dentro
+    try:
+        # Verificar token (expira a la hora)
+        email = s.loads(token, salt='reset-password', max_age=3600)
+    except SignatureExpired:
+        return jsonify({'error': 'El enlace expiró. Solicitá uno nuevo.'}), 400
+    except BadSignature:
+        return jsonify({'error': 'Token inválido.'}), 400
 
     data = request.json
     new_password = data.get('new_password')
     confirm_password = data.get('confirm_password')
 
+    if not new_password or not confirm_password:
+        return jsonify({'error': 'Debes ingresar y confirmar la contraseña'}), 400
     if new_password != confirm_password:
         return jsonify({'error': 'Las contraseñas no coinciden'}), 400
 
-    username = session['reset_user']
+    password_hash = generate_password_hash(new_password)
+
     conn = get_connection()
     cursor = conn.cursor()
-    hash_pw = generate_password_hash(new_password)
-    cursor.execute("UPDATE usuarios SET password_hash = %s WHERE username = %s", (hash_pw, username))
+    cursor.execute("UPDATE usuarios SET password_hash = %s WHERE email = %s", (password_hash, email))
     conn.commit()
     conn.close()
 
-    session.pop('reset_token', None)
-    session.pop('reset_user', None)
-
-    return jsonify({'message': 'Contraseña actualizada correctamente ✅'})
+    return jsonify({'message': 'Contraseña actualizada correctamente ✅'}), 200

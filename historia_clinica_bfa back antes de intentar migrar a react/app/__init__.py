@@ -6,6 +6,7 @@ from .database import get_connection
 from datetime import timedelta
 from flask_mail import Mail
 from flask_cors import CORS
+from itsdangerous import URLSafeTimedSerializer
 
 # -------------------------
 # Crear app

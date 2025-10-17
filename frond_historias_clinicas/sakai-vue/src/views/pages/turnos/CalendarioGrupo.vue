@@ -64,7 +64,7 @@ const turnoSeleccionado = ref(null)
 
 const calendarOptions = ref({
   plugins: [dayGridPlugin, timeGridPlugin, interactionPlugin],
-  initialView: 'dayGridMonth', // 👈 para ver los turnos del mes completo
+  initialView: 'timeGridWeek',
   locale: 'es',
   headerToolbar: {
     left: 'prev,next today',
@@ -95,20 +95,21 @@ const calendarOptions = ref({
 async function cargarTurnosGrupo() {
   try {
     const [resGrupo, resTurnos] = await Promise.all([
-      fetch(`/api/grupos/${grupoId}`, { credentials: 'include' }),
-      fetch(`/api/turnos/grupo/${grupoId}`, { credentials: 'include' })
+    fetch(`/api/grupos/${grupoId}`, { credentials: 'include' }),
+    fetch(`/api/turnos/grupo/${grupoId}`, { credentials: 'include' })  // ✅ ahora usa el nuevo endpoint
     ])
 
     if (!resGrupo.ok || !resTurnos.ok) throw new Error('Error al cargar datos del grupo')
 
     grupo.value = await resGrupo.json()
     const dataTurnos = await resTurnos.json()
-    console.log('📅 Datos del backend:', dataTurnos)
-
-    // 🔹 Convertir formato GMT → ISO válido para FullCalendar
+    console.log("📅 Datos del backend:", dataTurnos)
+    
     eventos.value = dataTurnos.map(t => {
-      const fechaISO = new Date(t.fecha).toISOString().slice(0, 19)
-      return {
+    // 🔹 Convertir "Wed, 15 Oct 2025 14:03:00 GMT" → ISO "2025-10-15T14:03:00"
+    const fechaISO = new Date(t.fecha).toISOString().slice(0, 19)
+
+    return {
         id: t.id,
         title: `${t.paciente} (${t.profesional})`,
         start: fechaISO,
@@ -117,10 +118,10 @@ async function cargarTurnosGrupo() {
         profesional: t.profesional,
         description: t.motivo || 'Sin motivo',
         backgroundColor: grupo.value?.color || '#00936B'
-      }
+    }
     })
-
     calendarOptions.value.events = eventos.value
+
   } catch (err) {
     console.error('Error cargando turnos grupales:', err)
   }
@@ -132,10 +133,23 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.fc {
-  background: white;
-  border-radius: 12px;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
-  padding: 1rem;
+:deep(.app-dark .fc),
+:deep(html.dark .fc) {
+  background-color: #1e1e1e !important;
+  color: #f5f5f5 !important;
+  border: 1px solid #333 !important;
 }
+
+:deep(.app-dark .fc-toolbar-title),
+:deep(html.dark .fc-toolbar-title) {
+  color: #00bfa5 !important;
+}
+
+:deep(.app-dark .fc-daygrid-day),
+:deep(html.dark .fc-daygrid-day) {
+  background-color: #1a1a1a !important;
+  border-color: #333 !important;
+  color: #eaeaea !important;
+}
+
 </style>

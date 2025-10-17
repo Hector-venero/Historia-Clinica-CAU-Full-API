@@ -24,6 +24,11 @@ const login = async () => {
     alert('Credenciales incorrectas o error de red')
   }
 }
+
+// 🔹 Redirigir al formulario de recuperación
+const irARecuperar = () => {
+  router.push('/recuperar')
+}
 </script>
 
 <template>
@@ -52,7 +57,12 @@ const login = async () => {
                 <Checkbox v-model="checked" id="rememberme1" binary class="mr-2"></Checkbox>
                 <label for="rememberme1">Recordarme</label>
               </div>
-              <span class="font-medium no-underline ml-2 text-right cursor-pointer text-primary">¿Olvidaste tu contraseña?</span>
+              <span
+                @click="irARecuperar"
+                class="font-medium no-underline ml-2 text-right cursor-pointer text-primary hover:underline transition"
+                >
+                ¿Olvidaste tu contraseña?
+              </span>
             </div>
             <Button label="Ingresar" class="w-full" @click="login"></Button>
           </div>

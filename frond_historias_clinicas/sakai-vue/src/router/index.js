@@ -4,6 +4,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 const router = createRouter({
   history: createWebHistory(),
   routes: [
+    // 🔐 Autenticación
     {
       path: '/auth/login',
       name: 'login',
@@ -14,6 +15,18 @@ const router = createRouter({
       name: 'logout',
       component: () => import('@/views/pages/auth/Logout.vue')
     },
+    {
+      path: '/recuperar',
+      name: 'RecuperarContraseña',
+      component: () => import('@/views/pages/auth/RecoverPassword.vue')
+    },
+    {
+      path: '/reset/:token',
+      name: 'ResetContraseña',
+      component: () => import('@/views/pages/auth/ResetPassword.vue')
+    },
+
+    // 🌐 App principal (protegida)
     {
       path: '/',
       component: AppLayout,
@@ -97,19 +110,19 @@ const router = createRouter({
         },
         // 📌 Grupos
         {
-          path: '/grupos',
+          path: 'grupos',
           name: 'GruposProfesionales',
           component: () => import('../views/pages/grupos/GruposProfesionales.vue'),
           meta: { requiresAuth: true }
         },
         {
-          path: '/calendario-grupo/:grupoId',
+          path: 'calendario-grupo/:grupoId',
           name: 'CalendarioGrupo',
           component: () => import('../views/pages/turnos/CalendarioGrupo.vue'),
           meta: { requiresAuth: true }
         },
         {
-          path: '/grupos/crear',
+          path: 'grupos/crear',
           name: 'CrearGrupo',
           component: () => import('../views/pages/grupos/CrearGrupo.vue'),
           meta: { requiresAuth: true }
@@ -122,6 +135,8 @@ const router = createRouter({
         }
       ]
     },
+
+    // 🚫 Ruta no encontrada
     {
       path: '/:pathMatch(.*)*',
       name: 'notfound',
@@ -132,8 +147,9 @@ const router = createRouter({
 
 // 🛡️ Guard global para proteger rutas
 router.beforeEach((to, from, next) => {
-  const publicPages = ['/auth/login']
-  const authRequired = !publicPages.includes(to.path)
+  const publicPages = ['/auth/login', '/recuperar']
+  const isResetRoute = to.path.startsWith('/reset/')
+  const authRequired = !publicPages.includes(to.path) && !isResetRoute
   const loggedIn = localStorage.getItem('loggedIn')
 
   if (authRequired && !loggedIn) {
@@ -141,5 +157,6 @@ router.beforeEach((to, from, next) => {
   }
   next()
 })
+
 
 export default router

@@ -14,6 +14,7 @@ import Dialog from 'primevue/dialog'
 // Estilos
 import 'primeicons/primeicons.css'
 import '@/assets/styles.scss'
+import '@/assets/theme-dark.css'
 
 // 🧩 Importar el store del usuario
 import { useUserStore } from '@/stores/user'

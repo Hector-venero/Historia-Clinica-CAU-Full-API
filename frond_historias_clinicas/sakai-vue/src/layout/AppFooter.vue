@@ -1,7 +1,8 @@
 <template>
   <footer class="app-footer">
     <div class="footer-content">
-      © 2025 <span class="brand">Historia Clínica CAU</span> — 
+      © 2025
+      <span class="brand">Historia Clínica CAU</span> —
       Desarrollado por <span class="author">Héctor Venero</span> |
       Universidad Nacional de San Martín (UNSAM)
     </div>
@@ -9,39 +10,59 @@
 </template>
 
 <script setup>
-// Footer simple, sin lógica adicional
+// Footer simple — sin lógica adicional
 </script>
 
 <style scoped>
 .app-footer {
-  position: fixed; /* Mantiene el footer siempre visible al final */
+  position: fixed;
   bottom: 0;
   left: 0;
   width: 100%;
   height: 40px;
-  background-color: #f9fafb;
-  border-top: 1px solid #e5e7eb;
   display: flex;
   justify-content: center;
   align-items: center;
   font-size: 13px;
-  color: #6b7280;
-  z-index: 100; /* Para que quede sobre el contenido, sin taparlo */
+  z-index: 100;
+  border-top: 1px solid var(--footer-border);
+  background-color: var(--footer-bg);
+  color: var(--footer-text);
+  transition: background-color 0.3s ease, color 0.3s ease;
 }
 
-/* Espaciado interno del texto */
 .footer-content {
   text-align: center;
   line-height: 1.5;
 }
 
+/* Colores institucionales */
 .brand {
-  color: #003b70;
+  color: var(--footer-brand);
   font-weight: 600;
 }
 
 .author {
-  color: #00936b;
+  color: var(--footer-author);
   font-weight: 600;
+}
+
+/* ====== 🎨 Tema claro ====== */
+:root {
+  --footer-bg: #f9fafb;
+  --footer-border: #e5e7eb;
+  --footer-text: #6b7280;
+  --footer-brand: #003b70;
+  --footer-author: #00936b;
+}
+
+/* ====== 🌙 Tema oscuro ====== */
+.app-dark .app-footer,
+html.dark .app-footer {
+  --footer-bg: #1a1a1a;
+  --footer-border: #2e2e2e;
+  --footer-text: #e0e0e0;
+  --footer-brand: #3db5e6; /* celeste institucional */
+  --footer-author: #00bfa5; /* verde turquesa */
 }
 </style>
