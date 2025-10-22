@@ -1,7 +1,8 @@
-# 🏥 Historia Clínica CAU - Full API (Flask + Vue + Docker + BFA)
+# 🏥 Historia Clínica CAU - Full API (Flask + Vue 3 + Docker + MySQL + BFA + Auditoría Blockchain)
 
 Este proyecto implementa un sistema web integral para la gestión de **historias clínicas unificadas**, desarrollado como **trabajo final de Ingeniería en Telecomunicaciones** en la **Universidad Nacional de San Martín (UNSAM)**.  
-El sistema garantiza la **integridad, trazabilidad y disponibilidad** de la información médica mediante una arquitectura moderna basada en **API REST, frontend desacoplado y tecnología blockchain (BFA)**.
+El sistema garantiza la **integridad, trazabilidad y disponibilidad** de la información médica mediante una arquitectura moderna basada en **API REST, frontend desacoplado y tecnología blockchain (BFA)**.  
+Además, incluye un sistema automatizado de **verificación y auditoría de integridad** entre el hash local y el registrado en la **Blockchain Federal Argentina (BFA)**.
 
 ---
 
@@ -10,11 +11,13 @@ El sistema garantiza la **integridad, trazabilidad y disponibilidad** de la info
 - 🔐 **Autenticación por roles** (`director`, `profesional`, `administrativo`)
 - 📋 **Registro, edición y consulta de pacientes**
 - 🩺 **Gestión de historias clínicas y evoluciones médicas**
+- 🧩 **Consolidación automática** de historia clínica a partir de evoluciones médicas
+- ⛓️ **Publicación y validación de hashes SHA-256 en la Blockchain Federal Argentina (BFA)**
+- 🔍 **Verificación automática de integridad** entre MySQL y Blockchain (BFA)
+- 📊 **Auditorías históricas** de verificaciones registradas en base local
 - 📅 **Agenda de turnos médicos** con recordatorios automáticos
 - 🧾 **Exportación de historias clínicas a PDF**
 - 📎 **Carga de archivos adjuntos** en evoluciones médicas
-- 🧱 **Validación de integridad** con hash SHA-256 por historia clínica
-- ⛓️ **Registro de hash en la Blockchain Federal Argentina (BFA)**
 - 💬 **Panel de control dinámico** con estadísticas y gráficos
 - 💡 **Interfaz moderna basada en PrimeVue + Sakai (estilo UNSAM)**
 
@@ -25,25 +28,31 @@ El sistema garantiza la **integridad, trazabilidad y disponibilidad** de la info
 El sistema sigue una estructura **frontend–backend desacoplada**, comunicada por API REST y contenedorizada con Docker Compose.
 
 ```bash
-📦 Historia-Clinica-CAU-Full-API/
-├── frond_historias_clinicas/                # Frontend Vue 3 (Vite + PrimeVue + Sakai)
-│   ├── src/                                 # Componentes, vistas y lógica de UI
-│   ├── public/                              # Recursos estáticos
-│   └── vite.config.mjs                      # Configuración de build
+📦 historia_clinica_bfa/
+├── backend_flask/                     # API Flask modular (pacientes, usuarios, historias, blockchain)
+│   ├── app/
+│   │   ├── routes/                    # Rutas agrupadas por módulo
+│   │   ├── utils/                     # Hash, PDF, BFA, auditorías
+│   │   ├── main.py                    # Entry point Flask
+│   │   └── database.py                # Conexión MySQL
+│   ├── Dockerfile
+│   └── requirements.txt
 │
-├── historia_clinica_bfa/                    # Backend Flask
-│   ├── app/                                 # Código backend Flask
-│   │   ├── main.py                          # Entry point (Flask)
-│   │   ├── routes/                          # Rutas API (pacientes, turnos, usuarios, blockchain)
-│   │   ├── auth.py                          # Manejo de login y roles
-│   │   ├── database.py                      # Conexión MySQL
-│   │   └── utils/                           # Hash, PDF, blockchain, etc.
-│   ├── docker-compose.yml                   # Orquestación de servicios backend
-│   ├── db/init.sql                          # Estructura base de datos
-│   ├── bfa-node/                            # Nodo Geth conectado a BFA
-│   └── reset.sh / reset_web.sh              # Scripts de mantenimiento
+├── db/                                # Estructura base de datos MySQL
+│   └── init.sql                       # Estructura con auditorías y consolidación de historia
 │
-└── docker-compose.yml                       # Entorno integrado Flask + MySQL + Nginx
+├── frontend/                          # Vue 3 + Vite + PrimeVue + Sakai
+│   ├── src/views/pages/historias/     # HistoriaPaciente.vue + BlockchainVerificar.vue
+│   ├── src/service/                   # axios services
+│   ├── package.json
+│   └── vite.config.js
+│
+├── bfa-node/                          # Nodo Geth conectado a Blockchain Federal Argentina
+│   ├── nucleo/test2network/           # Archivos de red y keystore
+│   ├── setup_bfa_node.sh              # Inicialización del nodo
+│   └── reset_bfa_node.sh              # Reinicio y desbloqueo automático
+│
+└── docker-compose.yml                 # Orquestación Flask + MySQL + Nginx + BFA node
 ```
 
 ---
@@ -101,6 +110,7 @@ Esto desplegará los contenedores:
 | 🐍 `historia_web` | Backend Flask (API REST) |
 | 🐬 `historia_db` | Base de datos MySQL |
 | 🌐 `historia_nginx` | Servidor web + proxy inverso para Flask y frontend |
+| ⛓️ `bfa-node` | Nodo Geth conectado a la Blockchain Federal Argentina |
 
 ---
 
@@ -109,10 +119,10 @@ Esto desplegará los contenedores:
 Si deseas probar la publicación de hashes en la Blockchain Federal Argentina:
 
 ```bash
-./reset_bfa_node.sh
+./setup_bfa_node.sh
 ```
 
-> Ver `setup_bfa_node.sh` y `reset_bfa_node.sh` para los detalles de configuración.
+> Ver `setup_bfa_node.sh` y `reset_bfa_node.sh` para los detalles de configuración y desbloqueo automático.
 
 ---
 
@@ -132,12 +142,27 @@ Usuario inicial (modo demo):
 
 ---
 
-## 🧭 Flujo de Integridad Blockchain (BFA)
+## 🧭 Flujo de Integridad y Auditoría Blockchain (BFA)
 
-1. Cada historia clínica genera un **hash SHA-256** único.  
-2. El hash se almacena en MySQL y opcionalmente se publica en la **Blockchain Federal Argentina (BFA)**.  
-3. Los usuarios pueden **verificar la integridad** de las historias mediante el módulo “Verificar Hash”.  
-4. El sistema incluye soporte para ejecutar el nodo `geth` BFA dentro de `bfa-node/`.
+1. Cada evolución médica se guarda en MySQL.  
+2. El sistema genera automáticamente un **hash SHA-256 consolidado** de todas las evoluciones del paciente.  
+3. El hash se registra localmente y opcionalmente se publica en la **Blockchain Federal Argentina (BFA)**.  
+4. Los usuarios pueden **verificar la integridad** desde la interfaz (ver “Verificar Integridad”), comparando el hash local y el registrado en BFA.  
+5. Cada verificación queda registrada en la tabla `auditorias_blockchain`, disponible desde el módulo visual de auditorías.
+
+---
+
+## 🧾 Módulo de Auditoría Blockchain
+
+El sistema incorpora un módulo visual (Vue 3) donde se puede:
+
+- 🔗 Verificar la integridad de una historia clínica puntual.  
+- 📜 Consultar el historial de auditorías (válido / no válido).  
+- ⚙️ Ejecutar nuevas publicaciones de hash en la BFA.
+
+Este módulo se implementa en:  
+`frontend/src/views/pages/historias/BlockchainVerificar.vue`  
+y consume las rutas `/api/blockchain/verificar` y `/api/blockchain/auditorias`.
 
 ---
 
@@ -167,6 +192,17 @@ Además, el dashboard tiene un modo **"UNSAM Pro"** con transiciones suaves y es
 
 ---
 
+## 🧹 Limpieza y Modularización
+
+A partir de **octubre 2025**, el repositorio fue reorganizado con una arquitectura modular y limpia:
+
+- Eliminación de entornos virtuales antiguos (`venv/`) y versiones previas del sistema.  
+- `.gitignore` actualizado para prevenir commits de dependencias o entornos locales.  
+- Reescritura del historial remoto para optimizar tamaño y performance del repo.  
+- Integración del nodo BFA directamente bajo estructura `bfa-node/` con configuración automatizada.
+
+---
+
 ## 🖥️ Capturas (versión UNSAM Pro UI)
 
 > Próximamente disponibles en `/docs/screens/`
@@ -183,7 +219,7 @@ Incluye:
 
 - 🧩 Diagrama de arquitectura general  
 - 🗃️ Diagrama entidad-relación MySQL  
-- 🔗 Flujo de publicación de hash (Flask → BFA)  
+- 🔗 Flujo de publicación y verificación de hash (Flask → BFA)  
 - ⚙️ Descripción técnica de la red permisionada BFA  
 - ⚡ Comparativa PoW vs PoA aplicada al sector salud  
 - 🔐 Análisis de seguridad y trazabilidad de la información
