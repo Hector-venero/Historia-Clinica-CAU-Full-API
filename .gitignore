@@ -110,3 +110,4 @@ __pycache__/
 # 🧹 VERSIONES ANTIGUAS / BACKUPS COMPLETOS
 # =====================================
 historia_clinica_bfa back antes de intentar migrar a react/
+frontend/.vite/
