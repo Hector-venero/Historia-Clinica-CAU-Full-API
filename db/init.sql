@@ -1,19 +1,36 @@
+-- ==============================================
+-- 🧩 BASE DE DATOS hc_bfa - VERSIÓN ACTUALIZADA
+-- Incluye ajustes para integración con Blockchain BFA
+-- ==============================================
+
 -- Crear la base de datos si no existe
-CREATE DATABASE IF NOT EXISTS hc_bfa;
+CREATE DATABASE IF NOT EXISTS hc_bfa
+  CHARACTER SET utf8mb4
+  COLLATE utf8mb4_unicode_ci;
+
 USE hc_bfa;
 
 SET GLOBAL time_zone = '-3:00';
 SET time_zone = '-3:00';
 
--- Eliminar tablas si existen (para desarrollo)
+-- ==============================================
+-- 🔄 ELIMINAR TABLAS (solo para entorno de desarrollo)
+-- ==============================================
+DROP TABLE IF EXISTS auditorias_blockchain;
 DROP TABLE IF EXISTS historias;
 DROP TABLE IF EXISTS turnos;
 DROP TABLE IF EXISTS evolucion_archivos;
 DROP TABLE IF EXISTS evoluciones;
 DROP TABLE IF EXISTS pacientes;
 DROP TABLE IF EXISTS usuarios;
+DROP TABLE IF EXISTS ausencias;
+DROP TABLE IF EXISTS disponibilidades;
+DROP TABLE IF EXISTS grupos_profesionales;
+DROP TABLE IF EXISTS grupo_miembros;
 
--- Tabla de usuarios
+-- ==============================================
+-- 👤 TABLA DE USUARIOS
+-- ==============================================
 CREATE TABLE usuarios (
     id INT AUTO_INCREMENT PRIMARY KEY,
     nombre VARCHAR(100) NOT NULL,
@@ -22,10 +39,14 @@ CREATE TABLE usuarios (
     password_hash TEXT NOT NULL,
     rol ENUM('director', 'profesional', 'administrativo') NOT NULL,
     especialidad VARCHAR(100) NULL,
-    activo TINYINT(1) NOT NULL DEFAULT 1   -- ✅ soft delete
-);
+    activo TINYINT(1) NOT NULL DEFAULT 1   -- ✅ Soft delete
+) ENGINE=InnoDB
+  DEFAULT CHARSET=utf8mb4
+  COLLATE=utf8mb4_unicode_ci;
 
--- Tabla de pacientes (extendida)
+-- ==============================================
+-- 🧾 TABLA DE PACIENTES
+-- ==============================================
 CREATE TABLE pacientes (
     id INT AUTO_INCREMENT PRIMARY KEY,
     nro_hc VARCHAR(20),
@@ -54,23 +75,30 @@ CREATE TABLE pacientes (
     modificado_por INT DEFAULT NULL,
     FOREIGN KEY (registrado_por) REFERENCES usuarios(id),
     FOREIGN KEY (modificado_por) REFERENCES usuarios(id)
-);
+) ENGINE=InnoDB
+  DEFAULT CHARSET=utf8mb4
+  COLLATE=utf8mb4_unicode_ci;
 
--- Tabla de historias clínicas
+-- ==============================================
+-- 🩺 TABLA DE HISTORIAS CLÍNICAS (actualizada para blockchain)
+-- ==============================================
 CREATE TABLE historias (
     id INT AUTO_INCREMENT PRIMARY KEY,
     paciente_id INT NOT NULL UNIQUE,
     usuario_id INT NOT NULL,
     fecha DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    resumen LONGTEXT,
-    hash_local CHAR(64) DEFAULT NULL,
-    hash_bfa CHAR(64) DEFAULT NULL,
-    tx_hash VARCHAR(100) DEFAULT NULL,    
-    FOREIGN KEY (paciente_id) REFERENCES pacientes(id),
-    FOREIGN KEY (usuario_id) REFERENCES usuarios(id)
-);
+    resumen LONGTEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+    hash_local CHAR(64) DEFAULT NULL,        -- Hash SHA-256 del contenido
+    tx_hash VARCHAR(100) DEFAULT NULL,       -- Hash de la transacción en BFA
+    FOREIGN KEY (paciente_id) REFERENCES pacientes(id) ON DELETE CASCADE,
+    FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE
+) ENGINE=InnoDB
+  DEFAULT CHARSET=utf8mb4
+  COLLATE=utf8mb4_unicode_ci;
 
--- Tabla de evoluciones
+-- ==============================================
+-- 📄 TABLA DE EVOLUCIONES
+-- ==============================================
 CREATE TABLE evoluciones (
     id INT AUTO_INCREMENT PRIMARY KEY,
     paciente_id INT NOT NULL,
@@ -80,9 +108,13 @@ CREATE TABLE evoluciones (
     creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (paciente_id) REFERENCES pacientes(id),
     FOREIGN KEY (usuario_id) REFERENCES usuarios(id)
-);
+) ENGINE=InnoDB
+  DEFAULT CHARSET=utf8mb4
+  COLLATE=utf8mb4_unicode_ci;
 
--- Archivos asociados a evoluciones
+-- ==============================================
+-- 📎 ARCHIVOS ASOCIADOS A EVOLUCIONES
+-- ==============================================
 CREATE TABLE evolucion_archivos (
     id INT AUTO_INCREMENT PRIMARY KEY,
     evolucion_id INT NOT NULL,
@@ -90,9 +122,13 @@ CREATE TABLE evolucion_archivos (
     filepath TEXT,
     creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (evolucion_id) REFERENCES evoluciones(id)
-);
+) ENGINE=InnoDB
+  DEFAULT CHARSET=utf8mb4
+  COLLATE=utf8mb4_unicode_ci;
 
--- Tabla de turnos
+-- ==============================================
+-- 📅 TABLA DE TURNOS
+-- ==============================================
 CREATE TABLE turnos (
     id INT AUTO_INCREMENT PRIMARY KEY,
     paciente_id INT NOT NULL,
@@ -102,35 +138,52 @@ CREATE TABLE turnos (
     notificado BOOLEAN DEFAULT FALSE,
     FOREIGN KEY (paciente_id) REFERENCES pacientes(id),
     FOREIGN KEY (usuario_id) REFERENCES usuarios(id)
-);
+) ENGINE=InnoDB
+  DEFAULT CHARSET=utf8mb4
+  COLLATE=utf8mb4_unicode_ci;
 
+-- ==============================================
+-- 🚫 AUSENCIAS PROFESIONALES
+-- ==============================================
 CREATE TABLE ausencias (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    usuario_id INT NOT NULL,           -- médico al que aplica
+    usuario_id INT NOT NULL,
     fecha_inicio DATETIME NOT NULL,
     fecha_fin DATETIME NOT NULL,
     motivo VARCHAR(255),
-    creado_por INT NOT NULL,           -- usuario que lo cargó
+    creado_por INT NOT NULL,
     FOREIGN KEY (usuario_id) REFERENCES usuarios(id)
-);
+) ENGINE=InnoDB
+  DEFAULT CHARSET=utf8mb4
+  COLLATE=utf8mb4_unicode_ci;
 
+-- ==============================================
+-- ⏰ DISPONIBILIDADES DE PROFESIONALES
+-- ==============================================
 CREATE TABLE disponibilidades (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    usuario_id INT NOT NULL,  -- médico o profesional
+    usuario_id INT NOT NULL,
     dia_semana ENUM('Lunes','Martes','Miercoles','Jueves','Viernes','Sabado') NOT NULL,
     hora_inicio TIME NOT NULL,
     hora_fin TIME NOT NULL,
     activo BOOLEAN DEFAULT TRUE,
     FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE
-);
+) ENGINE=InnoDB
+  DEFAULT CHARSET=utf8mb4
+  COLLATE=utf8mb4_unicode_ci;
 
+-- ==============================================
+-- 👥 GRUPOS PROFESIONALES
+-- ==============================================
 CREATE TABLE grupos_profesionales (
     id INT AUTO_INCREMENT PRIMARY KEY,
     nombre VARCHAR(100) NOT NULL,
     descripcion TEXT,
-    color VARCHAR(20) DEFAULT '#00936B', -- para diferenciar en el calendario
+    color VARCHAR(20) DEFAULT '#00936B',
     creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
+) ENGINE=InnoDB
+  DEFAULT CHARSET=utf8mb4
+  COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE grupo_miembros (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -138,25 +191,36 @@ CREATE TABLE grupo_miembros (
     usuario_id INT NOT NULL,
     FOREIGN KEY (grupo_id) REFERENCES grupos_profesionales(id) ON DELETE CASCADE,
     FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE
-);
+) ENGINE=InnoDB
+  DEFAULT CHARSET=utf8mb4
+  COLLATE=utf8mb4_unicode_ci;
 
+-- ==============================================
+-- 🧮 AUDITORÍAS BLOCKCHAIN (corregida para UTF8 y hashes largos)
+-- ==============================================
 CREATE TABLE auditorias_blockchain (
     id INT AUTO_INCREMENT PRIMARY KEY,
     historia_id INT NOT NULL,
-    hash_local CHAR(64) NOT NULL,
-    hash_bfa CHAR(64) NOT NULL,
+    hash_local VARCHAR(200) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+    hash_bfa   VARCHAR(200) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
     valido TINYINT(1) NOT NULL,
     usuario VARCHAR(100) NOT NULL,
     fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (historia_id) REFERENCES historias(id)
-);
+    FOREIGN KEY (historia_id) REFERENCES historias(id) ON DELETE CASCADE
+) ENGINE=InnoDB
+  DEFAULT CHARSET=utf8mb4
+  COLLATE=utf8mb4_unicode_ci;
 
--- Índices útiles
+-- ==============================================
+-- 📈 ÍNDICES
+-- ==============================================
 CREATE INDEX idx_pacientes_dni ON pacientes (dni);
 CREATE INDEX idx_pacientes_nombre ON pacientes (nombre);
 CREATE INDEX idx_pacientes_apellido ON pacientes (apellido);
 
--- Usuario administrador inicial
+-- ==============================================
+-- 👑 USUARIO ADMINISTRADOR INICIAL
+-- ==============================================
 INSERT INTO usuarios (nombre, username, email, password_hash, rol)
 SELECT 'Admin', 'admin', 'admin@ejemplo.com',
 'scrypt:32768:8:1$bdt4huruWlbjvNqs$4a236ac9509c5ee61ab5ce7103a686d272d512c2cf5f11d30b5afcb91f98832cba6ba1118114c6c4df2e4e9387f452514b05c6f9b6fc7d35a3a2e042f07fc0af',

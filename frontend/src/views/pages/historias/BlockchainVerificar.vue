@@ -11,6 +11,7 @@ import Column from 'primevue/column'
 import Tag from 'primevue/tag'
 import ProgressSpinner from 'primevue/progressspinner'
 import Message from 'primevue/message'
+import { useRoute } from 'vue-router'
 
 const historiaId = ref(null)
 const resultado = ref(null)
@@ -23,6 +24,7 @@ const tablePage = ref(0)
 const rows = ref(10)
 const sortField = ref('fecha')
 const sortOrder = ref(-1) // desc
+const route = useRoute()
 
 const limpiarEstado = () => {
   error.value = null
@@ -118,8 +120,22 @@ const onSort = async (ev) => {
 }
 
 onMounted(() => {
+  // Detectar ID desde la URL o query (?id=12)
+  const pathParts = window.location.pathname.split('/')
+  const posibleId = parseInt(pathParts[pathParts.length - 1])
+  const queryId = route.query.id ? parseInt(route.query.id) : null
+
+  if (!isNaN(posibleId)) {
+    historiaId.value = posibleId
+    console.log(`🧩 ID detectado desde path: ${posibleId}`)
+  } else if (queryId) {
+    historiaId.value = queryId
+    console.log(`🧩 ID detectado desde query: ${queryId}`)
+  }
+
   cargarAuditorias()
 })
+
 </script>
 
 <template>

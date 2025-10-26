@@ -6,9 +6,11 @@ import { onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import historiaService from '@/service/historiaService'
 import axios from 'axios'
+import { useRouter } from 'vue-router'
 
 const route = useRoute()
 const pacienteId = route.params.id
+const router = useRouter()
 
 const toast = useToast()
 
@@ -126,18 +128,18 @@ const onFileSelect = (event) => {
   archivos.value = event.files
 }
 
+/**
+ * Verifica la integridad de toda la historia clínica
+ */
 const verificarIntegridad = async () => {
   try {
-    const { data } = await axios.get(`/api/pacientes/${pacienteId}/historia/verificar`, {
+    const { data } = await axios.get(`/api/blockchain/verificar/historia/${pacienteId}`, {
       withCredentials: true
     })
     toast.add({
-      severity: data.estado === 'válido' ? 'success' : 'warn',
+      severity: data.valido ? 'success' : 'warn',
       summary: 'Verificación Blockchain',
-      detail:
-        data.estado === 'válido'
-          ? '✅ La historia coincide con el registro en la Blockchain.'
-          : '⚠️ La historia no coincide con la versión registrada en Blockchain.',
+      detail: data.mensaje,
       life: 5000
     })
   } catch (err) {
@@ -149,6 +151,58 @@ const verificarIntegridad = async () => {
       life: 4000
     })
   }
+}
+
+/**
+ * Verifica la integridad de una evolución individual
+ */
+const verificarEvolucion = async (evoId) => {
+  try {
+    const { data } = await axios.get(`/api/blockchain/verificar/evolucion/${evoId}`, {
+      withCredentials: true
+    })
+    toast.add({
+      severity: data.valido ? 'success' : 'warn',
+      summary: 'Verificación Blockchain',
+      detail: data.mensaje,
+      life: 4000
+    })
+  } catch (err) {
+    console.error('Error al verificar evolución:', err)
+    toast.add({
+      severity: 'error',
+      summary: 'Error',
+      detail: 'No se pudo verificar la integridad de la evolución.',
+      life: 4000
+    })
+  }
+}
+
+const verAuditoriasBlockchain = () => {
+  // ✅ Usamos el id real de la historia consolidada más reciente
+  const idHistoria = historias.value?.[0]?.id || null
+
+  if (!idHistoria) {
+    toast.add({
+      severity: 'warn',
+      summary: 'Sin historia registrada',
+      detail: 'El paciente aún no tiene una historia consolidada.',
+      life: 4000
+    })
+    return
+  }
+
+  toast.add({
+    severity: 'info',
+    summary: 'Redirigiendo...',
+    detail: 'Abriendo auditorías Blockchain',
+    life: 800
+  })
+
+  setTimeout(() => {
+    // ✅ pasamos el id correcto de la tabla `historias`
+    router.push({ path: '/blockchain/verificar', query: { id: idHistoria } })
+  }, 300)
 }
 
 onMounted(fetchHistoria)
@@ -192,6 +246,13 @@ onMounted(fetchHistoria)
           </button>
 
           <button
+            @click="verAuditoriasBlockchain"
+            class="flex items-center bg-purple-600 text-white px-4 py-2 rounded-lg shadow-sm hover:bg-purple-700 transition text-sm"
+          >
+            <i class="pi pi-list mr-2"></i> Ver Auditorías Blockchain
+          </button>
+
+          <button
             @click="showForm = !showForm"
             class="flex items-center bg-green-600 text-white px-4 py-2 rounded-lg shadow-sm hover:bg-green-700 transition text-sm"
           >
@@ -229,7 +290,7 @@ onMounted(fetchHistoria)
             <i class="pi pi-file-pdf mr-1"></i> Exportar PDF
           </button>
           <button
-            @click="verificarIntegridad"
+            @click="verificarEvolucion(evo.id)"
             class="text-purple-600 hover:text-blue-800 text-sm flex items-center"
           >
             <i class="pi pi-shield mr-1"></i> Verificar Integridad
