@@ -1,22 +1,32 @@
 from flask import Flask, jsonify
 import json
 from flask_login import LoginManager
-from .auth import Usuario
-from .database import get_connection
-from datetime import timedelta
 from flask_mail import Mail
 from flask_cors import CORS
 from itsdangerous import URLSafeTimedSerializer
+from flask_talisman import Talisman
+from app.config import Config
+from app.auth import Usuario
+from app.database import get_connection
+from datetime import timedelta
 
 # -------------------------
-# Crear app
+# Crear app Flask
 # -------------------------
 app = Flask(__name__)
-CORS(app, supports_credentials=True)
+app.config.from_object(Config)
 
-app.secret_key = '2908'
-app.jinja_env.filters['from_json'] = json.loads
-app.permanent_session_lifetime = timedelta(hours=1)
+# Seguridad HTTP (headers CSP, HTTPS, etc.)
+csp = {
+    "default-src": ["'self'"],
+    "img-src": ["'self'", "data:"],
+    "style-src": ["'self'", "'unsafe-inline'"],
+    "script-src": ["'self'"]
+}
+Talisman(app, content_security_policy=csp)
+
+# CORS (permite peticiones desde el frontend React)
+CORS(app, supports_credentials=True, origins=["http://localhost:5173"])
 
 # -------------------------
 # Configuración Login
@@ -35,35 +45,26 @@ def load_user(user_id):
 
     if data:
         return Usuario(
-            id=data['id'],
-            nombre=data['nombre'],
-            username=data['username'],
-            email=data['email'],
-            password_hash=data['password_hash'],
-            rol=data['rol']
+            id=data["id"],
+            nombre=data["nombre"],
+            username=data["username"],
+            email=data["email"],
+            password_hash=data["password_hash"],
+            rol=data["rol"]
         )
     return None
 
 @login_manager.unauthorized_handler
 def unauthorized():
-    return jsonify({'error': 'No autorizado'}), 401
+    return jsonify({"error": "No autorizado"}), 401
 
 # -------------------------
-# Configuración Mail
+# Configuración de correo (usa variables de entorno)
 # -------------------------
-app.config.update(
-    MAIL_SERVER='smtp.gmail.com',
-    MAIL_PORT=587,
-    MAIL_USE_TLS=True,
-    MAIL_USERNAME='hectorvenero2908@gmail.com',
-    MAIL_PASSWORD='typyayxujklnyskg',
-    MAIL_DEFAULT_SENDER='hectorvenero29hv@gmail.com'
-)
-
 mail = Mail(app)
 
 # -------------------------
-# Importar y registrar Blueprints
+# Registrar Blueprints
 # -------------------------
 from app.routes.auth_routes import bp_auth
 from app.routes.usuarios_routes import bp_usuarios
@@ -72,18 +73,19 @@ from app.routes.historias_routes import bp_historias
 from app.routes.turnos_routes import bp_turnos
 from app.routes.blockchain_routes import bp_blockchain
 from app.routes.ausencias_routes import bp_ausencias
-from app.routes.dashboard_routes import bp_dashboard  
+from app.routes.dashboard_routes import bp_dashboard
 from app.routes.disponibilidades_routes import bp_disponibilidades
 from app.routes.grupos_routes import bp_grupos
+from app.routes.health_routes import bp_health
 
-# Registrar blueprints
-app.register_blueprint(bp_auth)        # -> /api/login, /api/logout
-app.register_blueprint(bp_usuarios)    # -> /api/usuarios
-app.register_blueprint(bp_pacientes)   # -> /api/pacientes
-app.register_blueprint(bp_historias)   # -> /api/pacientes/<id>/historias
-app.register_blueprint(bp_turnos)      # -> /api/turnos
-app.register_blueprint(bp_ausencias)   # -> /api/ausencias
-app.register_blueprint(bp_dashboard)   # -> /api/dashboard
+app.register_blueprint(bp_auth)
+app.register_blueprint(bp_usuarios)
+app.register_blueprint(bp_pacientes)
+app.register_blueprint(bp_historias)
+app.register_blueprint(bp_turnos)
+app.register_blueprint(bp_ausencias)
+app.register_blueprint(bp_dashboard)
 app.register_blueprint(bp_disponibilidades)
 app.register_blueprint(bp_grupos)
-app.register_blueprint(bp_blockchain)  
+app.register_blueprint(bp_blockchain)
+app.register_blueprint(bp_health)

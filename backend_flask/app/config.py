@@ -1,15 +1,28 @@
+# backend_flask/app/config.py
 import os
-# config.py
+from datetime import timedelta
 
-# DB_CONFIG_local = {
-#     'host': 'localhost',
-#     'user': 'flaskuser',
-#     'password': 'flaskpass',
-#     'database': 'hc_bfa'
-# }
-DB_CONFIG = {
-    'host': os.getenv('DB_HOST', 'db'),
-    'user': os.getenv('DB_USER', 'root'),
-    'password': os.getenv('DB_PASSWORD', 'root'),
-    'database': os.getenv('DB_NAME', 'hc_bfa')
-}
+class Config:
+    # 🔒 Seguridad general
+    SECRET_KEY = os.getenv("SECRET_KEY", "CambiaEstoPorUnValorSeguro")
+    DEBUG = os.getenv("FLASK_DEBUG", "False").lower() == "true"
+    PERMANENT_SESSION_LIFETIME = timedelta(hours=1)
+    SESSION_COOKIE_SECURE = True
+    SESSION_COOKIE_HTTPONLY = True
+    REMEMBER_COOKIE_SECURE = True
+
+    # 📧 Configuración de correo (ahora desde entorno)
+    MAIL_SERVER = os.getenv("MAIL_SERVER", "smtp.gmail.com")
+    MAIL_PORT = int(os.getenv("MAIL_PORT", 587))
+    MAIL_USE_TLS = os.getenv("MAIL_USE_TLS", "True").lower() == "true"
+    MAIL_USERNAME = os.getenv("MAIL_USERNAME")
+    MAIL_PASSWORD = os.getenv("MAIL_PASSWORD")
+    MAIL_DEFAULT_SENDER = os.getenv("MAIL_DEFAULT_SENDER")
+
+    # 💾 Base de datos (ya no usar root)
+    DB_CONFIG = {
+        "host": os.getenv("DB_HOST", "db"),
+        "user": os.getenv("DB_USER", "hc_app"),
+        "password": os.getenv("DB_PASSWORD", "hc_password"),
+        "database": os.getenv("DB_NAME", "hc_bfa"),
+    }

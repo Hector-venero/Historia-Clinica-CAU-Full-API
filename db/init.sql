@@ -196,7 +196,7 @@ CREATE TABLE grupo_miembros (
   COLLATE=utf8mb4_unicode_ci;
 
 -- ==============================================
--- 🧮 AUDITORÍAS BLOCKCHAIN (corregida para UTF8 y hashes largos)
+-- 🧮 AUDITORÍAS BLOCKCHAIN
 -- ==============================================
 CREATE TABLE auditorias_blockchain (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -228,3 +228,11 @@ SELECT 'Admin', 'admin', 'admin@ejemplo.com',
 WHERE NOT EXISTS (
     SELECT 1 FROM usuarios WHERE username = 'admin'
 );
+
+-- ==============================================
+-- 🔐 USUARIO DE APLICACIÓN (no root)
+-- ==============================================
+DROP USER IF EXISTS 'hc_app'@'%';
+CREATE USER IF NOT EXISTS 'hc_app'@'%' IDENTIFIED BY 'HC_App_2025!';
+GRANT SELECT, INSERT, UPDATE, DELETE ON hc_bfa.* TO 'hc_app'@'%';
+FLUSH PRIVILEGES;

@@ -1,250 +1,201 @@
-# 🏥 Historia Clínica CAU - Full API (Flask + Vue 3 + Docker + MySQL + BFA + Auditoría Blockchain)
+# 🏥 Historia Clínica CAU - Full API (Flask + React + Docker + MySQL + BFA + Seguridad avanzada)
 
-Este proyecto implementa un sistema web integral para la gestión de **historias clínicas unificadas**, desarrollado como **trabajo final de Ingeniería en Telecomunicaciones** en la **Universidad Nacional de San Martín (UNSAM)**.  
-El sistema garantiza la **integridad, trazabilidad y disponibilidad** de la información médica mediante una arquitectura moderna basada en **API REST, frontend desacoplado y tecnología blockchain (BFA)**.  
-Además, incluye un sistema automatizado de **verificación y auditoría de integridad** entre el hash local y el registrado en la **Blockchain Federal Argentina (BFA)**.
-
----
-
-## 📌 Funcionalidades Principales
-
-- 🔐 **Autenticación por roles** (`director`, `profesional`, `administrativo`)
-- 📋 **Registro, edición y consulta de pacientes**
-- 🩺 **Gestión de historias clínicas y evoluciones médicas**
-- 🧩 **Consolidación automática** de historia clínica a partir de evoluciones médicas
-- ⛓️ **Publicación y validación de hashes SHA-256 en la Blockchain Federal Argentina (BFA)**
-- 🔍 **Verificación automática de integridad** entre MySQL y Blockchain (BFA)
-- 📊 **Auditorías históricas** de verificaciones registradas en base local
-- 📅 **Agenda de turnos médicos** con recordatorios automáticos
-- 🧾 **Exportación de historias clínicas a PDF**
-- 📎 **Carga de archivos adjuntos** en evoluciones médicas
-- 💬 **Panel de control dinámico** con estadísticas y gráficos
-- 💡 **Interfaz moderna basada en PrimeVue + Sakai (estilo UNSAM)**
+Este proyecto implementa un sistema web integral para la gestión de **historias clínicas unificadas**, desarrollado como **Trabajo Final de Ingeniería en Telecomunicaciones (UNSAM)**.  
+La arquitectura combina **Flask + React + MySQL + Blockchain Federal Argentina (BFA)**, con enfoque en **seguridad, trazabilidad y auditoría de integridad médica**.
 
 ---
 
-## 🧱 Arquitectura General
+## 🚀 Novedades (Octubre 2025)
 
-El sistema sigue una estructura **frontend–backend desacoplada**, comunicada por API REST y contenedorizada con Docker Compose.
+- 🔄 Arquitectura **modular y segura** con `Flask + Gunicorn + Nginx`
+- 🔐 **Flask-Talisman** y cabeceras CSP/HTTPS activadas
+- 🌍 **CORS restringido** solo al frontend autorizado
+- ⛓️ **Integración nativa con Blockchain Federal Argentina (BFA)** vía nodo `geth`
+- 🧩 **Hashing SHA-256** y publicación en BFA
+- 📜 **Verificación automática** entre hash local y blockchain
+- 🧱 Orquestación completa con `Docker Compose`
+- 🧾 **Sesiones expiran automáticamente** en 1 hora
+- 📧 Sistema seguro de recuperación de contraseña por email (SMTP TLS)
+
+---
+
+## 📦 Estructura del Proyecto
 
 ```bash
 📦 historia_clinica_bfa/
-├── backend_flask/                     # API Flask modular (pacientes, usuarios, historias, blockchain)
-│   ├── app/
-│   │   ├── routes/                    # Rutas agrupadas por módulo
-│   │   ├── utils/                     # Hash, PDF, BFA, auditorías
-│   │   ├── main.py                    # Entry point Flask
-│   │   └── database.py                # Conexión MySQL
-│   ├── Dockerfile
-│   └── requirements.txt
+├── backend_flask/
+│   └── app/
+│       ├── routes/                # Endpoints por módulo (auth, pacientes, blockchain, etc.)
+│       ├── utils/                 # Hashing, PDF, integridad, auditorías
+│       ├── start.sh               # Script de arranque híbrido (Flask / Gunicorn)
+│       ├── config.py              # Config global (lectura .env)
+│       ├── main.py                # Entry principal Flask
+│       ├── Dockerfile             # Imagen híbrida dev/prod
+│       └── requirements.txt
 │
-├── db/                                # Estructura base de datos MySQL
-│   └── init.sql                       # Estructura con auditorías y consolidación de historia
+├── db/init.sql                    # Estructura MySQL (pacientes, historias, auditorías)
+├── frontend/                      # React + Vite + PrimeVue (UI UNSAM Pro)
 │
-├── frontend/                          # Vue 3 + Vite + PrimeVue + Sakai
-│   ├── src/views/pages/historias/     # HistoriaPaciente.vue + BlockchainVerificar.vue
-│   ├── src/service/                   # axios services
-│   ├── package.json
-│   └── vite.config.js
-│
-├── bfa-node/                          # Nodo Geth conectado a Blockchain Federal Argentina
-│   ├── nucleo/test2network/           # Archivos de red y keystore
-│   ├── setup_bfa_node.sh              # Inicialización del nodo
-│   └── reset_bfa_node.sh              # Reinicio y desbloqueo automático
-│
-└── docker-compose.yml                 # Orquestación Flask + MySQL + Nginx + BFA node
+├── nginx/default.conf             # Reverse proxy seguro (HTTP/HTTPS)
+├── bfa-node/                      # Nodo Geth dev o BFA real
+├── .env                           # Variables de entorno (DB, Mail, Blockchain, Flask)
+└── docker-compose.yml             # Orquestación de servicios
 ```
 
 ---
 
-## 🧰 Tecnologías Utilizadas
+## 🧰 Tecnologías Principales
 
-| Capa              | Tecnología / Framework |
-|--------------------|------------------------|
-| **Frontend**       | Vue 3, Vite, PrimeVue, Tailwind, Sakai Template |
-| **Backend**        | Python (Flask), Flask-Login, Flask-Mail |
-| **Base de Datos**  | MySQL 8.0 |
-| **Blockchain**     | Blockchain Federal Argentina (BFA) – Nodo Geth |
-| **Contenedores**   | Docker + Docker Compose |
-| **PDF / Hashing**  | ReportLab, hashlib (SHA-256) |
-| **Servidor Web**   | Nginx (reverse proxy) |
+| Capa | Tecnología |
+|------|-------------|
+| **Frontend** | React (Vite, PrimeVue, Tailwind, Sakai Template) |
+| **Backend** | Flask, Flask-Login, Flask-Mail, Flask-Talisman |
+| **Base de Datos** | MySQL 8.0 |
+| **Blockchain** | Blockchain Federal Argentina (BFA, Geth) |
+| **Servidor Web** | Nginx (reverse proxy seguro) |
+| **Contenedores** | Docker + Docker Compose |
+| **Hash / PDF** | hashlib (SHA-256), ReportLab |
+| **Seguridad** | CSP, CORS, HTTPS, Scrypt password hashing |
 
 ---
 
-## 🐳 Instalación con Docker Compose
+## 🛡️ Seguridad
 
-### 1️⃣ Clonar el repositorio
+- 🔒 **Cabeceras HTTP seguras** (CSP, X-Frame-Options, HSTS, Referrer-Policy)
+- 🌐 **HTTPS listo** con soporte para certificados Let's Encrypt
+- ⚙️ **Flask-Talisman** protege contra ataques XSS / clickjacking
+- 🔐 **Contraseñas cifradas con Scrypt (Werkzeug)**
+- ⏱️ **Sesiones expiran a los 60 minutos**
+- 🧍 **Roles jerárquicos:** `director`, `profesional`, `administrativo`
+- 📧 **Recuperación de contraseña** con token firmado y link seguro
+- 🧩 **Acceso protegido** por `@login_required`
+- 🧰 **CORS limitado** al dominio del frontend React autorizado
+
+---
+
+## ⛓️ Blockchain Federal Argentina (BFA)
+
+El sistema incluye integración directa con la **BFA**, mediante un contenedor `geth` configurado en modo `--dev` para pruebas.  
+En producción, se reemplaza por el nodo permisionado oficial de BFA.
+
+**Flujo de integridad:**
+1. Cada historia clínica genera un hash SHA-256 consolidado.  
+2. El hash se guarda localmente y opcionalmente se publica en la BFA.  
+3. La verificación compara hash local ↔ blockchain.  
+4. Cada auditoría se registra en la tabla `auditorias_blockchain`.  
+
+📂 Código relevante:  
+`app/utils/blockchain_utils.py` y `app/routes/blockchain_routes.py`
+
+---
+
+## 🐳 Despliegue con Docker Compose
+
+### 1️⃣ Clonar repositorio
 
 ```bash
 git clone https://github.com/Hector-venero/Historia-Clinica-CAU-Full-API.git
 cd Historia-Clinica-CAU-Full-API
 ```
 
----
+### 2️⃣ Crear archivo `.env`
 
-### 2️⃣ Configurar entorno (.env)
-
-Crear un archivo `.env` dentro del backend con las variables:
+Ejemplo base:
 
 ```env
+# Flask
 FLASK_ENV=production
-MYSQL_HOST=historia_db
-MYSQL_USER=root
-MYSQL_PASSWORD=root
-MYSQL_DATABASE=hc_bfa
-SECRET_KEY=unsam2025
+FLASK_DEBUG=False
+SECRET_KEY=clave_super_segura
+
+# MySQL
+DB_HOST=db
+DB_USER=hc_app
+DB_PASSWORD=HC_App_2025!
+DB_NAME=hc_bfa
+
+# Mail (SMTP)
+MAIL_SERVER=smtp.gmail.com
+MAIL_PORT=587
+MAIL_USE_TLS=True
+MAIL_USERNAME=hectorvenero2908@gmail.com
+MAIL_PASSWORD=typyayxujklnyskg
+MAIL_DEFAULT_SENDER=hectorvenero29hv@gmail.com
+
+# Blockchain (BFA)
+PRIVATE_KEY_BFA=03ca4edb5fb0dff310f92f8421cfbb1f3b5b2bb54ac9b9e3314b133fb7daae2b
+ADDRESS_BFA=0x71562b71999873DB5b286dF957af199Ec94617F7
+
+# Frontend
+FRONTEND_URL=http://localhost:5173
 ```
 
----
-
-### 3️⃣ Levantar el entorno
+### 3️⃣ Construir y levantar entorno
 
 ```bash
-sudo docker-compose up --build
+docker compose --env-file .env up -d --build
 ```
 
-Esto desplegará los contenedores:
-
-| Servicio | Descripción |
-|-----------|-------------|
-| 🐍 `historia_web` | Backend Flask (API REST) |
-| 🐬 `historia_db` | Base de datos MySQL |
-| 🌐 `historia_nginx` | Servidor web + proxy inverso para Flask y frontend |
-| ⛓️ `bfa-node` | Nodo Geth conectado a la Blockchain Federal Argentina |
-
----
-
-### 4️⃣ Inicializar nodo BFA (opcional)
-
-Si deseas probar la publicación de hashes en la Blockchain Federal Argentina:
+### 4️⃣ Verificar logs
 
 ```bash
-./setup_bfa_node.sh
+docker logs historia_web | grep Running
+docker ps
 ```
 
-> Ver `setup_bfa_node.sh` y `reset_bfa_node.sh` para los detalles de configuración y desbloqueo automático.
+**Salida esperada:**
+```
+🚀 Running in PRODUCTION mode (Gunicorn)
+```
 
 ---
 
-## ▶️ Acceso a la Aplicación
+## 🌍 Acceso
 
-Una vez desplegado el entorno, accedé desde tu navegador a:
+- Frontend: [http://localhost](http://localhost)
+- Backend API: [http://localhost/api](http://localhost/api)
+- Nodo BFA: `http://localhost:8545`
 
-- 🌍 **Frontend:** [http://localhost](http://localhost)
-- 🔗 **API Backend:** [http://localhost/api](http://localhost/api)
-
-Usuario inicial (modo demo):
-
-| Campo | Valor |
-|--------|--------|
-| **Usuario** | `admin` |
-| **Contraseña** | `admin123` |
+Usuario demo:
+| Usuario | Contraseña |
+|----------|-------------|
+| `admin` | `admin123` |
 
 ---
 
-## 🧭 Flujo de Integridad y Auditoría Blockchain (BFA)
+## ⚙️ Entornos soportados
 
-1. Cada evolución médica se guarda en MySQL.  
-2. El sistema genera automáticamente un **hash SHA-256 consolidado** de todas las evoluciones del paciente.  
-3. El hash se registra localmente y opcionalmente se publica en la **Blockchain Federal Argentina (BFA)**.  
-4. Los usuarios pueden **verificar la integridad** desde la interfaz (ver “Verificar Integridad”), comparando el hash local y el registrado en BFA.  
-5. Cada verificación queda registrada en la tabla `auditorias_blockchain`, disponible desde el módulo visual de auditorías.
+| Modo | Configuración | Ejecución |
+|------|----------------|------------|
+| **Desarrollo** | `FLASK_ENV=development` | Flask con auto-reload |
+| **Producción** | `FLASK_ENV=production` | Gunicorn (multi-worker) |
 
----
-
-## 🧾 Módulo de Auditoría Blockchain
-
-El sistema incorpora un módulo visual (Vue 3) donde se puede:
-
-- 🔗 Verificar la integridad de una historia clínica puntual.  
-- 📜 Consultar el historial de auditorías (válido / no válido).  
-- ⚙️ Ejecutar nuevas publicaciones de hash en la BFA.
-
-Este módulo se implementa en:  
-`frontend/src/views/pages/historias/BlockchainVerificar.vue`  
-y consume las rutas `/api/blockchain/verificar` y `/api/blockchain/auditorias`.
-
----
-
-## 🧮 Dashboard y Estadísticas
-
-El **panel de control** presenta:
-
-- Turnos del día y próximos turnos.
-- Actividad médica semanal (gráfico dinámico).
-- Ausencias y bloqueos registrados.
-- Próximos eventos médicos (congresos, licencias, etc.).
-
-Los gráficos se construyen con **Chart.js + PrimeVue**,  
-y usan códigos de color dinámicos (verde = alta carga, gris = ausencias).  
-Además, el dashboard tiene un modo **"UNSAM Pro"** con transiciones suaves y estilo institucional.
-
----
-
-## 🛡️ Seguridad
-
-- 🔑 Contraseñas encriptadas con `Werkzeug + Scrypt`
-- ⏱️ Sesiones limitadas (expiran automáticamente a 1 hora)
-- 🧩 Permisos basados en rol (`director`, `profesional`, `administrativo`)
-- 🧍 Control de sesión con `Flask-Login`
-- ✅ Acceso protegido mediante `@login_required`
-- 📧 Recuperación de contraseña y recordatorios automáticos por email
-
----
-
-## 🧹 Limpieza y Modularización
-
-A partir de **octubre 2025**, el repositorio fue reorganizado con una arquitectura modular y limpia:
-
-- Eliminación de entornos virtuales antiguos (`venv/`) y versiones previas del sistema.  
-- `.gitignore` actualizado para prevenir commits de dependencias o entornos locales.  
-- Reescritura del historial remoto para optimizar tamaño y performance del repo.  
-- Integración del nodo BFA directamente bajo estructura `bfa-node/` con configuración automatizada.
-
----
-
-## 🖥️ Capturas (versión UNSAM Pro UI)
-
-> Próximamente disponibles en `/docs/screens/`
-
-- Dashboard principal  
-- Listado de pacientes  
-- Visualización y verificación de hash blockchain
+Cambio de entorno → modificar `.env` y ejecutar:
+```bash
+docker compose down -v && docker compose up -d --build
+```
 
 ---
 
 ## 📚 Documentación Técnica
 
-Incluye:
+Incluye diagramas y análisis técnico en `/docs/`:
 
-- 🧩 Diagrama de arquitectura general  
-- 🗃️ Diagrama entidad-relación MySQL  
-- 🔗 Flujo de publicación y verificación de hash (Flask → BFA)  
-- ⚙️ Descripción técnica de la red permisionada BFA  
-- ⚡ Comparativa PoW vs PoA aplicada al sector salud  
-- 🔐 Análisis de seguridad y trazabilidad de la información
-
----
-
-## 🪪 Licencia
-
-Proyecto académico desarrollado en el marco del **Proyecto Final Integrador**  
-de la carrera de **Ingeniería en Telecomunicaciones (UNSAM - ECyT)**.
-
-> Uso autorizado únicamente con fines **educativos e institucionales**.
+- Arquitectura general Flask + React + BFA  
+- Diagrama E/R MySQL  
+- Flujo de integridad Blockchain  
+- Comparativa PoW vs PoA  
+- Descripción técnica de la BFA permisionada  
+- Seguridad de red y cifrado de datos  
 
 ---
 
-## 📬 Contacto
+## 📬 Autor
 
-**Autor:** Héctor Venero  
-**Carrera:** Ingeniería en Telecomunicaciones  
-**Universidad:** Universidad Nacional de San Martín (UNSAM)  
-**Año:** 2025  
-**LinkedIn:** [linkedin.com/in/hector-venero-8493a1154](https://www.linkedin.com/in/hector-venero-8493a1154/)  
-**GitHub:** [github.com/Hector-venero](https://github.com/Hector-venero)
+**Héctor Venero**  
+Ingeniería en Telecomunicaciones – UNSAM (ECyT)  
+📧 hectorvenero29hv@gmail.com  
+🔗 [LinkedIn](https://www.linkedin.com/in/hector-venero-8493a1154/)  
+💻 [GitHub](https://github.com/Hector-venero)
 
----
-
-🧠 *"Integridad, interoperabilidad y transparencia médica —  
-Blockchain aplicada a la gestión sanitaria en Argentina."*
+🧠 *"Integridad, interoperabilidad y transparencia médica — Blockchain aplicada a la gestión sanitaria en Argentina."*
