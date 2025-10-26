@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   web:
     build: ./backend_flask/app
@@ -9,8 +7,10 @@ services:
     volumes:
       - ./backend_flask/app:/app
     depends_on:
-      - db
-      - bfa-node
+      db:
+        condition: service_healthy
+      bfa-node:
+        condition: service_started
     environment:
       - FLASK_ENV=development
       - FLASK_APP=main.py
@@ -20,7 +20,6 @@ services:
       - DB_NAME=hc_bfa
       - PRIVATE_KEY_BFA=
       - ADDRESS_BFA=0x71562b71999873DB5b286dF957af199Ec94617F7
-
       - TZ=America/Argentina/Buenos_Aires
     command: flask run --host=0.0.0.0
     networks:
@@ -33,7 +32,7 @@ services:
     environment:
       MYSQL_ROOT_PASSWORD: root
       MYSQL_DATABASE: hc_bfa
-      TZ: America/Argentina/Buenos_Aires  
+      TZ: America/Argentina/Buenos_Aires
     command: --default-time-zone='America/Argentina/Buenos_Aires'
     volumes:
       - db_data:/var/lib/mysql
@@ -42,6 +41,11 @@ services:
       - "3307:3306"
     networks:
       - historia_net
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -proot || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
 
   bfa-node:
     image: ethereum/client-go:stable
