@@ -30,7 +30,12 @@
         <!-- Fecha de nacimiento -->
         <div>
           <label class="block mb-1">Fecha de Nacimiento <span class="text-red-500">*</span></label>
-          <input v-model="paciente.fecha_nacimiento" type="date" class="p-inputtext p-component w-full h-12" />
+          <DatePicker
+            v-model="paciente.fecha_nacimiento"
+            dateFormat="dd/mm/yy"
+            :showIcon="true"
+            class="p-inputtext p-component w-full h-12"
+          />
           <span v-if="intentadoEnviar && !paciente.fecha_nacimiento" class="text-red-500 text-sm">Campo obligatorio</span>
         </div>
         <!-- Sexo -->
@@ -125,7 +130,31 @@
           <input v-model="paciente.medico_cabecera" type="text" class="p-inputtext p-component w-full h-12" />
         </div>
       </div>
-
+      <!-- Motivo de ingreso -->
+      <div class="mt-6">
+        <label class="block mb-1">Motivo de Ingreso</label>
+        <textarea v-model="paciente.motivo_ingreso" rows="3" class="p-inputtext p-component w-full"></textarea>
+      </div>
+      <!-- Enfermedad actual -->
+      <div class="mt-6">
+        <label class="block mb-1">Enfermedad Actual</label>
+        <textarea v-model="paciente.enfermedad_actual" rows="3" class="p-inputtext p-component w-full"></textarea>
+      </div>
+      <!-- Antecedentes de la enfermedad actual -->
+      <div class="mt-6">
+        <label class="block mb-1">Antecedentes de la Enfermedad Actual</label>
+        <textarea v-model="paciente.antecedentes_enfermedad_actual" rows="3" class="p-inputtext p-component w-full"></textarea>
+      </div>
+      <!-- Antecedentes personales -->
+      <div class="mt-6">
+        <label class="block mb-1">Antecedentes Personales</label>
+        <textarea v-model="paciente.antecedentes_personales" rows="3" class="p-inputtext p-component w-full"></textarea>
+      </div>
+      <!-- Antecedentes Heredo-Familiares -->
+      <div class="mt-6">
+        <label class="block mb-1">Antecedentes Heredo-Familiares</label>
+        <textarea v-model="paciente.antecedentes_heredofamiliares" rows="3" class="p-inputtext p-component w-full"></textarea>
+      </div>
       <!-- Comentarios -->
       <div class="mt-6">
         <label class="block mb-1">Comentarios</label>
@@ -143,6 +172,7 @@
 </template>
 
 <script setup>
+import DatePicker from 'primevue/datepicker';
 import { ref, watch } from 'vue'
 import pacienteService from '@/service/pacienteService'
 
@@ -172,6 +202,31 @@ watch(() => props.paciente, (nuevo) => {
   paciente.value = { ...nuevo }
 }, { deep: true })
 
+function normalizarFechaISO(fecha) {
+  if (!fecha) return null;
+
+  // Caso 1: Si es un objeto Date (lo que devuelve PrimeVue)
+  if (fecha instanceof Date) {
+    const year = fecha.getFullYear();
+    const month = String(fecha.getMonth() + 1).padStart(2, '0');
+    const day = String(fecha.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`; // → "2000-08-29"
+  }
+
+  // Caso 2: Si viene como string ISO con zona horaria
+  if (typeof fecha === "string" && fecha.includes("T")) {
+    return fecha.split("T")[0];
+  }
+
+  // Caso 3: Si viene como dd/mm/yyyy
+  if (typeof fecha === "string" && fecha.includes("/")) {
+    const [dia, mes, ano] = fecha.split("/");
+    return `${ano}-${mes}-${dia}`;
+  }
+
+  return fecha;
+}
+
 // Función principal: o registrar o actualizar
 const registrar = async () => {
   intentadoEnviar.value = true
@@ -185,9 +240,13 @@ const registrar = async () => {
   }
 
   try {
-    const formData = new FormData()
+
+    // Normalizar fecha antes de enviar al backend
+    paciente.value.fecha_nacimiento = normalizarFechaISO(paciente.value.fecha_nacimiento);
+
+    const formData = new FormData();
     for (const key in paciente.value) {
-      formData.append(key, paciente.value[key])
+      formData.append(key, paciente.value[key]);
     }
 
     // Si hay función onSubmit, la usamos (caso editar)

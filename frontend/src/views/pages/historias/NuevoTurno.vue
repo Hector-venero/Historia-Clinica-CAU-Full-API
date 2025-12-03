@@ -57,6 +57,7 @@
           <input
             v-model="fecha"
             type="datetime-local"
+            step="300"
             class="w-full p-3 border rounded-xl shadow-sm focus:ring-2 focus:ring-blue-500"
             required
           />

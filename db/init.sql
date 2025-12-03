@@ -49,7 +49,7 @@ CREATE TABLE usuarios (
 -- ==============================================
 CREATE TABLE pacientes (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    nro_hc VARCHAR(20),
+    nro_hc VARCHAR(20) NOT NULL UNIQUE,
     dni VARCHAR(20) NOT NULL UNIQUE,
     nombre VARCHAR(100) NOT NULL,
     apellido VARCHAR(100) NOT NULL,
@@ -71,6 +71,11 @@ CREATE TABLE pacientes (
     motivo_derivacion TEXT,
     medico_cabecera VARCHAR(100),
     comentarios TEXT,
+    motivo_ingreso TEXT,
+    enfermedad_actual TEXT,
+    antecedentes_enfermedad_actual TEXT,
+    antecedentes_personales TEXT,
+    antecedentes_heredofamiliares TEXT,
     registrado_por INT DEFAULT NULL,
     modificado_por INT DEFAULT NULL,
     FOREIGN KEY (registrado_por) REFERENCES usuarios(id),

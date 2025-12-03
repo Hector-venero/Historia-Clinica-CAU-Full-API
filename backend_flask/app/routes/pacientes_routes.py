@@ -54,9 +54,10 @@ def api_crear_paciente():
             nro_hc, dni, apellido, nombre, fecha_nacimiento, sexo, nacionalidad,
             ocupacion, direccion, codigo_postal, telefono, celular, email, contacto,
             cobertura, cert_discapacidad, nro_certificado, derivado_por, diagnostico,
-            motivo_derivacion, medico_cabecera, comentarios, registrado_por
+            motivo_derivacion, medico_cabecera, comentarios, motivo_ingreso, enfermedad_actual, antecedentes_enfermedad_actual,
+            antecedentes_personales, antecedentes_heredofamiliares, registrado_por
         ) VALUES (
-            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,%s, %s, %s, %s, %s, %s, %s, %s,%s, %s, %s, %s, %s, %s
         )
     """, (
         data.get('nro_hc'),
@@ -81,6 +82,11 @@ def api_crear_paciente():
         data.get('motivo_derivacion'),
         data.get('medico_cabecera'),
         data.get('comentarios'),
+        data.get('motivo_ingreso'),
+        data.get('enfermedad_actual'),
+        data.get('antecedentes_enfermedad_actual'),
+        data.get('antecedentes_personales'),
+        data.get('antecedentes_heredofamiliares'),
         usuario_id
     ))
 
@@ -125,6 +131,12 @@ def api_modificar_paciente(id):
         'motivo_derivacion': data.get('motivo_derivacion'),
         'medico_cabecera': data.get('medico_cabecera'),
         'comentarios': data.get('comentarios'),
+        'motivo_ingreso': data.get('motivo_ingreso'),
+        'enfermedad_actual': data.get('enfermedad_actual'),
+        'antecedentes_enfermedad_actual': data.get('antecedentes_enfermedad_actual'),
+        'antecedentes_personales': data.get('antecedentes_personales'),
+        'antecedentes_heredofamiliares': data.get('antecedentes_heredofamiliares'),
+
     }
 
     # Solo actualizar campos enviados

@@ -6,6 +6,7 @@ import Aura from '@primeuix/themes/aura'
 import PrimeVue from 'primevue/config'
 import ConfirmationService from 'primevue/confirmationservice'
 import ToastService from 'primevue/toastservice'
+import es from '@/locales/es.json'
 
 // Componentes globales
 import Button from 'primevue/button'
@@ -26,6 +27,7 @@ async function bootstrap() {
   app.use(pinia)
   app.use(router)
   app.use(PrimeVue, {
+    locale: es,
     theme: {
       preset: Aura,
       options: { darkModeSelector: '.app-dark' }
