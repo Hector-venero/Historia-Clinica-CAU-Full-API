@@ -54,11 +54,16 @@
         <!-- Fecha -->
         <div>
           <label class="block mb-2 font-semibold text-gray-700">Fecha y hora</label>
-          <input
+          <DatePicker
             v-model="fecha"
-            type="datetime-local"
-            step="300"
-            class="w-full p-3 border rounded-xl shadow-sm focus:ring-2 focus:ring-blue-500"
+            showTime
+            hourFormat="24"
+            :stepMinute="5"
+            iconDisplay="input"
+            placeholder="Seleccionar fecha y hora"
+            fluid
+            class="w-full"
+            inputClass="w-full p-3 border rounded-xl shadow-sm"
             required
           />
         </div>
@@ -74,7 +79,7 @@
           ></textarea>
         </div>
 
-        <!-- 🔹 Nueva sección: Tanda de turnos -->
+        <!-- 🔹 Tanda de turnos -->
         <div class="mt-6 border-t pt-4">
           <label class="flex items-center gap-2 text-gray-700 font-semibold cursor-pointer">
             <input type="checkbox" v-model="esTanda" class="accent-blue-600 w-5 h-5" />
@@ -143,13 +148,16 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
+import { useUserStore } from '@/stores/user'
+import DatePicker from 'primevue/datepicker'
 
+const userStore = useUserStore()
 const searchPaciente = ref('')
 const pacientes = ref([])
 const pacienteId = ref('')
 const pacienteSeleccionado = ref('')
 const usuarioId = ref('')
-const fecha = ref('')
+const fecha = ref(null)   // 👈 ahora es Date
 const motivo = ref('')
 const mensaje = ref('')
 const error = ref('')
@@ -158,7 +166,7 @@ const profesionales = ref([])
 // 🔹 Campos nuevos para tanda
 const esTanda = ref(false)
 const cantidad = ref(10)
-const diasSemana = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"]
+const diasSemana = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
 const diasSeleccionados = ref([])
 
 onMounted(async () => {
@@ -196,6 +204,31 @@ function seleccionarPaciente(p) {
   pacientes.value = [] // cerrar lista
 }
 
+function formatearFechaBackend(dateObj) {
+  if (!dateObj) return null
+
+  const d = new Date(dateObj)
+  const pad = (n) => String(n).padStart(2, '0')
+
+  const year = d.getFullYear()
+  const month = pad(d.getMonth() + 1)
+  const day = pad(d.getDate())
+  const hour = pad(d.getHours())
+  const minute = pad(d.getMinutes())
+
+  // Ej: 2025-12-05T16:20
+  return `${year}-${month}-${day}T${hour}:${minute}`
+}
+
+function calcularFin(fechaInicio, minutos) {
+  if (!fechaInicio) return null
+
+  const d = new Date(fechaInicio)
+  d.setMinutes(d.getMinutes() + minutos)
+
+  return formatearFechaBackend(d)
+}
+
 async function crearTurno() {
   mensaje.value = ''
   error.value = ''
@@ -205,17 +238,28 @@ async function crearTurno() {
     return
   }
 
+  if (!fecha.value) {
+    error.value = 'Debe seleccionar fecha y hora'
+    return
+  }
+
   const endpoint = esTanda.value ? '/api/turnos/tanda' : '/api/turnos'
+  const duracion = userStore.duracion_turno || 30
+  const fechaInicioStr = formatearFechaBackend(fecha.value)
+  const fechaFinStr = calcularFin(fecha.value, duracion)
+
   const payload = {
     paciente_id: pacienteId.value,
     usuario_id: usuarioId.value,
-    fecha: fecha.value,
+    fecha_inicio: fechaInicioStr,
+    fecha_fin: fechaFinStr,
     motivo: motivo.value
   }
 
   if (esTanda.value) {
     payload.cantidad = cantidad.value
     payload.dias_semana = diasSeleccionados.value
+    payload.fecha = fechaInicioStr
   }
 
   try {
@@ -237,7 +281,7 @@ async function crearTurno() {
     // Resetear formulario
     pacienteId.value = ''
     usuarioId.value = ''
-    fecha.value = ''
+    fecha.value = null
     motivo.value = ''
     searchPaciente.value = ''
     pacienteSeleccionado.value = ''

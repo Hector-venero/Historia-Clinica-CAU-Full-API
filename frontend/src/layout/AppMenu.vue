@@ -44,7 +44,8 @@ const model = ref([
     items: [
       { label: 'Agenda', icon: 'pi pi-fw pi-calendar', to: '/turnos' },
       { label: 'Nuevo Turno', icon: 'pi pi-fw pi-calendar-plus', to: '/turnos/nuevo' },
-      { label: 'Disponibilidad', icon: 'pi pi-fw pi-clock', to: '/disponibilidad' }
+      { label: 'Disponibilidad', icon: 'pi pi-fw pi-clock', to: '/disponibilidad' },
+      { label: 'Configuración de Turnos', icon: 'pi pi-clock', to: '/turnos/configuracion'}
     ]
   },
   {

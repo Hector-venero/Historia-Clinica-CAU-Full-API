@@ -29,7 +29,7 @@ DROP TABLE IF EXISTS grupos_profesionales;
 DROP TABLE IF EXISTS grupo_miembros;
 
 -- ==============================================
--- 👤 TABLA DE USUARIOS
+-- TABLA DE USUARIOS
 -- ==============================================
 CREATE TABLE usuarios (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -39,13 +39,14 @@ CREATE TABLE usuarios (
     password_hash TEXT NOT NULL,
     rol ENUM('director', 'profesional', 'administrativo') NOT NULL,
     especialidad VARCHAR(100) NULL,
-    activo TINYINT(1) NOT NULL DEFAULT 1   -- ✅ Soft delete
+    duracion_turno INT NOT NULL DEFAULT 20,
+    activo TINYINT(1) NOT NULL DEFAULT 1 
 ) ENGINE=InnoDB
   DEFAULT CHARSET=utf8mb4
   COLLATE=utf8mb4_unicode_ci;
 
 -- ==============================================
--- 🧾 TABLA DE PACIENTES
+-- TABLA DE PACIENTES
 -- ==============================================
 CREATE TABLE pacientes (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -85,7 +86,7 @@ CREATE TABLE pacientes (
   COLLATE=utf8mb4_unicode_ci;
 
 -- ==============================================
--- 🩺 TABLA DE HISTORIAS CLÍNICAS (actualizada para blockchain)
+-- TABLA DE HISTORIAS CLÍNICAS (actualizada para blockchain)
 -- ==============================================
 CREATE TABLE historias (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -102,7 +103,7 @@ CREATE TABLE historias (
   COLLATE=utf8mb4_unicode_ci;
 
 -- ==============================================
--- 📄 TABLA DE EVOLUCIONES
+-- TABLA DE EVOLUCIONES
 -- ==============================================
 CREATE TABLE evoluciones (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -118,7 +119,7 @@ CREATE TABLE evoluciones (
   COLLATE=utf8mb4_unicode_ci;
 
 -- ==============================================
--- 📎 ARCHIVOS ASOCIADOS A EVOLUCIONES
+-- ARCHIVOS ASOCIADOS A EVOLUCIONES
 -- ==============================================
 CREATE TABLE evolucion_archivos (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -132,13 +133,14 @@ CREATE TABLE evolucion_archivos (
   COLLATE=utf8mb4_unicode_ci;
 
 -- ==============================================
--- 📅 TABLA DE TURNOS
+-- TABLA DE TURNOS
 -- ==============================================
 CREATE TABLE turnos (
     id INT AUTO_INCREMENT PRIMARY KEY,
     paciente_id INT NOT NULL,
     usuario_id INT NOT NULL,
-    fecha DATETIME NOT NULL,
+    fecha_inicio DATETIME NOT NULL,
+    fecha_fin DATETIME NOT NULL,
     motivo VARCHAR(255),
     notificado BOOLEAN DEFAULT FALSE,
     FOREIGN KEY (paciente_id) REFERENCES pacientes(id),
@@ -148,7 +150,7 @@ CREATE TABLE turnos (
   COLLATE=utf8mb4_unicode_ci;
 
 -- ==============================================
--- 🚫 AUSENCIAS PROFESIONALES
+-- AUSENCIAS PROFESIONALES
 -- ==============================================
 CREATE TABLE ausencias (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -163,7 +165,7 @@ CREATE TABLE ausencias (
   COLLATE=utf8mb4_unicode_ci;
 
 -- ==============================================
--- ⏰ DISPONIBILIDADES DE PROFESIONALES
+-- DISPONIBILIDADES DE PROFESIONALES
 -- ==============================================
 CREATE TABLE disponibilidades (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -178,7 +180,7 @@ CREATE TABLE disponibilidades (
   COLLATE=utf8mb4_unicode_ci;
 
 -- ==============================================
--- 👥 GRUPOS PROFESIONALES
+-- GRUPOS PROFESIONALES
 -- ==============================================
 CREATE TABLE grupos_profesionales (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -201,7 +203,7 @@ CREATE TABLE grupo_miembros (
   COLLATE=utf8mb4_unicode_ci;
 
 -- ==============================================
--- 🧮 AUDITORÍAS BLOCKCHAIN
+-- AUDITORÍAS BLOCKCHAIN
 -- ==============================================
 CREATE TABLE auditorias_blockchain (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -217,14 +219,14 @@ CREATE TABLE auditorias_blockchain (
   COLLATE=utf8mb4_unicode_ci;
 
 -- ==============================================
--- 📈 ÍNDICES
+-- ÍNDICES
 -- ==============================================
 CREATE INDEX idx_pacientes_dni ON pacientes (dni);
 CREATE INDEX idx_pacientes_nombre ON pacientes (nombre);
 CREATE INDEX idx_pacientes_apellido ON pacientes (apellido);
 
 -- ==============================================
--- 👑 USUARIO ADMINISTRADOR INICIAL
+-- USUARIO ADMINISTRADOR INICIAL
 -- ==============================================
 INSERT INTO usuarios (nombre, username, email, password_hash, rol)
 SELECT 'Admin', 'admin', 'admin@ejemplo.com',
@@ -235,7 +237,7 @@ WHERE NOT EXISTS (
 );
 
 -- ==============================================
--- 🔐 USUARIO DE APLICACIÓN (no root)
+-- USUARIO DE APLICACIÓN (no root)
 -- ==============================================
 DROP USER IF EXISTS 'hc_app'@'%';
 CREATE USER IF NOT EXISTS 'hc_app'@'%' IDENTIFIED BY 'HC_App_2025!';

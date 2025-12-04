@@ -3,13 +3,14 @@ from werkzeug.security import check_password_hash
 from .database import get_connection
 
 class Usuario(UserMixin):
-    def __init__(self, id, nombre, username, email, password_hash, rol):
+    def __init__(self, id, nombre, username, email, password_hash, rol, duracion_turno):
         self.id = id
         self.nombre = nombre
         self.username = username
-        self.email = email       # ✅ ahora lo guardamos
+        self.email = email
         self.password_hash = password_hash
-        self.rol = rol  
+        self.rol = rol
+        self.duracion_turno = duracion_turno
 
     @staticmethod
     def obtener_por_username(username):
@@ -26,7 +27,8 @@ class Usuario(UserMixin):
                 username=data['username'],
                 email=data['email'],                
                 password_hash=data['password_hash'],
-                rol=data['rol']
+                rol=data['rol'],
+                duracion_turno=data.get('duracion_turno')
             )
         return None
 

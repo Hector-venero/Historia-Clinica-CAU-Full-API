@@ -50,7 +50,9 @@ def load_user(user_id):
             username=data["username"],
             email=data["email"],
             password_hash=data["password_hash"],
-            rol=data["rol"]
+            rol=data["rol"],
+            duracion_turno = data.get("duracion_turno")
+
         )
     return None
 

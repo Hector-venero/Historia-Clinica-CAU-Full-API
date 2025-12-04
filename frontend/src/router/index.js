@@ -80,6 +80,12 @@ const router = createRouter({
           name: 'nuevoTurno',
           component: () => import('@/views/pages/historias/NuevoTurno.vue')
         },
+        {
+          path: 'turnos/configuracion',
+          name: 'configuracionTurnos',
+          component: () => import('@/views/pages/turnos/ConfiguracionTurnos.vue'),
+          meta: { soloProfesional: true }
+        },
         // 📌 Usuarios
         {
           path: 'usuarios',

@@ -1,5 +1,5 @@
 from flask import Blueprint, request, jsonify
-from flask_login import login_required
+from flask_login import login_required, current_user
 from werkzeug.security import generate_password_hash
 from app.database import get_connection
 from app.utils.permisos import requiere_rol
@@ -280,3 +280,51 @@ def api_listar_profesionales():
     conn.close()
 
     return jsonify(profesionales)
+
+@bp_usuarios.route("/api/usuarios/<int:usuario_id>/duracion", methods=["PATCH"])
+@login_required
+def actualizar_duracion_turno(usuario_id):
+    """
+    Permite actualizar la duración del turno del profesional.
+    - Un profesional solo puede modificar su propia duración
+    - Director/Admin pueden modificar la de cualquiera
+    """
+    data = request.get_json()
+    nueva_duracion = data.get("duracion_turno")
+
+    if not nueva_duracion:
+        return jsonify({"error": "Duración no especificada"}), 400
+
+    # Validar que sea un número positivo
+    try:
+        nueva_duracion = int(nueva_duracion)
+        if nueva_duracion <= 0:
+            return jsonify({"error": "La duración debe ser un número positivo"}), 400
+    except:
+        return jsonify({"error": "Duración inválida"}), 400
+
+    # Si es profesional → solo puede modificar su propio registro
+    if current_user.rol == "profesional" and current_user.id != usuario_id:
+        return jsonify({"error": "No autorizado para modificar otro usuario"}), 403
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    try:
+        cursor.execute("""
+            UPDATE usuarios
+            SET duracion_turno = %s
+            WHERE id = %s
+        """, (nueva_duracion, usuario_id))
+
+        conn.commit()
+
+        return jsonify({"message": "Duración actualizada correctamente"}), 200
+
+    except Exception as e:
+        conn.rollback()
+        return jsonify({"error": str(e)}), 500
+
+    finally:
+        cursor.close()
+        conn.close()
