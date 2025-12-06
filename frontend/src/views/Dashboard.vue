@@ -4,6 +4,7 @@ import axios from 'axios'
 import Chart from 'primevue/chart'
 import { useUserStore } from '../stores/user'
 import { reactive, watch } from 'vue'
+import { fechaBonita } from '@/utils/formatDate'
 
 // ===============================
 // 👤 Usuario actual
@@ -154,7 +155,7 @@ onMounted(fetchDashboard)
 
       <!-- TURNOS DEL DÍA -->
       <div class="col-span-12 lg:col-span-6">
-        <div class="card shadow-md border border-gray-100 bg-white rounded-xl p-5">
+        <div class="card shadow-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-xl p-5 transition">
           <h2 class="text-xl font-semibold mb-4 text-[#003B70]">📅 Turnos de Hoy</h2>
           <p v-if="dashboard.turnos.length === 0" class="text-gray-500">No hay turnos programados para hoy.</p>
           <DataTable
@@ -163,8 +164,9 @@ onMounted(fetchDashboard)
             paginator
             :rows="5"
             responsiveLayout="scroll"
+            class="p-datatable-sm dark:bg-gray-800 dark:text-gray-200 rounded-xl"
           >
-            <Column field="fecha" header="Fecha/Hora" :body="(r) => new Date(r.fecha).toLocaleString()" />
+            <Column field="fecha" header="Fecha/Hora" :body="(r) => fechaBonita(r.fecha)" />
             <Column field="paciente" header="Paciente" />
             <Column field="profesional" header="Profesional" />
             <Column field="motivo" header="Motivo" />
@@ -172,9 +174,9 @@ onMounted(fetchDashboard)
         </div>
       </div>
 
-      <!-- PRÓXIMO TURNO -->
+      <!-- PRÓXIMO TURNO 
       <div class="col-span-12 lg:col-span-6">
-        <div class="card shadow-md border border-gray-100 bg-white rounded-xl p-5">
+        <div class="card shadow-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-xl p-5 transition">
           <h2 class="text-xl font-semibold mb-4 text-[#003B70]">🕒 Próximo Turno</h2>
           <div v-if="dashboard.proximo_turno" class="space-y-2 text-gray-700">
             <p><strong>Paciente:</strong> {{ dashboard.proximo_turno.paciente }} {{ dashboard.proximo_turno.apellido }}</p>
@@ -184,10 +186,28 @@ onMounted(fetchDashboard)
           <p v-else class="text-gray-500">No hay próximos turnos.</p>
         </div>
       </div>
+-->
+
+      <!-- PRÓXIMO TURNO -->
+      <div class="col-span-12 lg:col-span-6">
+        <div class="card shadow-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-xl p-5 transition">
+          <h2 class="text-xl font-semibold mb-4 text-[#003B70] dark:text-white">🕒 Próximo Turno</h2>
+
+          <div v-if="dashboard.proximo_turno" class="space-y-2 text-gray-700 dark:text-gray-200">
+            <p><strong>Paciente:</strong> {{ dashboard.proximo_turno.paciente }} {{ dashboard.proximo_turno.apellido }}</p>
+            <p><strong>Fecha:</strong> {{ fechaBonita(dashboard.proximo_turno.fecha) }}</p>
+            <p><strong>Motivo:</strong> {{ dashboard.proximo_turno.motivo }}</p>
+          </div>
+
+          <p v-else class="text-gray-500 dark:text-gray-400">
+            No hay próximos turnos.
+          </p>
+        </div>
+      </div>
 
       <!-- GRÁFICO -->
       <div class="col-span-12 lg:col-span-8">
-        <div class="card shadow-md border border-gray-100 bg-white rounded-xl p-5">
+        <div class="card shadow-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-xl p-5 transition">
           <h2 class="text-xl font-semibold mb-4 text-[#003B70]">📈 Turnos programados (próximos 7 días)</h2>
           <Chart
             v-if="chartData && chartData.labels.length > 0"
@@ -202,7 +222,7 @@ onMounted(fetchDashboard)
 
       <!-- DISPONIBILIDAD -->
       <div class="col-span-12 lg:col-span-4">
-        <div class="card shadow-md border border-gray-100 bg-white rounded-xl p-5">
+        <div class="card shadow-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-xl p-5 transition">
           <h2 class="text-xl font-semibold mb-4 text-[#003B70] flex items-center gap-2">🩺 Disponibilidad</h2>
 
           <!-- 👨‍⚕️ PROFESIONAL -->

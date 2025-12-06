@@ -209,7 +209,8 @@ onMounted(fetchHistoria)
 </script>
 
 <template>
-  <div class="p-4 md:p-8 bg-gray-50 min-h-screen">
+  <div class="p-4 md:p-8 min-h-screen bg-gray-50 dark:bg-[#121212] transition-colors">
+
     <Toast />
 
     <h1 class="text-3xl font-bold mb-4 text-gray-800 flex items-center">
