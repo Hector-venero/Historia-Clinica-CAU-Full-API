@@ -25,7 +25,6 @@ const router = createRouter({
       name: 'ResetContraseña',
       component: () => import('@/views/pages/auth/ResetPassword.vue')
     },
-
     // 🌐 App principal (protegida)
     {
       path: '/',
@@ -108,6 +107,18 @@ const router = createRouter({
           component: () => import('@/views/pages/usuarios/EditarUsuario.vue'),
           props: true
         },
+        {
+          path: 'mi-perfil',
+          name: 'miPerfil',
+          component: () => import('@/views/pages/usuarios/MiPerfil.vue'),
+          meta: { requiresAuth: true }
+        },
+        {
+          path: '/cambiar-password',
+          name: 'cambiarPassword',
+          component: () => import('@/views/pages/usuarios/CambiarPassword.vue'),
+          meta: { requiresAuth: true }
+        },
         // 📌 Disponibilidades
         {
           path: 'disponibilidad',
@@ -132,6 +143,13 @@ const router = createRouter({
           name: 'CrearGrupo',
           component: () => import('../views/pages/grupos/CrearGrupo.vue'),
           meta: { requiresAuth: true }
+        },
+        {
+          path: 'grupos/editar/:id',
+          name: 'EditarGrupo',
+          component: () => import('../views/pages/grupos/EditarGrupo.vue'),
+          meta: { requiresAuth: true },
+          props: true
         },
         // 📌 Blockchain
         {

@@ -62,7 +62,8 @@ def api_user():
         "username": current_user.username,
         "email": current_user.email,
         "rol": current_user.rol,
-        "duracion_turno": current_user.duracion_turno
+        "duracion_turno": current_user.duracion_turno,
+        "foto": current_user.foto
     })
 
 

@@ -1,5 +1,6 @@
 from flask import Flask, jsonify
 import json
+import os
 from flask_login import LoginManager
 from flask_mail import Mail
 from flask_cors import CORS
@@ -9,6 +10,7 @@ from app.config import Config
 from app.auth import Usuario
 from app.database import get_connection
 from datetime import timedelta
+from flask import send_from_directory
 
 # -------------------------
 # Crear app Flask
@@ -51,7 +53,8 @@ def load_user(user_id):
             email=data["email"],
             password_hash=data["password_hash"],
             rol=data["rol"],
-            duracion_turno = data.get("duracion_turno")
+            duracion_turno = data.get("duracion_turno"),
+            foto=data.get("foto")
 
         )
     return None
@@ -91,3 +94,11 @@ app.register_blueprint(bp_disponibilidades)
 app.register_blueprint(bp_grupos)
 app.register_blueprint(bp_blockchain)
 app.register_blueprint(bp_health)
+
+# -------------------------
+# Servir fotos de usuario
+# -------------------------
+@app.route('/static/fotos_usuarios/<path:filename>')
+def fotos_usuarios(filename):
+    carpeta = os.path.join(app.root_path, 'static', 'fotos_usuarios')
+    return send_from_directory(carpeta, filename)

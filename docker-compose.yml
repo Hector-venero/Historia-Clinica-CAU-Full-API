@@ -12,6 +12,7 @@ services:
       - "5000:5000"
     volumes:
       - ./backend_flask/app:/app
+      - ./backend_flask/app/static:/app/static
     depends_on:
       db:
         condition: service_healthy
@@ -91,8 +92,11 @@ services:
       dockerfile: Dockerfile
     container_name: historia_frontend
     restart: always
+    env_file:
+      - .env
     environment:
-      - VITE_API_URL=http://web:5000/api
+      #- VITE_API_URL=${API_URL}
+       - VITE_API_URL=${VITE_API_URL}
     volumes:
       - ./frontend:/app
     depends_on:
@@ -112,6 +116,7 @@ services:
     restart: always
     depends_on:
       - web
+      - frontend
     ports:
       - "80:80"
       # - "443:443"  # ✅ Descomentar al habilitar HTTPS

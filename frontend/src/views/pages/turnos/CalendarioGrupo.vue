@@ -6,7 +6,7 @@
 
     <FullCalendar :options="calendarOptions" />
 
-    <!-- Modal Detalle Turno -->
+    <!-- Modal Detalle -->
     <div
       v-if="turnoSeleccionado"
       class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
@@ -14,28 +14,31 @@
       <div class="bg-white rounded-lg shadow-lg p-6 w-96">
         <h2 class="text-xl font-bold mb-4">Detalles del Turno</h2>
 
-        <div>
-          <p><strong>Paciente:</strong> {{ turnoSeleccionado.paciente }}</p>
-          <p><strong>DNI:</strong> {{ turnoSeleccionado.dni }}</p>
-          <p><strong>Profesional:</strong> {{ turnoSeleccionado.profesional }}</p>
-          <p>
-            <strong>Fecha:</strong>
-            {{ new Date(turnoSeleccionado.start).toLocaleDateString() }}
-          </p>
-          <p>
-            <strong>Hora:</strong>
-            {{ new Date(turnoSeleccionado.start).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }}
-          </p>
-          <p><strong>Motivo:</strong> {{ turnoSeleccionado.description }}</p>
+        <p><strong>Paciente:</strong> {{ turnoSeleccionado.paciente }}</p>
+        <p><strong>DNI:</strong> {{ turnoSeleccionado.dni }}</p>
+        <p><strong>Profesional:</strong> {{ turnoSeleccionado.profesional }}</p>
+        <p>
+          <strong>Fecha:</strong>
+          {{ new Date(turnoSeleccionado.start).toLocaleDateString() }}
+        </p>
+        <p>
+          <strong>Hora:</strong>
+          {{
+            new Date(turnoSeleccionado.start).toLocaleTimeString([], {
+              hour: '2-digit',
+              minute: '2-digit'
+            })
+          }}
+        </p>
+        <p><strong>Motivo:</strong> {{ turnoSeleccionado.description }}</p>
 
-          <div class="flex justify-end gap-2 mt-4">
-            <button
-              @click="turnoSeleccionado = null"
-              class="bg-gray-400 text-white px-3 py-1 rounded hover:bg-gray-500"
-            >
-              Cerrar
-            </button>
-          </div>
+        <div class="flex justify-end gap-2 mt-4">
+          <button
+            @click="turnoSeleccionado = null"
+            class="bg-gray-400 text-white px-3 py-1 rounded hover:bg-gray-500"
+          >
+            Cerrar
+          </button>
         </div>
       </div>
     </div>
@@ -56,12 +59,18 @@ import '@fullcalendar/common/main.css'
 import '@fullcalendar/daygrid/main.css'
 import '@fullcalendar/timegrid/main.css'
 
+// -------------------------
+// 📌 SETUP
+// -------------------------
 const route = useRoute()
 const grupoId = route.params.grupoId
 const grupo = ref(null)
 const eventos = ref([])
 const turnoSeleccionado = ref(null)
 
+// -------------------------
+// 📅 CONFIG FULLCALENDAR
+// -------------------------
 const calendarOptions = ref({
   plugins: [dayGridPlugin, timeGridPlugin, interactionPlugin],
   initialView: 'timeGridWeek',
@@ -72,54 +81,66 @@ const calendarOptions = ref({
     right: 'dayGridMonth,timeGridWeek,timeGridDay'
   },
   events: eventos.value,
+
   eventClick(info) {
     turnoSeleccionado.value = {
       id: info.event.id,
-      paciente: info.event.extendedProps?.paciente,
-      dni: info.event.extendedProps?.dni,
-      profesional: info.event.extendedProps?.profesional,
-      description: info.event.extendedProps?.description,
+      paciente: info.event.extendedProps.paciente,
+      dni: info.event.extendedProps.dni,
+      profesional: info.event.extendedProps.profesional,
+      description: info.event.extendedProps.description,
       start: info.event.start
     }
   },
+
   eventDidMount(info) {
     tippy(info.el, {
-      content: `${info.event.extendedProps.profesional} — ${info.event.extendedProps.description}`,
+      content: `
+        <strong>${info.event.extendedProps.paciente}</strong><br>
+        Profesional: ${info.event.extendedProps.profesional}<br>
+        Motivo: ${info.event.extendedProps.description}
+      `,
+      allowHTML: true,
       placement: 'top',
       theme: 'light-border'
     })
   }
 })
 
-// 🔹 Cargar turnos de todos los miembros del grupo
+// -------------------------
+// 🔹 Cargar turnos del grupo
+// -------------------------
 async function cargarTurnosGrupo() {
   try {
     const [resGrupo, resTurnos] = await Promise.all([
-    fetch(`/api/grupos/${grupoId}`, { credentials: 'include' }),
-    fetch(`/api/turnos/grupo/${grupoId}`, { credentials: 'include' })  // ✅ ahora usa el nuevo endpoint
+      fetch(`/api/grupos/${grupoId}`, { credentials: 'include' }),
+      fetch(`/api/turnos/grupo/${grupoId}`, { credentials: 'include' })
     ])
 
-    if (!resGrupo.ok || !resTurnos.ok) throw new Error('Error al cargar datos del grupo')
+    if (!resGrupo.ok || !resTurnos.ok) {
+      throw new Error('Error al cargar datos del grupo')
+    }
 
     grupo.value = await resGrupo.json()
     const dataTurnos = await resTurnos.json()
-    console.log("📅 Datos del backend:", dataTurnos)
-    
-    eventos.value = dataTurnos.map(t => {
-    // 🔹 Convertir "Wed, 15 Oct 2025 14:03:00 GMT" → ISO "2025-10-15T14:03:00"
-    const fechaISO = new Date(t.fecha).toISOString().slice(0, 19)
 
-    return {
-        id: t.id,
-        title: `${t.paciente} (${t.profesional})`,
-        start: fechaISO,
+    // 🟦 Convertir eventos al formato FullCalendar
+    eventos.value = dataTurnos.map(t => ({
+      id: t.id,
+      title: `${t.paciente} (${t.profesional})`,
+      start: t.start, // YA VIENE ISO CORRECTO
+      end: t.end,
+      backgroundColor: grupo.value?.color || '#00936B',
+      borderColor: grupo.value?.color || '#007A50',
+
+      extendedProps: {
         paciente: t.paciente,
-        dni: t.dni || '',
+        dni: t.dni,
         profesional: t.profesional,
-        description: t.motivo || 'Sin motivo',
-        backgroundColor: grupo.value?.color || '#00936B'
-    }
-    })
+        description: t.description || t.motivo || 'Sin motivo'
+      }
+    }))
+
     calendarOptions.value.events = eventos.value
 
   } catch (err) {
@@ -151,5 +172,4 @@ onMounted(() => {
   border-color: #333 !important;
   color: #eaeaea !important;
 }
-
 </style>

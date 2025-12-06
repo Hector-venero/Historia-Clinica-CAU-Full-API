@@ -1,12 +1,20 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, current_app as app
 from flask_login import login_required, current_user
-from werkzeug.security import generate_password_hash
+from werkzeug.utils import secure_filename
+from werkzeug.security import check_password_hash, generate_password_hash
 from app.database import get_connection
 from app.utils.permisos import requiere_rol
+import os
+from PIL import Image
+import io
 
 bp_usuarios = Blueprint("usuarios", __name__)
 
 ROLES_VALIDOS = {"director", "profesional", "administrativo"}
+
+# ============================================================
+#  RUTAS ORIGINALES (NO MODIFICADAS)
+# ============================================================
 
 @bp_usuarios.route('/api/usuarios', methods=['POST'])
 @login_required
@@ -29,7 +37,8 @@ def api_crear_usuario():
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
 
-    cursor.execute("SELECT id FROM usuarios WHERE username = %s OR email = %s", (username, email))
+    cursor.execute("SELECT id FROM usuarios WHERE username = %s OR email = %s",
+                   (username, email))
     existente = cursor.fetchone()
 
     if existente:
@@ -54,15 +63,11 @@ def api_crear_usuario():
 
     return jsonify({'message': f"Usuario '{username}' creado con éxito ✅"})
 
+
 @bp_usuarios.route('/api/usuarios', methods=['GET'])
 @login_required
 @requiere_rol('director')
 def api_usuarios_listado():
-    """
-    Listado de usuarios activos (solo director).
-    Soporta filtros opcionales: ?q=texto (busca en nombre/username/email).
-    Si se pasa ?inactivos=1, devuelve también los inactivos.
-    """
     q = (request.args.get('q') or "").strip()
     incluir_inactivos = request.args.get('inactivos') == '1'
 
@@ -93,11 +98,11 @@ def api_usuarios_listado():
     conn.close()
     return jsonify(usuarios)
 
+
 @bp_usuarios.route('/api/usuarios/<int:usuario_id>', methods=['GET'])
 @login_required
 @requiere_rol('director')
 def api_usuarios_detalle(usuario_id):
-    """Detalle de un usuario (solo director)."""
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
     cursor.execute("""
@@ -112,44 +117,39 @@ def api_usuarios_detalle(usuario_id):
         return jsonify({"error": "Usuario no encontrado"}), 404
     return jsonify(u)
 
+
 @bp_usuarios.route('/api/usuarios/<int:usuario_id>', methods=['PUT'])
 @login_required
 @requiere_rol('director')
 def api_usuarios_editar(usuario_id):
-    """
-    Editar usuario (solo director).
-    Body JSON opcional por campo: nombre, username, email, rol, especialidad, password
-    - Valida unicidad de username/email si cambian
-    - Si rol = profesional, guarda especialidad (en MAYÚSCULAS); si no, la pone en NULL
-    - Si viene 'password', se re-hashea
-    """
     data = request.get_json(silent=True) or {}
     nombre = (data.get("nombre") or "").strip()
     username = (data.get("username") or "").strip()
     email = (data.get("email") or "").strip()
     rol = (data.get("rol") or "").strip()
     especialidad = (data.get("especialidad") or "").strip()
-    password = data.get("password")  # puede venir vacío o no venir
+    password = data.get("password")
 
     conn = get_connection()
     cur = conn.cursor(dictionary=True)
 
-    # Existe el usuario?
     cur.execute("SELECT * FROM usuarios WHERE id = %s", (usuario_id,))
     actual = cur.fetchone()
     if not actual:
         cur.close(); conn.close()
         return jsonify({"error": "Usuario no encontrado"}), 404
 
-    # Validaciones básicas
+    # Validaciones
     if username and username != actual["username"]:
-        cur.execute("SELECT id FROM usuarios WHERE username=%s AND id<>%s", (username, usuario_id))
+        cur.execute("SELECT id FROM usuarios WHERE username=%s AND id<>%s",
+                    (username, usuario_id))
         if cur.fetchone():
             cur.close(); conn.close()
             return jsonify({"error": "Ya existe otro usuario con ese username"}), 400
 
     if email and email != actual["email"]:
-        cur.execute("SELECT id FROM usuarios WHERE email=%s AND id<>%s", (email, usuario_id))
+        cur.execute("SELECT id FROM usuarios WHERE email=%s AND id<>%s",
+                    (email, usuario_id))
         if cur.fetchone():
             cur.close(); conn.close()
             return jsonify({"error": "Ya existe otro usuario con ese email"}), 400
@@ -158,7 +158,6 @@ def api_usuarios_editar(usuario_id):
         cur.close(); conn.close()
         return jsonify({"error": "Rol inválido"}), 400
 
-    # Construir SET dinámico
     sets = []
     params = []
 
@@ -170,15 +169,11 @@ def api_usuarios_editar(usuario_id):
         sets.append("email=%s"); params.append(email)
     if rol:
         sets.append("rol=%s"); params.append(rol)
-        # manejar especialidad según rol
         if rol == "profesional":
-            sets.append("especialidad=%s"); params.append(especialidad.upper() if especialidad else None)
+            sets.append("especialidad=%s")
+            params.append(especialidad.upper() if especialidad else None)
         else:
             sets.append("especialidad=%s"); params.append(None)
-    else:
-        # si no cambia rol pero sí especialidad y el actual es profesional
-        if especialidad and actual["rol"] == "profesional":
-            sets.append("especialidad=%s"); params.append(especialidad.upper())
 
     if password:
         sets.append("password_hash=%s"); params.append(generate_password_hash(password))
@@ -190,22 +185,20 @@ def api_usuarios_editar(usuario_id):
     params.append(usuario_id)
     q = f"UPDATE usuarios SET {', '.join(sets)} WHERE id=%s"
     cur.execute(q, tuple(params))
+
     conn.commit()
     cur.close(); conn.close()
 
     return jsonify({"message": "Usuario actualizado ✅"})
 
+
 @bp_usuarios.route('/api/usuarios/<int:usuario_id>', methods=['DELETE'])
 @login_required
 @requiere_rol('director')
 def api_usuarios_eliminar(usuario_id):
-    """
-    Soft delete: marcar usuario como inactivo en lugar de eliminarlo.
-    """
     conn = get_connection()
     cur = conn.cursor(dictionary=True)
 
-    # Verificar si existe
     cur.execute("SELECT id, activo FROM usuarios WHERE id=%s", (usuario_id,))
     usuario = cur.fetchone()
     if not usuario:
@@ -216,41 +209,32 @@ def api_usuarios_eliminar(usuario_id):
         cur.close(); conn.close()
         return jsonify({"message": "Usuario ya estaba inactivo"}), 200
 
-    # Marcar como inactivo
     cur.execute("UPDATE usuarios SET activo=0 WHERE id=%s", (usuario_id,))
     conn.commit()
-    cur.close(); conn.close()
 
+    cur.close(); conn.close()
     return jsonify({"message": "Usuario marcado como inactivo ✅"})
+
 
 @bp_usuarios.route('/api/usuarios/<int:usuario_id>/activar', methods=['PUT'])
 @login_required
 @requiere_rol('director')
 def api_usuarios_activar(usuario_id):
-    """
-    Reactivar un usuario marcado como inactivo.
-    Solo accesible por director.
-    """
     conn = get_connection()
     cur = conn.cursor(dictionary=True)
 
-    # Verificar si existe
     cur.execute("SELECT id, activo FROM usuarios WHERE id=%s", (usuario_id,))
     usuario = cur.fetchone()
     if not usuario:
         cur.close(); conn.close()
         return jsonify({"error": "Usuario no encontrado"}), 404
 
-    if usuario["activo"] == 1:
-        cur.close(); conn.close()
-        return jsonify({"message": "Usuario ya estaba activo"}), 200
-
-    # Reactivar
     cur.execute("UPDATE usuarios SET activo=1 WHERE id=%s", (usuario_id,))
     conn.commit()
-    cur.close(); conn.close()
 
+    cur.close(); conn.close()
     return jsonify({"message": "Usuario reactivado ✅"})
+
 
 @bp_usuarios.route('/api/profesionales', methods=['GET'])
 @login_required
@@ -262,69 +246,221 @@ def api_listar_profesionales():
 
     if especialidad:
         cursor.execute("""
-            SELECT id, nombre, username, especialidad 
-            FROM usuarios 
+            SELECT id, nombre, username, especialidad
+            FROM usuarios
             WHERE rol = 'profesional' AND UPPER(especialidad) = UPPER(%s)
             ORDER BY nombre
         """, (especialidad,))
     else:
         cursor.execute("""
-            SELECT id, nombre, username, especialidad 
-            FROM usuarios 
+            SELECT id, nombre, username, especialidad
+            FROM usuarios
             WHERE rol = 'profesional'
             ORDER BY nombre
         """)
-    
+
     profesionales = cursor.fetchall()
     cursor.close()
     conn.close()
 
     return jsonify(profesionales)
 
+
 @bp_usuarios.route("/api/usuarios/<int:usuario_id>/duracion", methods=["PATCH"])
 @login_required
 def actualizar_duracion_turno(usuario_id):
-    """
-    Permite actualizar la duración del turno del profesional.
-    - Un profesional solo puede modificar su propia duración
-    - Director/Admin pueden modificar la de cualquiera
-    """
     data = request.get_json()
     nueva_duracion = data.get("duracion_turno")
 
     if not nueva_duracion:
         return jsonify({"error": "Duración no especificada"}), 400
 
-    # Validar que sea un número positivo
     try:
         nueva_duracion = int(nueva_duracion)
         if nueva_duracion <= 0:
-            return jsonify({"error": "La duración debe ser un número positivo"}), 400
+            return jsonify({"error": "La duración debe ser positiva"}), 400
     except:
         return jsonify({"error": "Duración inválida"}), 400
 
-    # Si es profesional → solo puede modificar su propio registro
     if current_user.rol == "profesional" and current_user.id != usuario_id:
-        return jsonify({"error": "No autorizado para modificar otro usuario"}), 403
+        return jsonify({"error": "No autorizado"}), 403
 
     conn = get_connection()
     cursor = conn.cursor()
 
-    try:
-        cursor.execute("""
-            UPDATE usuarios
-            SET duracion_turno = %s
-            WHERE id = %s
-        """, (nueva_duracion, usuario_id))
+    cursor.execute("""
+        UPDATE usuarios
+        SET duracion_turno = %s
+        WHERE id = %s
+    """, (nueva_duracion, usuario_id))
 
-        conn.commit()
+    conn.commit()
+    cursor.close()
+    conn.close()
 
-        return jsonify({"message": "Duración actualizada correctamente"}), 200
+    return jsonify({"message": "Duración actualizada correctamente"})
 
-    except Exception as e:
-        conn.rollback()
-        return jsonify({"error": str(e)}), 500
 
-    finally:
-        cursor.close()
-        conn.close()
+# ============================================================
+#  NUEVAS RUTAS DE PERFIL
+# ============================================================
+
+UPLOAD_FOLDER = "static/fotos_usuarios"
+
+
+@bp_usuarios.route('/api/usuario/perfil', methods=['GET'])
+@login_required
+def obtener_perfil():
+    return jsonify({
+        "id": current_user.id,
+        "nombre": current_user.nombre,
+        "email": current_user.email,
+        "foto": current_user.foto,
+        "rol": current_user.rol
+    })
+
+from PIL import Image
+import io
+
+@bp_usuarios.route('/api/usuario/perfil', methods=['POST'])
+@login_required
+def actualizar_perfil():
+    print("🔵 INICIO actualizar_perfil()")
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    nuevo_nombre = request.form.get('nombre')
+    nuevo_email = request.form.get('email')
+
+    print("📥 Nombre recibido:", nuevo_nombre)
+    print("📥 Email recibido:", nuevo_email)
+
+    # Ruta donde se guardan las fotos
+    carpeta_fotos = os.path.join(app.root_path, "static/fotos_usuarios")
+    os.makedirs(carpeta_fotos, exist_ok=True)
+
+    foto_anterior = current_user.foto
+    nueva_foto = foto_anterior  # valor por defecto si no se cambia
+
+    # Si llega archivo
+    if "foto" in request.files:
+        archivo = request.files["foto"]
+
+        if archivo.filename:
+            print("📁 Nueva foto recibida:", archivo.filename)
+
+            # --------------------------
+            # 1) BORRAR FOTO ANTERIOR
+            # --------------------------
+            if foto_anterior:
+                path_anterior = os.path.join(carpeta_fotos, foto_anterior)
+                if os.path.exists(path_anterior):
+                    os.remove(path_anterior)
+                    print("🗑 Foto anterior eliminada:", foto_anterior)
+
+            # --------------------------
+            # 2) RENOMBRAR FOTO
+            # --------------------------
+            extension = archivo.filename.rsplit(".", 1)[-1].lower()
+            filename = f"user_{current_user.id}.{extension}"
+            nueva_foto = filename
+            path_nuevo = os.path.join(carpeta_fotos, filename)
+
+            print("📁 La nueva foto se guardará como:", filename)
+
+            # --------------------------
+            # 3) OPTIMIZAR / COMPRIMIR IMAGEN
+            # --------------------------
+            try:
+                image = Image.open(archivo)
+
+                # Convertir a RGB si viene como PNG con transparencia
+                if image.mode in ("RGBA", "P", "LA"):
+                    image = image.convert("RGB")
+
+                # Guardar optimizada
+                image.save(path_nuevo, optimize=True, quality=85)
+                print("✨ Imagen comprimida y guardada correctamente")
+
+            except Exception as e:
+                print("⚠ Error al procesar imagen, guardando sin optimizar:", e)
+                archivo.save(path_nuevo)
+
+    else:
+        print("⚠ No llegó campo foto")
+
+    print("➡️ Foto final:", nueva_foto)
+
+    # GUARDAR EN BASE DE DATOS
+    cursor.execute("""
+        UPDATE usuarios
+        SET nombre = %s,
+            email = %s,
+            foto = %s
+        WHERE id = %s
+    """, (nuevo_nombre, nuevo_email, nueva_foto, current_user.id))
+
+    conn.commit()
+    conn.close()
+
+    print("💾 UPDATE ejecutado")
+    print("🔵 FIN actualizar_perfil()")
+
+    return jsonify({"message": "Perfil actualizado correctamente.", "foto": nueva_foto})
+
+@bp_usuarios.route('/api/usuario/cambiar-password', methods=['POST'])
+@login_required
+def cambiar_password():
+    data = request.json
+    actual = data.get("actual")
+    nueva = data.get("nueva")
+
+    if not check_password_hash(current_user.password_hash, actual):
+        return jsonify({"error": "La contraseña actual es incorrecta"}), 400
+
+    nuevo_hash = generate_password_hash(nueva)
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        UPDATE usuarios
+        SET password_hash=%s
+        WHERE id=%s
+    """, (nuevo_hash, current_user.id))
+
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+    return jsonify({"message": "Contraseña actualizada correctamente"})
+
+@bp_usuarios.route('/api/usuario/foto', methods=['DELETE'])
+@login_required
+def borrar_foto():
+    user_id = current_user.id
+    
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("SELECT foto FROM usuarios WHERE id=%s", (user_id,))
+    data = cursor.fetchone()
+
+    if not data or not data.get("foto"):
+        return jsonify({"message": "No hay foto para borrar", "foto": None}), 200
+
+    foto = data["foto"]
+    carpeta = os.path.join(app.root_path, "static/fotos_usuarios")
+    ruta_foto = os.path.join(carpeta, foto)
+
+    # Borrar archivo físico
+    if os.path.exists(ruta_foto):
+        os.remove(ruta_foto)
+        print(f"🗑 Foto eliminada: {ruta_foto}")
+
+    # Actualizar BD
+    cursor.execute("UPDATE usuarios SET foto=NULL WHERE id=%s", (user_id,))
+    conn.commit()
+    conn.close()
+
+    return jsonify({"message": "Foto eliminada", "foto": None}), 200

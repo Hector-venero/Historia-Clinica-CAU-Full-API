@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify
 from flask_login import login_required, current_user
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from app.database import get_connection
 from app.utils.permisos import requiere_rol
 from app import mail
@@ -8,11 +8,13 @@ from flask_mail import Message
 
 bp_turnos = Blueprint("turnos", __name__)
 
+# Timezone Argentina FIX
+TZ_ARG = timezone(timedelta(hours=-3))
+
 # ==========================================================
 # 🔹 Función auxiliar: Verificar disponibilidad del médico
 # ==========================================================
 def medico_disponible(usuario_id, fecha_inicio, fecha_fin):
-    """Verifica si el médico está disponible entre fecha_inicio y fecha_fin."""
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
 
@@ -34,7 +36,6 @@ def medico_disponible(usuario_id, fecha_inicio, fecha_fin):
     }
     dia_es = dias.get(dia_semana, "Lunes")
 
-    # Verificar disponibilidad habitual
     cursor.execute("""
         SELECT 1 FROM disponibilidades
         WHERE usuario_id = %s
@@ -46,7 +47,6 @@ def medico_disponible(usuario_id, fecha_inicio, fecha_fin):
 
     disponible = cursor.fetchone()
 
-    # Verificar ausencia
     cursor.execute("""
         SELECT 1 FROM ausencias
         WHERE usuario_id = %s
@@ -55,24 +55,23 @@ def medico_disponible(usuario_id, fecha_inicio, fecha_fin):
     """, (usuario_id, fecha_inicio, fecha_fin))
 
     ausente = cursor.fetchone()
-
-    # Verificar superposición con turnos
-    cursor.execute("""
-        SELECT 1 FROM turnos
-        WHERE usuario_id = %s
-        AND (
-            (fecha_inicio < %s AND fecha_fin > %s)
-            OR
-            (fecha_inicio < %s AND fecha_fin > %s)
-        )
-    """, (usuario_id, fecha_fin, fecha_inicio, fecha_inicio, fecha_fin))
-
-    ocupado = cursor.fetchone()
-
+##
+#    cursor.execute("""
+#       SELECT 1 FROM turnos
+#        WHERE usuario_id = %s
+#        AND (
+#            (fecha_inicio < %s AND fecha_fin > %s)
+#            OR
+#            (fecha_inicio < %s AND fecha_fin > %s)
+#        )
+#    """, (usuario_id, fecha_fin, fecha_inicio, fecha_inicio, fecha_fin))
+#    ocupado = cursor.fetchone()
+#
     cursor.close()
     conn.close()
 
-    return bool(disponible) and not ausente and not ocupado
+    return bool(disponible) and not ausente #and not ocupado
+
 
 
 # ==========================================================
@@ -115,8 +114,8 @@ def api_turnos():
             "id": t["id"],
             "paciente": t["nombre"],
             "dni": t["dni"],
-            "start": t["fecha_inicio"].isoformat(),
-            "end": t["fecha_fin"].isoformat(),
+            "start": t["fecha_inicio"].replace(tzinfo=TZ_ARG).isoformat(),
+            "end": t["fecha_fin"].replace(tzinfo=TZ_ARG).isoformat(),
             "description": t["motivo"],
             "profesional": t["profesional"]
         } for t in turnos]
@@ -138,12 +137,10 @@ def api_turnos():
         if not (paciente_id and usuario_id and fecha_inicio and fecha_fin):
             return jsonify({"error": "Campos obligatorios faltantes"}), 400
 
-        # 🔒 Restricción: un profesional solo puede asignarse turnos a sí mismo
         if current_user.rol == 'profesional' and usuario_id != current_user.id:
             return jsonify({"error": "No puede asignar turnos a otros profesionales"}), 403
         
         try:
-            # Validación de disponibilidad
             if not medico_disponible(usuario_id, fecha_inicio, fecha_fin):
                 return jsonify({"error": "El profesional no está disponible en esa fecha u horario"}), 400
 
@@ -153,7 +150,6 @@ def api_turnos():
             """, (paciente_id, usuario_id, fecha_inicio, fecha_fin, motivo))
             conn.commit()
 
-            # Enviar mail (solo fecha/hora de inicio)
             cursor.execute("SELECT email, nombre, apellido FROM pacientes WHERE id = %s", (paciente_id,))
             paciente = cursor.fetchone()
 
@@ -162,7 +158,7 @@ def api_turnos():
 
             if paciente and paciente.get("email"):
                 try:
-                    fecha_dt = datetime.fromisoformat(fecha_inicio)
+                    fecha_dt = datetime.fromisoformat(fecha_inicio).replace(tzinfo=TZ_ARG)
                     fecha_legible = fecha_dt.strftime("%d/%m/%Y")
                     hora_legible = fecha_dt.strftime("%H:%M")
 
@@ -254,9 +250,29 @@ def editar_turno(id):
         conn.close()
         return jsonify({"error": "No autorizado"}), 403
 
+    motivo = data.get("motivo")
+
     fecha_inicio = data.get("fecha_inicio")
     fecha_fin = data.get("fecha_fin")
-    motivo = data.get("motivo")
+
+    if not fecha_inicio or not fecha_fin:
+        nueva_fecha = data.get("fecha")
+        if not nueva_fecha:
+            return jsonify({"error": "Falta fecha"}), 400
+
+        cursor.execute("SELECT duracion_turno FROM usuarios WHERE id=%s", (turno['usuario_id'],))
+        info_prof = cursor.fetchone()
+
+        if not info_prof or not info_prof["duracion_turno"]:
+            return jsonify({"error": "El profesional no tiene duración de turno configurada"}), 400
+
+        duracion = info_prof["duracion_turno"]
+
+        inicio_dt = datetime.fromisoformat(nueva_fecha)
+        fin_dt = inicio_dt + timedelta(minutes=duracion)
+
+        fecha_inicio = inicio_dt.isoformat()
+        fecha_fin = fin_dt.isoformat()
 
     cursor.execute("""
         UPDATE turnos
@@ -267,6 +283,7 @@ def editar_turno(id):
     conn.commit()
     cursor.close()
     conn.close()
+
     return jsonify({"message": "Turno actualizado correctamente ✅"})
 
 
@@ -289,11 +306,9 @@ def crear_turnos_tanda():
         if not (paciente_id and usuario_id and fecha_inicial and dias_semana):
             return jsonify({"error": "Faltan datos requeridos"}), 400
 
-        # Restricción: profesional solo se asigna a sí mismo
         if current_user.rol == 'profesional' and usuario_id != current_user.id:
             return jsonify({"error": "No puede asignar turnos a otros profesionales"}), 403
 
-        # Obtener duración del profesional
         conn = get_connection()
         cursor = conn.cursor(dictionary=True)
         cursor.execute("SELECT duracion_turno FROM usuarios WHERE id=%s", (usuario_id,))
@@ -304,7 +319,6 @@ def crear_turnos_tanda():
 
         dur = profesional["duracion_turno"]
 
-        # Mapear días
         dias_map = {
             "Lunes": 0,
             "Martes": 1,
@@ -324,7 +338,6 @@ def crear_turnos_tanda():
 
                 fecha_fin = fecha_actual + timedelta(minutes=dur)
 
-                # Validar disponibilidad
                 if not medico_disponible(usuario_id, fecha_actual.isoformat(), fecha_fin.isoformat()):
                     fecha_actual += timedelta(days=1)
                     continue
@@ -352,6 +365,148 @@ def crear_turnos_tanda():
 # ==========================================================
 # 📌 Turnos por grupo
 # ==========================================================
+@bp_turnos.route("/api/turnos/profesional/<int:usuario_id>", methods=["GET"])
+@login_required
+def turnos_profesional(usuario_id):
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+
+    cursor.execute("""
+        SELECT 
+            t.id,
+            t.fecha_inicio,
+            t.fecha_fin,
+            t.motivo,
+            p.nombre AS paciente,
+            p.dni,
+            u.nombre AS profesional,
+            '#007AFF' AS color   
+        FROM turnos t
+        JOIN pacientes p ON t.paciente_id = p.id
+        JOIN usuarios u ON t.usuario_id = u.id
+        WHERE u.id = %s
+    """, (usuario_id,))
+
+    individuales = cursor.fetchall()
+
+    cursor.execute("SELECT grupo_id FROM grupo_miembros WHERE usuario_id = %s", (usuario_id,))
+    grupos = [g["grupo_id"] for g in cursor.fetchall()]
+
+    grupales = []
+    if grupos:
+        cursor.execute(f"""
+            SELECT 
+                t.id,
+                t.fecha_inicio,
+                t.fecha_fin,
+                t.motivo,
+                p.nombre AS paciente,
+                p.dni,
+                u.nombre AS profesional,
+                gp.color
+            FROM turnos t
+            JOIN pacientes p ON t.paciente_id = p.id
+            JOIN usuarios u ON t.usuario_id = u.id
+            JOIN grupo_miembros gm ON gm.usuario_id = u.id
+            JOIN grupos_profesionales gp ON gp.id = gm.grupo_id
+            WHERE gm.grupo_id IN ({','.join(['%s'] * len(grupos))})
+        """, grupos)
+
+        grupales = cursor.fetchall()
+
+    cursor.close()
+    conn.close()
+
+    def to_event(t):
+        return {
+            "id": t["id"],
+            "title": f"{t['paciente']} ({t['profesional']})",
+            "start": t["fecha_inicio"].replace(tzinfo=TZ_ARG).isoformat(),
+            "end": t["fecha_fin"].replace(tzinfo=TZ_ARG).isoformat(),
+            "paciente": t["paciente"],
+            "dni": t["dni"],
+            "profesional": t["profesional"],
+            "description": t["motivo"],
+            "backgroundColor": t["color"],
+            "borderColor": t["color"],
+        }
+
+    return jsonify([to_event(t) for t in individuales] + [to_event(t) for t in grupales])
+
+
+# =========================================================
+# 📌 Turnos completos del profesional (individuales + grupales)
+# =========================================================
+@bp_turnos.route("/api/turnos/profesional/completo", methods=["GET"])
+@login_required
+def turnos_profesional_completo():
+    usuario_id = current_user.id
+    es_director = current_user.rol == "director"
+
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+
+    cursor.execute("""
+        SELECT
+            t.id,
+            t.fecha_inicio AS start,
+            t.fecha_fin AS end,
+            p.nombre AS paciente,
+            p.dni,
+            u.nombre AS profesional,
+            t.motivo AS description,
+            '#1976D2' AS color,
+            %s AS editable
+        FROM turnos t
+        JOIN pacientes p ON p.id = t.paciente_id
+        JOIN usuarios u ON u.id = t.usuario_id
+        WHERE t.usuario_id = %s
+    """, (1 if es_director else 1, usuario_id))
+    individuales = cursor.fetchall()
+
+    cursor.execute("""
+        SELECT grupo_id 
+        FROM grupo_miembros 
+        WHERE usuario_id = %s
+    """, (usuario_id,))
+    grupos_ids = [g["grupo_id"] for g in cursor.fetchall()]
+
+    grupales = []
+    if grupos_ids:
+        cursor.execute(f"""
+            SELECT
+                t.id,
+                t.fecha_inicio AS start,
+                t.fecha_fin AS end,
+                p.nombre AS paciente,
+                p.dni,
+                u.nombre AS profesional,
+                t.motivo AS description,
+                gp.color AS color,
+                %s AS editable
+            FROM turnos t
+            JOIN pacientes p ON p.id = t.paciente_id
+            JOIN usuarios u ON u.id = t.usuario_id
+            JOIN grupo_miembros gm ON gm.usuario_id = u.id
+            JOIN grupos_profesionales gp ON gp.id = gm.grupo_id
+            WHERE gm.grupo_id IN ({','.join(['%s'] * len(grupos_ids))})
+        """, tuple([1 if es_director else 0] + grupos_ids))
+        grupales = cursor.fetchall()
+
+    cursor.close()
+    conn.close()
+
+    def fix(item):
+        item["start"] = item["start"].replace(tzinfo=TZ_ARG).isoformat()
+        item["end"] = item["end"].replace(tzinfo=TZ_ARG).isoformat()
+        return item
+
+    return jsonify([fix(t) for t in individuales] + [fix(t) for t in grupales])
+
+
+# ==========================================================
+# 📌 Turnos por grupo
+# ==========================================================
 @bp_turnos.route('/api/turnos/grupo/<int:grupo_id>', methods=['GET'])
 @login_required
 def turnos_por_grupo(grupo_id):
@@ -359,12 +514,20 @@ def turnos_por_grupo(grupo_id):
     cursor = conn.cursor(dictionary=True)
 
     cursor.execute("""
-        SELECT t.id, t.fecha_inicio, t.fecha_fin, t.motivo,
-               p.nombre AS paciente, u.nombre AS profesional
-        FROM turnos t
-        JOIN pacientes p ON t.paciente_id = p.id
-        JOIN usuarios u ON t.usuario_id = u.id
-        JOIN grupo_miembros gm ON gm.usuario_id = u.id
+        SELECT 
+            t.id,
+            t.fecha_inicio AS start,
+            t.fecha_fin AS end,
+            t.motivo AS description,
+            p.nombre AS paciente,
+            p.dni,
+            u.nombre AS profesional,
+            gp.color
+        FROM grupo_miembros gm
+        JOIN turnos t ON gm.usuario_id = t.usuario_id
+        JOIN pacientes p ON p.id = t.paciente_id
+        JOIN usuarios u ON u.id = t.usuario_id
+        JOIN grupos_profesionales gp ON gp.id = gm.grupo_id
         WHERE gm.grupo_id = %s
         ORDER BY t.fecha_inicio ASC
     """, (grupo_id,))
@@ -373,4 +536,16 @@ def turnos_por_grupo(grupo_id):
     cursor.close()
     conn.close()
 
-    return jsonify(turnos)
+    return jsonify([
+        {
+            "id": t["id"],
+            "paciente": t["paciente"],
+            "dni": t["dni"],
+            "profesional": t["profesional"],
+            "description": t["description"],
+            "start": t["start"].replace(tzinfo=TZ_ARG).isoformat(),
+            "end": t["end"].replace(tzinfo=TZ_ARG).isoformat(),
+            "color": t["color"]
+        }
+        for t in turnos
+    ])

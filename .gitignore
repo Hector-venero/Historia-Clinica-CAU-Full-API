@@ -60,6 +60,8 @@ frond_historias_clinicas/**/coverage/
 frond_historias_clinicas/**/yarn-error.log
 frond_historias_clinicas/**/.package-lock.json
 frond_historias_clinicas/**/.vue-global-types/
+frontend/node_modules/
+frontend/dist/
 
 # =====================================
 # 🧰 IDE / SISTEMA

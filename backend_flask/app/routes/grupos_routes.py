@@ -25,6 +25,29 @@ def obtener_grupos():
 
 
 # =====================================================
+# 🔹 Obtener un grupo por ID
+# =====================================================
+@bp_grupos.route("/api/grupos/<int:grupo_id>", methods=["GET"])
+@login_required
+def obtener_grupo(grupo_id):
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("""
+        SELECT id, nombre, descripcion, color
+        FROM grupos_profesionales
+        WHERE id = %s
+    """, (grupo_id,))
+    grupo = cursor.fetchone()
+    cursor.close()
+    conn.close()
+
+    if not grupo:
+        return jsonify({"error": "Grupo no encontrado"}), 404
+
+    return jsonify(grupo)
+
+
+# =====================================================
 # 👥 Obtener los miembros de un grupo
 # =====================================================
 @bp_grupos.route("/api/grupos/<int:grupo_id>/miembros", methods=["GET"])
@@ -69,7 +92,74 @@ def crear_grupo():
     grupo_id = cursor.lastrowid
     cursor.close()
     conn.close()
+
     return jsonify({"message": "Grupo creado correctamente", "id": grupo_id}), 201
+
+
+# =====================================================
+# 📝 Editar grupo (solo director)
+# =====================================================
+@bp_grupos.route("/api/grupos/<int:grupo_id>", methods=["PUT"])
+@login_required
+@requiere_rol("director")
+def editar_grupo(grupo_id):
+    data = request.get_json()
+    nombre = data.get("nombre")
+    descripcion = data.get("descripcion")
+    color = data.get("color")
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT id FROM grupos_profesionales WHERE id = %s", (grupo_id,))
+    existe = cursor.fetchone()
+    if not existe:
+        cursor.close()
+        conn.close()
+        return jsonify({"error": "Grupo no encontrado"}), 404
+
+    cursor.execute("""
+        UPDATE grupos_profesionales
+        SET nombre = %s, descripcion = %s, color = %s
+        WHERE id = %s
+    """, (nombre, descripcion, color, grupo_id))
+
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+    return jsonify({"message": "Grupo actualizado correctamente"})
+
+
+# =====================================================
+# ❌ Eliminar grupo (solo director)
+# =====================================================
+@bp_grupos.route("/api/grupos/<int:grupo_id>", methods=["DELETE"])
+@login_required
+@requiere_rol("director")
+def eliminar_grupo(grupo_id):
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    # Verificar existencia
+    cursor.execute("SELECT id FROM grupos_profesionales WHERE id = %s", (grupo_id,))
+    existe = cursor.fetchone()
+    if not existe:
+        cursor.close()
+        conn.close()
+        return jsonify({"error": "Grupo no encontrado"}), 404
+
+    # Borrar miembros primero (FK)
+    cursor.execute("DELETE FROM grupo_miembros WHERE grupo_id = %s", (grupo_id,))
+
+    # Borrar grupo
+    cursor.execute("DELETE FROM grupos_profesionales WHERE id = %s", (grupo_id,))
+    conn.commit()
+
+    cursor.close()
+    conn.close()
+
+    return jsonify({"message": "Grupo eliminado correctamente"})
 
 
 # =====================================================
@@ -90,85 +180,32 @@ def agregar_miembro(grupo_id):
     cursor.execute("""
         INSERT INTO grupo_miembros (grupo_id, usuario_id)
         VALUES (%s, %s)
-        ON DUPLICATE KEY UPDATE grupo_id = grupo_id
+        ON DUPLICATE KEY UPDATE usuario_id = usuario_id
     """, (grupo_id, usuario_id))
     conn.commit()
     cursor.close()
     conn.close()
+
     return jsonify({"message": "Miembro agregado correctamente"}), 201
 
 
 # =====================================================
-# 📅 Obtener turnos de todos los miembros de un grupo profesional
+# ❌ Quitar un miembro (solo director)
 # =====================================================
-@bp_grupos.route("/api/turnos/grupo/<int:grupo_id>", methods=["GET"])
+@bp_grupos.route("/api/grupos/<int:grupo_id>/miembros/<int:usuario_id>", methods=["DELETE"])
 @login_required
-@requiere_rol("director", "profesional", "administrativo")
-def turnos_por_grupo(grupo_id):
+@requiere_rol("director")
+def quitar_miembro(grupo_id, usuario_id):
     conn = get_connection()
-    cursor = conn.cursor(dictionary=True)
+    cursor = conn.cursor()
 
     cursor.execute("""
-        SELECT 
-            t.id,
-            t.fecha,
-            t.motivo,
-            p.nombre AS paciente,
-            p.dni,
-            u.nombre AS profesional,
-            gp.color
-        FROM turnos t
-        JOIN pacientes p ON t.paciente_id = p.id
-        JOIN usuarios u ON t.usuario_id = u.id
-        JOIN grupo_miembros gm ON gm.usuario_id = u.id
-        JOIN grupos_profesionales gp ON gp.id = gm.grupo_id
-        WHERE gm.grupo_id = %s
-        ORDER BY t.fecha ASC
-    """, (grupo_id,))
+        DELETE FROM grupo_miembros
+        WHERE grupo_id = %s AND usuario_id = %s
+    """, (grupo_id, usuario_id))
 
-    turnos = cursor.fetchall()
+    conn.commit()
     cursor.close()
     conn.close()
 
-    eventos = []
-    for t in turnos:
-        fecha = t["fecha"]
-        # Asegurar formato ISO con "T"
-        if hasattr(fecha, "isoformat"):
-            fecha_str = fecha.isoformat()
-        else:
-            fecha_str = str(fecha).replace(" ", "T")
-
-        eventos.append({
-            "id": t["id"],
-            "paciente": t["paciente"],
-            "dni": t["dni"],
-            "start": fecha_str,
-            "description": t["motivo"],
-            "profesional": t["profesional"],
-            "color": t["color"]
-        })
-
-    return jsonify(eventos)
-
-# =====================================================
-# 🔹 Obtener un grupo por ID
-# =====================================================
-@bp_grupos.route("/api/grupos/<int:grupo_id>", methods=["GET"])
-@login_required
-def obtener_grupo(grupo_id):
-    conn = get_connection()
-    cursor = conn.cursor(dictionary=True)
-    cursor.execute("""
-        SELECT id, nombre, descripcion, color
-        FROM grupos_profesionales
-        WHERE id = %s
-    """, (grupo_id,))
-    grupo = cursor.fetchone()
-    cursor.close()
-    conn.close()
-
-    if not grupo:
-        return jsonify({"error": "Grupo no encontrado"}), 404
-
-    return jsonify(grupo)
+    return jsonify({"message": "Miembro eliminado correctamente"})

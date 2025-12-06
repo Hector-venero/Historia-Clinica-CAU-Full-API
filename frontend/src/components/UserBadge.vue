@@ -1,5 +1,6 @@
 <template>
   <div class="flex items-center gap-3">
+    
     <!-- Placeholder mientras carga -->
     <div v-if="loading" class="flex items-center gap-2">
       <div class="animate-pulse w-8 h-8 rounded-full bg-gray-300/60"></div>
@@ -16,12 +17,21 @@
         <div class="text-xs text-gray-500 dark:text-gray-400">{{ user.username }}</div>
       </div>
 
-      <!-- Avatar con iniciales -->
+      <!-- Avatar -->
       <div
-        class="w-8 h-8 rounded-full flex items-center justify-center bg-sky-600 text-white font-semibold"
+        class="w-8 h-8 rounded-full overflow-hidden flex items-center justify-center bg-sky-600 text-white font-semibold"
         :title="user.email || user.username"
       >
-        {{ initials }}
+        <!-- Foto -->
+        <img
+          v-if="fotoURL"
+          :src="fotoURL"
+          class="w-full h-full object-cover"
+          alt="perfil"
+        />
+
+        <!-- Iniciales si no hay foto -->
+        <span v-else>{{ initials }}</span>
       </div>
 
       <!-- Rol -->
@@ -44,24 +54,26 @@
 <script setup>
 import { computed, onMounted } from 'vue';
 import { useSession } from '@/layout/composables/useSession';
+import { buildFotoURL } from '@/utils/fotoUrl.js';
 
 const { user, loading, loadCurrentUser } = useSession();
 
 onMounted(() => {
-  loadCurrentUser();
+  loadCurrentUser(true);
 });
 
+/* Iniciales si no hay foto */
 const initials = computed(() => {
   const n = user.value?.nombre?.trim() || user.value?.username || '';
   if (!n) return '?';
   const parts = n.split(/\s+/).slice(0, 2);
-  return parts.map(p => p[0]?.toUpperCase()).join('');
+  return parts.map((p) => p[0]?.toUpperCase()).join('');
 });
 
-/**
- * ✅ Clases dinámicas según rol + tema activo
- * (Usa Tailwind "dark:" para que cambie en tiempo real)
- */
+/* URL de la foto reutilizando helper */
+const fotoURL = computed(() => buildFotoURL(user.value?.foto));
+
+/* Clases por rol */
 const roleClass = computed(() => {
   const r = (user.value?.rol || '').toLowerCase();
 
@@ -77,10 +89,3 @@ const roleClass = computed(() => {
   }
 });
 </script>
-
-<style scoped>
-/* Transición suave entre temas */
-span {
-  transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
-}
-</style>

@@ -40,6 +40,7 @@ CREATE TABLE usuarios (
     rol ENUM('director', 'profesional', 'administrativo') NOT NULL,
     especialidad VARCHAR(100) NULL,
     duracion_turno INT NOT NULL DEFAULT 20,
+    foto VARCHAR(255) DEFAULT NULL,
     activo TINYINT(1) NOT NULL DEFAULT 1 
 ) ENGINE=InnoDB
   DEFAULT CHARSET=utf8mb4
@@ -196,6 +197,7 @@ CREATE TABLE grupo_miembros (
     id INT AUTO_INCREMENT PRIMARY KEY,
     grupo_id INT NOT NULL,
     usuario_id INT NOT NULL,
+    UNIQUE KEY idx_grupo_usuario (grupo_id, usuario_id),
     FOREIGN KEY (grupo_id) REFERENCES grupos_profesionales(id) ON DELETE CASCADE,
     FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE
 ) ENGINE=InnoDB

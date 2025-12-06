@@ -1,42 +1,44 @@
-import { ref } from 'vue'
+// src/layout/composables/useSession.js
+import { ref, computed } from 'vue'
+import { useUserStore } from '@/stores/user'
+import { on } from '@/utils/eventBus'
 
-const user = ref(null)
+// Estas refs globales están OK:
 const loading = ref(false)
 const error = ref('')
 
 export function useSession() {
+
+  // ⬅️ El store SOLO debe obtenerse dentro de la función,
+  //    donde ya existe Pinia y es seguro usarlo.
+  const userStore = useUserStore()
+
+  // Usuario derivado del store
+  const user = computed(() => {
+    if (!userStore.id) return null
+
+    return {
+      id: userStore.id,
+      nombre: userStore.nombre || userStore.username || 'Usuario',
+      username: userStore.username || '',
+      email: userStore.email || '',
+      rol: userStore.rol || '',
+      foto: userStore.foto || null
+    }
+  })
+
   async function loadCurrentUser(force = false) {
-    // Evita recargar si ya está en memoria
-    if (user.value && !force) return user.value
+    if (userStore.id && !force) return user.value
 
     loading.value = true
     error.value = ''
 
     try {
-      const resp = await fetch('/api/user', { credentials: 'include' })
-
-      // ✅ Si el usuario no está autenticado, no lo tratamos como error fatal
-      if (resp.status === 401) {
-        user.value = null
-        return null
-      }
-
-      if (!resp.ok) throw new Error(`Error ${resp.status}`)
-
-      const data = await resp.json()
-      user.value = {
-        nombre: data?.nombre || data?.name || data?.username || 'Usuario',
-        username: data?.username || '',
-        email: data?.email || '',
-        rol: data?.rol || data?.role || ''
-      }
-
+      await userStore.fetchUser()
       return user.value
     } catch (e) {
-      // ✅ Captura controlada
       console.warn('⚠️ No se pudo obtener el usuario actual:', e)
       error.value = e?.message || 'No se pudo obtener el usuario'
-      user.value = null
       return null
     } finally {
       loading.value = false
@@ -44,8 +46,13 @@ export function useSession() {
   }
 
   function clearUser() {
-    user.value = null
+    userStore.logout()
   }
+
+  // Eventos globales
+  on('user:updated', data => {
+    console.log('🔔 user:updated recibido en useSession', data)
+  })
 
   return { user, loading, error, loadCurrentUser, clearUser }
 }
