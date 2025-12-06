@@ -82,8 +82,9 @@
         </div>
         <!-- Email -->
         <div>
-          <label class="block mb-1">Mail</label>
+          <label class="block mb-1">Mail <span class="text-red-500">*</span></label>
           <input v-model="paciente.email" type="email" class="p-inputtext p-component w-full h-12" />
+          <span v-if="intentadoEnviar && !paciente.email" class="text-red-500 text-sm">Campo obligatorio</span>
         </div>
         <!-- Contacto -->
         <div>
@@ -161,7 +162,15 @@
         <textarea v-model="paciente.comentarios" rows="4" class="p-inputtext p-component w-full"></textarea>
       </div>
 
-      <button type="submit" class="p-button p-component mt-6 bg-green-500 text-white">Registrar</button>
+    <!--  <button type="submit" class="p-button p-component mt-6 bg-green-500 text-white">Registrar</button> -->
+      <button
+        type="submit"
+        class="mt-6 px-6 py-3 rounded-lg bg-green-600 text-white font-semibold shadow-md 
+              hover:bg-green-700 hover:shadow-lg transition-all active:scale-95"
+      >
+        Registrar Paciente
+      </button>
+
     </form>
 
     <!-- Mensaje -->
@@ -232,7 +241,7 @@ const registrar = async () => {
   intentadoEnviar.value = true
 
   if (!paciente.value.nro_hc || !paciente.value.nombre || !paciente.value.apellido ||
-      !paciente.value.dni || !paciente.value.fecha_nacimiento || !paciente.value.sexo ||
+      !paciente.value.dni || !paciente.value.fecha_nacimiento || !paciente.value.sexo || !paciente.value.email ||
       (!paciente.value.telefono && !paciente.value.celular)) {
     mensaje.value = '⚠️ Completá todos los campos obligatorios.'
     tipoMensaje.value = 'error'
