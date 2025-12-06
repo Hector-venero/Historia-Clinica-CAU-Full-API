@@ -62,6 +62,7 @@ frond_historias_clinicas/**/.package-lock.json
 frond_historias_clinicas/**/.vue-global-types/
 frontend/node_modules/
 frontend/dist/
+/backend_flask/app/static/fotos_usuarios/*
 
 # =====================================
 # 🧰 IDE / SISTEMA
