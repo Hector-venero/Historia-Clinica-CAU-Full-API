@@ -4,27 +4,28 @@ import axios from 'axios'
 import Chart from 'primevue/chart'
 import { useUserStore } from '../stores/user'
 import { reactive, watch } from 'vue'
-import { fechaBonita } from '@/utils/formatDate'
+import { fechaBonitaDashboard, fechaBonitaCompleta, fechaRangoBonito } from '@/utils/formatDate'
+
 
 // ===============================
-// 👤 Usuario actual
+//  Usuario actual
 // ===============================
 const user = useUserStore()
 const esDirector = computed(() => user.rol?.toLowerCase().trim() === 'director')
 // ===============================
-// 📦 Variables reactivas
+//  Variables reactivas
 // ===============================
 const loading = ref(true)
 const error = ref(null)
 const dashboard = ref(null)
 const disponibilidades = ref([])
 
-// 📊 Datos del gráfico (solo turnos)
+//  Datos del gráfico (solo turnos)
 const chartData = ref({ labels: [], datasets: [] })
 const chartOptions = ref({})
 
 // ===============================
-// 🔄 Cargar datos del backend
+//  Cargar datos del backend
 // ===============================
 const fetchDashboard = async () => {
   try {
@@ -41,7 +42,7 @@ const fetchDashboard = async () => {
     // 🔹 Si es profesional → ver solo las propias (backend ya filtra)
     disponibilidades.value = resDisponibilidad.data
 
-    // 🎨 Configurar gráfico de turnos
+    //  Configurar gráfico de turnos
     const { labels, turnos } = resSemanal.data
     const colores = turnos.map(v => (v > 5 ? '#00936B' : '#3DB5E6'))
 
@@ -122,7 +123,7 @@ watch(disponibilidades, (nuevas) => {
   }
 }, { immediate: true })
 
-// 🚀 Inicialización
+//  Inicialización
 onMounted(fetchDashboard)
 </script>
 
@@ -166,7 +167,7 @@ onMounted(fetchDashboard)
             responsiveLayout="scroll"
             class="p-datatable-sm dark:bg-gray-800 dark:text-gray-200 rounded-xl"
           >
-            <Column field="fecha" header="Fecha/Hora" :body="(r) => fechaBonita(r.fecha)" />
+            <Column field="fecha" header="Fecha/Hora" :body="(r) => fechaBonitaDashboard(r.fecha)" />
             <Column field="paciente" header="Paciente" />
             <Column field="profesional" header="Profesional" />
             <Column field="motivo" header="Motivo" />
@@ -195,7 +196,7 @@ onMounted(fetchDashboard)
 
           <div v-if="dashboard.proximo_turno" class="space-y-2 text-gray-700 dark:text-gray-200">
             <p><strong>Paciente:</strong> {{ dashboard.proximo_turno.paciente }} {{ dashboard.proximo_turno.apellido }}</p>
-            <p><strong>Fecha:</strong> {{ fechaBonita(dashboard.proximo_turno.fecha) }}</p>
+            <p><strong>Fecha:</strong>{{ fechaRangoBonito(dashboard.proximo_turno.fecha_inicio, dashboard.proximo_turno.fecha_fin) }}</p>
             <p><strong>Motivo:</strong> {{ dashboard.proximo_turno.motivo }}</p>
           </div>
 

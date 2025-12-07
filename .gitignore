@@ -1,5 +1,5 @@
 # =====================================
-# 🐍 PYTHON / FLASK
+#  PYTHON / FLASK
 # =====================================
 __pycache__/
 *.pyc
@@ -20,7 +20,7 @@ app/uploads/
 **/uploads/
 
 # =====================================
-# 🧱 BLOCKCHAIN FEDERAL ARGENTINA / BFA
+# BLOCKCHAIN FEDERAL ARGENTINA / BFA
 # =====================================
 bfa-node/nucleo/test2network/geth/
 bfa-node/nucleo/test2network/keystore/
@@ -36,7 +36,7 @@ bfa-node/keystore/
 bfa-node/geth/
 
 # =====================================
-# ⚙️ DOCKER
+#  DOCKER
 # =====================================
 *.pid
 *.sock
@@ -50,7 +50,7 @@ docker-compose.override.yml
 db/usuarios_roles.sql
 
 # =====================================
-# ⚛️ NODE / VUE FRONTEND
+# NODE / VUE FRONTEND
 # =====================================
 frond_historias_clinicas/**/node_modules/
 frond_historias_clinicas/**/dist/
@@ -65,7 +65,7 @@ frontend/dist/
 /backend_flask/app/static/fotos_usuarios/*
 
 # =====================================
-# 🧰 IDE / SISTEMA
+#  IDE / SISTEMA
 # =====================================
 .DS_Store
 .vscode/
@@ -75,7 +75,7 @@ frontend/dist/
 Thumbs.db
 
 # =====================================
-# 🚀 COMPILADOS Y TEMPORALES
+# COMPILADOS Y TEMPORALES
 # =====================================
 *.out
 *.swp
@@ -85,7 +85,7 @@ Thumbs.db
 *.log
 
 # =====================================
-# 🧾 ARCHIVOS / CARPETAS A IGNORAR ADICIONALMENTE
+#  ARCHIVOS / CARPETAS A IGNORAR ADICIONALMENTE
 # =====================================
 
 # Logs del sistema
@@ -110,7 +110,7 @@ __pycache__/
 *.log
 
 # =====================================
-# 🧹 VERSIONES ANTIGUAS / BACKUPS COMPLETOS
+#  VERSIONES ANTIGUAS / BACKUPS COMPLETOS
 # =====================================
 historia_clinica_bfa back antes de intentar migrar a react/
 frontend/.vite/

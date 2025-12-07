@@ -12,7 +12,7 @@ bp_turnos = Blueprint("turnos", __name__)
 TZ_ARG = timezone(timedelta(hours=-3))
 
 # ==========================================================
-# 🔹 Función auxiliar: Verificar disponibilidad del médico
+#  Función auxiliar: Verificar disponibilidad del médico
 # ==========================================================
 def medico_disponible(usuario_id, fecha_inicio, fecha_fin):
     conn = get_connection()
@@ -75,7 +75,7 @@ def medico_disponible(usuario_id, fecha_inicio, fecha_fin):
 
 
 # ==========================================================
-# 📅 Rutas de Turnos
+#  Rutas de Turnos
 # ==========================================================
 @bp_turnos.route('/api/turnos', methods=['GET', 'POST'])
 @login_required
@@ -193,10 +193,8 @@ Centro Asistencial Universitario
             cursor.close()
             conn.close()
 
-
-
 # ==========================================================
-# 🗑️ Eliminar turno
+#  Eliminar turno
 # ==========================================================
 @bp_turnos.route('/api/turnos/<int:id>', methods=['DELETE'])
 @login_required
@@ -205,27 +203,71 @@ def eliminar_turno(id):
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
 
-    cursor.execute("SELECT usuario_id FROM turnos WHERE id=%s", (id,))
+    # Obtener info del turno antes de borrar
+    cursor.execute("""
+        SELECT t.usuario_id, t.paciente_id, t.fecha_inicio, t.fecha_fin, u.nombre AS profesional
+        FROM turnos t
+        JOIN usuarios u ON u.id = t.usuario_id
+        WHERE t.id = %s
+    """, (id,))
     turno = cursor.fetchone()
+
     if not turno:
         cursor.close()
         conn.close()
         return jsonify({"error": "Turno no encontrado"}), 404
 
+    # Validación: profesionales solo pueden borrar sus propios turnos
     if current_user.rol == 'profesional' and turno['usuario_id'] != current_user.id:
         cursor.close()
         conn.close()
         return jsonify({"error": "No autorizado"}), 403
 
+    # Consulta del paciente
+    cursor.execute("SELECT nombre, apellido, email FROM pacientes WHERE id=%s", (turno["paciente_id"],))
+    paciente = cursor.fetchone()
+
+    # Proceder a eliminar
     cursor.execute("DELETE FROM turnos WHERE id=%s", (id,))
     conn.commit()
+
+    # Enviar mail si el paciente tiene email
+    if paciente and paciente.get("email"):
+        try:
+            fecha_dt = turno["fecha_inicio"].replace(tzinfo=TZ_ARG)
+            fecha_legible = fecha_dt.strftime("%d/%m/%Y")
+            hora_legible = fecha_dt.strftime("%H:%M")
+
+            msg = Message(
+                subject="Cancelación de turno médico",
+                recipients=[paciente["email"]],
+                body=f"""
+Estimado/a {paciente['nombre']} {paciente['apellido']},
+
+Le informamos que su turno programado ha sido CANCELADO.
+
+📅 Fecha: {fecha_legible}
+🕒 Hora: {hora_legible} hs
+👨‍⚕️ Profesional: {turno['profesional']}
+
+Para más información, puede comunicarse con nosotros al:
+📞 011 2033-1400 (interno 6090)
+
+Muchas gracias,
+Centro Asistencial Universitario – UNSAM
+"""
+            )
+            mail.send(msg)
+        except Exception as e:
+            print("⚠️ Error enviando mail de cancelación:", e)
+
     cursor.close()
     conn.close()
-    return jsonify({"message": "Turno eliminado correctamente ✅"})
+    return jsonify({"message": "Turno eliminado correctamente y mail enviado 📧"})
 
 
 # ==========================================================
-# ✏️ Editar turno
+# Editar turno
 # ==========================================================
 @bp_turnos.route('/api/turnos/<int:id>', methods=['PUT'])
 @login_required
@@ -288,7 +330,7 @@ def editar_turno(id):
 
 
 # ==========================================================
-# 🧩 Crear tanda de turnos
+#  Crear tanda de turnos
 # ==========================================================
 @bp_turnos.route('/api/turnos/tanda', methods=['POST'])
 @login_required
@@ -363,7 +405,7 @@ def crear_turnos_tanda():
 
 
 # ==========================================================
-# 📌 Turnos por grupo
+#  Turnos por grupo
 # ==========================================================
 @bp_turnos.route("/api/turnos/profesional/<int:usuario_id>", methods=["GET"])
 @login_required
@@ -435,16 +477,47 @@ def turnos_profesional(usuario_id):
 
 
 # =========================================================
-# 📌 Turnos completos del profesional (individuales + grupales)
+#  Turnos completos del profesional (individuales + grupales)
 # =========================================================
 @bp_turnos.route("/api/turnos/profesional/completo", methods=["GET"])
 @login_required
 def turnos_profesional_completo():
-    usuario_id = current_user.id
-    es_director = current_user.rol == "director"
-
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
+
+    es_director = current_user.rol == "director"
+
+    #  SI ES DIRECTOR → TRAE TODOS LOS TURNOS
+    if es_director:
+        cursor.execute("""
+            SELECT
+                t.id,
+                t.fecha_inicio AS start,
+                t.fecha_fin AS end,
+                p.nombre AS paciente,
+                p.dni,
+                u.nombre AS profesional,
+                t.motivo AS description,
+                '#1976D2' AS color,
+                1 AS editable
+            FROM turnos t
+            JOIN pacientes p ON p.id = t.paciente_id
+            JOIN usuarios u ON u.id = t.usuario_id
+            ORDER BY t.fecha_inicio ASC
+        """)
+        turnos = cursor.fetchall()
+        cursor.close()
+        conn.close()
+
+        def fix(t):
+            t["start"] = t["start"].replace(tzinfo=TZ_ARG).isoformat()
+            t["end"] = t["end"].replace(tzinfo=TZ_ARG).isoformat()
+            return t
+
+        return jsonify([fix(t) for t in turnos])
+
+    #  SI ES PROFESIONAL → SOLO SUS TURNOS (actúa igual)
+    usuario_id = current_user.id
 
     cursor.execute("""
         SELECT
@@ -456,18 +529,16 @@ def turnos_profesional_completo():
             u.nombre AS profesional,
             t.motivo AS description,
             '#1976D2' AS color,
-            %s AS editable
+            1 AS editable
         FROM turnos t
         JOIN pacientes p ON p.id = t.paciente_id
         JOIN usuarios u ON u.id = t.usuario_id
         WHERE t.usuario_id = %s
-    """, (1 if es_director else 1, usuario_id))
+    """, (usuario_id,))
     individuales = cursor.fetchall()
 
     cursor.execute("""
-        SELECT grupo_id 
-        FROM grupo_miembros 
-        WHERE usuario_id = %s
+        SELECT grupo_id FROM grupo_miembros WHERE usuario_id = %s
     """, (usuario_id,))
     grupos_ids = [g["grupo_id"] for g in cursor.fetchall()]
 
@@ -483,29 +554,28 @@ def turnos_profesional_completo():
                 u.nombre AS profesional,
                 t.motivo AS description,
                 gp.color AS color,
-                %s AS editable
+                1 AS editable
             FROM turnos t
             JOIN pacientes p ON p.id = t.paciente_id
             JOIN usuarios u ON u.id = t.usuario_id
             JOIN grupo_miembros gm ON gm.usuario_id = u.id
             JOIN grupos_profesionales gp ON gp.id = gm.grupo_id
             WHERE gm.grupo_id IN ({','.join(['%s'] * len(grupos_ids))})
-        """, tuple([1 if es_director else 0] + grupos_ids))
+        """, tuple(grupos_ids))
         grupales = cursor.fetchall()
 
     cursor.close()
     conn.close()
 
-    def fix(item):
-        item["start"] = item["start"].replace(tzinfo=TZ_ARG).isoformat()
-        item["end"] = item["end"].replace(tzinfo=TZ_ARG).isoformat()
-        return item
+    def fix(t):
+        t["start"] = t["start"].replace(tzinfo=TZ_ARG).isoformat()
+        t["end"] = t["end"].replace(tzinfo=TZ_ARG).isoformat()
+        return t
 
     return jsonify([fix(t) for t in individuales] + [fix(t) for t in grupales])
 
-
 # ==========================================================
-# 📌 Turnos por grupo
+#  Turnos por grupo
 # ==========================================================
 @bp_turnos.route('/api/turnos/grupo/<int:grupo_id>', methods=['GET'])
 @login_required

@@ -7,6 +7,8 @@ import { useRoute } from 'vue-router'
 import historiaService from '@/service/historiaService'
 import axios from 'axios'
 import { useRouter } from 'vue-router'
+import DatePicker from 'primevue/datepicker'
+import { fechaBonitaClinica } from '@/utils/formatDate.js'
 
 const route = useRoute()
 const pacienteId = route.params.id
@@ -54,31 +56,64 @@ const fetchHistoria = async () => {
  */
 const guardarEvolucion = async () => {
   try {
-    const formData = new FormData()
-    formData.append('fecha', fecha.value)
-    formData.append('contenido', contenido.value)
-    for (const archivo of archivos.value) {
-      formData.append('archivos', archivo)
+
+    let fechaNormalizada = fecha.value
+
+    if (fecha.value instanceof Date) {
+      // Si viene desde DatePicker
+      const y = fecha.value.getFullYear()
+      const m = String(fecha.value.getMonth() + 1).padStart(2, '0')
+      const d = String(fecha.value.getDate()).padStart(2, '0')
+      fechaNormalizada = `${y}-${m}-${d}`  // ISO seguro
+    } 
+    else if (typeof fecha.value === "string") {
+      // Si ya es string "YYYY-MM-DD", aseguramos formato
+      const partes = fecha.value.split("-")
+      if (partes.length === 3) {
+        const [y, m, d] = partes
+        fechaNormalizada = `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`
+      }
     }
 
+    const formData = new FormData()
+    formData.append("fecha", fechaNormalizada)
+    formData.append("contenido", contenido.value)
+
+    archivos.value.forEach(a => {
+      formData.append("archivos", a.file)
+    })
+
+
     await axios.post(`/api/pacientes/${pacienteId}/evolucion`, formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
+      headers: { "Content-Type": "multipart/form-data" },
       withCredentials: true
     })
 
-    toast.add({ severity: 'success', summary: 'Éxito', detail: 'Evolución guardada ✅', life: 3000 })
+    toast.add({
+      severity: "success",
+      summary: "Éxito",
+      detail: "Evolución guardada correctamente",
+      life: 3000
+    })
 
     showForm.value = false
-    contenido.value = ''
+    contenido.value = ""
     archivos.value = []
     fileUploader.value?.clear()
 
     await fetchHistoria()
+
   } catch (err) {
-    console.error('Error al guardar evolución:', err)
-    toast.add({ severity: 'error', summary: 'Error', detail: 'Error al guardar evolución', life: 3000 })
+    console.error("Error al guardar evolución:", err)
+    toast.add({
+      severity: "error",
+      summary: "Error",
+      detail: "Error al guardar evolución",
+      life: 3000
+    })
   }
 }
+
 
 /**
  * Exporta toda la historia clínica en PDF
@@ -123,9 +158,63 @@ const descargarEvolucionPDF = async (evoId) => {
     toast.add({ severity: 'error', summary: 'Error', detail: 'No se pudo generar el PDF', life: 3000 })
   }
 }
+const normalizar = (nombre) =>
+  nombre.toLowerCase().replace(/\s+/g, '').replace(/[()]/g, '').trim()
 
 const onFileSelect = (event) => {
-  archivos.value = event.files
+  
+  // Nombres normalizados de archivos YA cargados
+  const existentes = new Set(
+    archivos.value.map(a => normalizar(a.name))
+  )
+
+  // Filtrar solo archivos realmente nuevos
+  const nuevos = event.files.filter(
+    f => !existentes.has(normalizar(f.name))
+  )
+
+  nuevos.forEach((f) => {
+
+    // ---- Validaciones ----
+    if (f.size > 5 * 1024 * 1024) {
+      toast.add({
+        severity: 'warn',
+        summary: 'Archivo muy grande',
+        detail: `${f.name} supera los 5 MB.`,
+        life: 2500
+      })
+      return
+    }
+
+    const formatosPermitidos = ['application/pdf', 'image/jpeg', 'image/png']
+    if (!formatosPermitidos.includes(f.type)) {
+      toast.add({
+        severity: 'error',
+        summary: 'Formato no permitido',
+        detail: `${f.name} no es PDF/JPG/PNG válido.`,
+        life: 2500
+      })
+      return
+    }
+
+    // Crear preview
+    let preview = null
+    if (f.type.startsWith("image/")) preview = URL.createObjectURL(f)
+    if (f.type === "application/pdf") preview = "/icons/pdf-icon.png"
+
+    // Agregar archivo limpio
+    archivos.value.push({
+      file: f,
+      name: f.name,
+      size: f.size,
+      type: f.type,
+      previewUrl: preview
+    })
+  })
+}
+
+const onFileRemove = (event) => {
+  archivos.value = archivos.value.filter(a => a.name !== event.file.name)
 }
 
 /**
@@ -272,7 +361,7 @@ onMounted(fetchHistoria)
         class="border rounded-2xl mb-4 p-5 shadow-sm bg-white hover:shadow-md transition cursor-pointer"
       >
         <div class="flex justify-between text-sm text-gray-600 mb-2">
-          <span class="font-medium">{{ new Date(evo.fecha).toLocaleDateString() }}</span>
+          <span class="font-medium">{{ fechaBonitaClinica(evo.fecha) }}</span>
           <span>{{ evo.nombre_usuario }} — {{ evo.especialidad_usuario || 'Director' }}</span>
         </div>
         <p class="text-gray-800 text-sm mb-4 line-clamp-3">{{ evo.contenido }}</p>
@@ -309,7 +398,13 @@ onMounted(fetchHistoria)
       <h3 class="text-lg font-semibold text-gray-700 mb-4">Registrar nueva evolución</h3>
 
       <label for="fecha" class="block font-medium mb-2 text-gray-700">Fecha</label>
-      <input type="date" v-model="fecha" class="p-2 border rounded w-full mb-4" />
+
+      <DatePicker
+        v-model="fecha"
+        dateFormat="dd/mm/yy"
+        :showIcon="true"
+        class="p-inputtext p-component w-full h-12 mb-4"
+      />
 
       <label for="contenido" class="block font-medium mb-2 text-gray-700">Evolución</label>
       <textarea
@@ -320,16 +415,58 @@ onMounted(fetchHistoria)
       ></textarea>
 
       <label class="block font-medium mb-2 text-gray-700">Archivos adjuntos</label>
+
       <FileUpload
         ref="fileUploader"
         name="archivos"
         customUpload
         :multiple="true"
         @select="onFileSelect"
+        @remove="onFileRemove"
         :auto="false"
+        :showUpload="false"
+        :showCancel="false"
         accept=".pdf,image/*"
-        class="mb-4"
+        class="mb-2"
+        :previewWidth="0"
+        :showPreview="false"
       />
+      <p class="text-xs text-gray-500 mt-1">
+        Tipos permitidos: <strong>PDF, JPG, PNG</strong> — Máximo <strong>5 MB</strong> por archivo.
+      </p>
+
+      <!-- Lista de archivos seleccionados -->
+      <ul v-if="archivos.length" class="mt-3 space-y-2">
+        <li 
+          v-for="a in archivos" 
+          :key="a.name" 
+          class="flex items-center gap-3 p-2 border rounded-lg bg-gray-50"
+        >
+
+          <!-- Imagen preview -->
+          <img 
+            v-if="a.type.startsWith('image/')" 
+            :src="a.previewUrl" 
+            class="w-12 h-12 rounded object-cover" 
+          />
+
+          <!-- Icono PDF -->
+          <div 
+            v-else-if="a.type === 'application/pdf'" 
+            class="w-12 h-12 flex items-center justify-center bg-red-100 border border-red-300 text-red-700 rounded"
+          >
+            <i class="pi pi-file-pdf text-xl"></i>
+          </div>
+
+          <!-- Info del archivo -->
+          <div class="flex flex-col">
+            <span class="font-medium text-gray-800">{{ a.name }}</span>
+            <span class="text-xs text-gray-500">{{ (a.size / 1024).toFixed(1) }} KB</span>
+          </div>
+
+          <span class="ml-auto text-green-600 font-medium">Listo</span>
+        </li>
+      </ul>
 
       <button
         @click="guardarEvolucion"
