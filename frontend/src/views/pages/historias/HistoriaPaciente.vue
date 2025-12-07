@@ -10,6 +10,7 @@ import { useRouter } from 'vue-router'
 import DatePicker from 'primevue/datepicker'
 import { fechaBonitaClinica } from '@/utils/formatDate.js'
 import { nextTick } from "vue"
+import { computed } from "vue"
 
 const route = useRoute()
 const pacienteId = route.params.id
@@ -28,6 +29,33 @@ const fecha = ref(new Date().toISOString().split('T')[0])
 const contenido = ref('')
 const archivos = ref([])
 const fileUploader = ref(null)
+
+// Control de qué año está abierto
+const accordionAbierto = ref({})
+
+/**
+ * Agrupa evoluciones por año
+ */
+const evolucionesPorAño = computed(() => {
+  const grupos = {}
+
+  evoluciones.value.forEach(e => {
+    const fecha = new Date(e.fecha)
+    const año = fecha.getFullYear()
+
+    if (!grupos[año]) grupos[año] = []
+    grupos[año].push(e)
+  })
+
+  // Ordenar del año más reciente al más viejo
+  return Object.keys(grupos)
+    .sort((a, b) => b - a)
+    .map(año => ({
+      año,
+      items: grupos[año]
+    }))
+})
+
 
 /**
  * Carga los datos del paciente, sus historias y evoluciones
@@ -318,40 +346,60 @@ onMounted(fetchHistoria)
       <!-- Si no hay evoluciones -->
       <p v-if="evoluciones.length === 0" class="text-gray-500 mt-3">No hay evoluciones registradas aún.</p>
 
-      <!-- Cards de evoluciones -->
-      <div
-        v-for="evo in evoluciones"
-        :key="evo.id"
-        class="border rounded-2xl mb-4 p-5 shadow-sm bg-white hover:shadow-md transition cursor-pointer"
-      >
-        <div class="flex justify-between text-sm text-gray-600 mb-2">
-          <span class="font-medium">{{ fechaBonitaClinica(evo.fecha) }}</span>
-          <span>{{ evo.nombre_usuario }} — {{ evo.especialidad_usuario || 'Director' }}</span>
-        </div>
-        <p class="text-gray-800 text-sm mb-4 line-clamp-3">{{ evo.contenido }}</p>
+      <!-- 📂 Evoluciones agrupadas por año -->
+      <div v-for="{ año, items } in evolucionesPorAño" :key="año" class="mb-6">
 
-        <div class="flex justify-end gap-3">
-          <button
-            @click="$router.push({ name: 'evolucionDetalle', params: { id: pacienteId, evoId: evo.id } })"
-            class="text-blue-600 hover:text-blue-800 text-sm flex items-center"
-          >
-            <i class="pi pi-eye mr-1"></i> Ver Detalle
-          </button>
-          <button
-            @click="descargarEvolucionPDF(evo.id)"
-            class="text-red-600 hover:text-red-800 text-sm flex items-center"
-          >
-            <i class="pi pi-file-pdf mr-1"></i> Exportar PDF
-          </button>
-          <button
-            @click="verificarEvolucion(evo.id)"
-            class="text-purple-600 hover:text-blue-800 text-sm flex items-center"
-          >
-            <i class="pi pi-shield mr-1"></i> Verificar Integridad
-          </button>
+        <!-- CABECERA DEL AÑO -->
+        <button
+          @click="accordionAbierto[año] = !accordionAbierto[año]"
+          class="w-full flex justify-between items-center px-4 py-3 bg-gray-200 hover:bg-gray-300 rounded-lg transition font-semibold text-gray-800"
+        >
+          <span> {{ año }}</span>
+          <i :class="accordionAbierto[año] ? 'pi pi-chevron-up' : 'pi pi-chevron-down'"></i>
+        </button>
 
+        <!-- CONTENIDO DEL AÑO -->
+        <div v-show="accordionAbierto[año]" class="mt-3">
+
+          <div
+            v-for="evo in items"
+            :key="evo.id"
+            class="border rounded-2xl mb-4 p-5 shadow-sm bg-white hover:shadow-md transition"
+          >
+            <div class="flex justify-between text-sm text-gray-600 mb-2">
+              <span class="font-medium">{{ fechaBonitaClinica(evo.fecha) }}</span>
+              <span>{{ evo.nombre_usuario }} — {{ evo.especialidad_usuario || 'Director' }}</span>
+            </div>
+
+            <p class="text-gray-800 text-sm mb-4 line-clamp-3">{{ evo.contenido }}</p>
+
+            <div class="flex justify-end gap-3">
+              <button
+                @click="$router.push({ name: 'evolucionDetalle', params: { id: pacienteId, evoId: evo.id } })"
+                class="text-blue-600 hover:text-blue-800 text-sm flex items-center"
+              >
+                <i class="pi pi-eye mr-1"></i> Ver Detalle
+              </button>
+
+              <button
+                @click="descargarEvolucionPDF(evo.id)"
+                class="text-red-600 hover:text-red-800 text-sm flex items-center"
+              >
+                <i class="pi pi-file-pdf mr-1"></i> Exportar PDF
+              </button>
+
+              <button
+                @click="verificarEvolucion(evo.id)"
+                class="text-purple-600 hover:text-blue-800 text-sm flex items-center"
+              >
+                <i class="pi pi-shield mr-1"></i> Verificar Integridad
+              </button>
+            </div>
+
+          </div>
         </div>
       </div>
+
     </div>
 
     <!-- 📝 FORMULARIO NUEVA EVOLUCIÓN -->
@@ -360,7 +408,7 @@ onMounted(fetchHistoria)
       ref="formRef"
       class="mt-6 border p-4 rounded-2xl bg-white shadow-sm animate-fade-in"
     >
-    
+
       <h3 class="text-lg font-semibold text-gray-700 mb-4">Registrar nueva evolución</h3>
 
       <label for="fecha" class="block font-medium mb-2 text-gray-700">Fecha</label>

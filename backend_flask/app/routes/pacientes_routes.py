@@ -549,24 +549,32 @@ def exportar_historia_pdf(id):
 # ==========================================================
 # 📄 Exportar Evolución individual en PDF
 # ==========================================================
-
 @bp_pacientes.route('/api/pacientes/<int:paciente_id>/evolucion/<int:evo_id>/pdf', methods=['GET'])
 @login_required
 def exportar_evolucion_pdf(paciente_id, evo_id):
-    """Genera un PDF con una sola evolución clínica del paciente."""
+    """Genera un PDF institucional con una sola evolución clínica."""
+
+    from flask import current_app
+    from PIL import Image as PILImage
+
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
 
-    # Paciente
+    # ==========================================================
+    #  1) DATOS DEL PACIENTE
+    # ==========================================================
     cursor.execute("SELECT * FROM pacientes WHERE id = %s", (paciente_id,))
     paciente = cursor.fetchone()
     if not paciente:
         cursor.close(); conn.close()
         return jsonify({'error': 'Paciente no encontrado'}), 404
 
-    # Evolución específica
+    # ==========================================================
+    #  2) DATOS DE LA EVOLUCIÓN
+    # ==========================================================
     cursor.execute("""
-        SELECT e.id, e.fecha, e.contenido, u.nombre AS medico, 
+        SELECT e.id, e.fecha, e.contenido,
+               u.nombre AS medico, 
                CASE WHEN u.rol = 'director' THEN 'Director'
                     ELSE COALESCE(u.especialidad, 'Sin especificar')
                END AS especialidad
@@ -581,19 +589,19 @@ def exportar_evolucion_pdf(paciente_id, evo_id):
         cursor.close(); conn.close()
         return jsonify({'error': 'Evolución no encontrada'}), 404
 
-    # Archivos adjuntos
-    cursor.execute("""
-        SELECT filename
-        FROM evolucion_archivos
-        WHERE evolucion_id = %s
-    """, (evo_id,))
+    # ==========================================================
+    #  3) ARCHIVOS ADJUNTOS
+    # ==========================================================
+    cursor.execute("SELECT filename FROM evolucion_archivos WHERE evolucion_id = %s", (evo_id,))
     archivos = cursor.fetchall()
+
     cursor.close(); conn.close()
 
-    # -------------------------------------------------------
-    # 📄 Construcción del PDF
-    # -------------------------------------------------------
+    # ==========================================================
+    #  4) PDF – Construcción principal
+    # ==========================================================
     buffer = BytesIO()
+
     doc = SimpleDocTemplate(
         buffer,
         pagesize=A4,
@@ -608,7 +616,9 @@ def exportar_evolucion_pdf(paciente_id, evo_id):
 
     elements = []
 
-    # 🔹 Encabezado institucional
+    # ----------------------------------------------------------
+    # 🔹 ENCABEZADO CON LOGO Y TÍTULO
+    # ----------------------------------------------------------
     logo_path = os.path.join(current_app.root_path, "static", "img", "logo_cau_unsam2.png")
 
     if os.path.exists(logo_path):
@@ -618,26 +628,27 @@ def exportar_evolucion_pdf(paciente_id, evo_id):
 
     titulo = Paragraph("<b>Centro Asistencial Universitario UNSAM</b>", styles["Title"])
 
-    # Crear tabla con dos columnas: título (izquierda), logo (derecha)
     encabezado = Table([[titulo, logo]], colWidths=[11*cm, 5*cm])
     encabezado.setStyle(TableStyle([
-        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('ALIGN', (1, 0), (1, 0), 'RIGHT'),
-        ('LEFTPADDING', (0, 0), (-1, -1), 0),
-        ('RIGHTPADDING', (0, 0), (-1, -1), 0),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
+        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+        ('ALIGN', (1,0), (1,0), 'RIGHT'),
+        ('LEFTPADDING', (0,0), (-1,-1), 0),
+        ('RIGHTPADDING', (0,0), (-1,-1), 0)
     ]))
-    elements.append(encabezado)
-    elements.append(Spacer(1, 0.2*cm))
 
-    # Fecha de generación alineada a la derecha
+    elements.append(encabezado)
+    elements.append(Spacer(1, 0.3*cm))
+
+    # Fecha de generación
     fecha_actual = datetime.now().strftime("%d/%m/%Y - %H:%M")
     elements.append(Paragraph(f"<i>Fecha de generación: {fecha_actual}</i>", styles["Right"]))
     elements.append(Spacer(1, 0.5*cm))
 
-    # 🔹 Datos del paciente
+    # ----------------------------------------------------------
+    # 🔹 DATOS DEL PACIENTE
+    # ----------------------------------------------------------
     datos_paciente = f"""
-        <b>Paciente:</b> {paciente['apellido'].upper()} {paciente['nombre'].upper()}<br/>
+        <b>Paciente:</b> {paciente['apellido']} {paciente['nombre']}<br/>
         <b>DNI:</b> {paciente['dni']}<br/>
         <b>N° HC:</b> {paciente['nro_hc']}<br/>
         <b>Cobertura:</b> {paciente.get('cobertura', '-')}
@@ -645,50 +656,76 @@ def exportar_evolucion_pdf(paciente_id, evo_id):
     elements.append(Paragraph(datos_paciente, styles["Normal"]))
     elements.append(Spacer(1, 0.5*cm))
 
-    # 🔹 Detalle de la evolución
-    fecha_str = evolucion["fecha"].strftime("%d/%m/%Y") if hasattr(evolucion["fecha"], "strftime") else str(evolucion["fecha"])
-    medico = evolucion["medico"]
-    especialidad = evolucion["especialidad"]
+    # ----------------------------------------------------------
+    # INFORMACIÓN DE LA EVOLUCIÓN
+    # ----------------------------------------------------------
+    fecha_evo = evolucion["fecha"].strftime("%d/%m/%Y")
 
-    elements.append(Paragraph(f"<b>Fecha:</b> {fecha_str}", styles["Normal"]))
-    elements.append(Paragraph(f"<b>Médico:</b> {medico} ({especialidad})", styles["Normal"]))
+    elements.append(Paragraph(f"<b>Fecha:</b> {fecha_evo}", styles["Normal"]))
+    elements.append(Paragraph(f"<b>Médico:</b> {evolucion['medico']} ({evolucion['especialidad']})", styles["Normal"]))
     elements.append(Spacer(1, 0.4*cm))
-    elements.append(Paragraph(evolucion["contenido"].replace("\n", "<br/>"), styles["Normal"]))
-    elements.append(Spacer(1, 0.5*cm))
 
-    # 🔹 Archivos adjuntos
+    elements.append(Paragraph(evolucion["contenido"].replace("\n", "<br/>"), styles["Normal"]))
+    elements.append(Spacer(1, 0.6*cm))
+
+    # ----------------------------------------------------------
+    # ARCHIVOS ADJUNTOS (IMÁGENES + LINKS)
+    # ----------------------------------------------------------
     if archivos:
         elements.append(Paragraph("<b>Archivos adjuntos:</b>", styles["Heading3"]))
+        elements.append(Spacer(1, 0.2*cm))
+
         for a in archivos:
-            nombre_archivo = a["filename"]
-            url = f"/api/uploads/evoluciones/{evo_id}/{nombre_archivo}"
-            elements.append(Paragraph(f"• {nombre_archivo}", styles["Normal"]))
+            nombre = a["filename"]
+            file_path = os.path.join("uploads", "evoluciones", str(evo_id), nombre)
+            ext = nombre.lower().split(".")[-1]
+
+            # IMÁGENES
+            if ext in ["jpg", "jpeg", "png"]:
+                try:
+                    with PILImage.open(file_path) as im:
+                        w, h = im.size
+                        aspect = h / w
+                        new_width = 12 * cm
+                        new_height = new_width * aspect
+
+                        img = Image(file_path, width=new_width, height=new_height)
+                        img.hAlign = "CENTER"
+                        elements.append(img)
+                        elements.append(Spacer(1, 0.3*cm))
+                except:
+                    elements.append(Paragraph(f"⚠️ No se pudo mostrar {nombre}", styles["Normal"]))
+            else:
+                # LINK CLICKEABLE
+                url = f"{request.host_url.rstrip('/')}/api/uploads/evoluciones/{evo_id}/{nombre}"
+                elements.append(Paragraph(f"• <a href='{url}' color='blue'>{nombre}</a>", styles["Normal"]))
+                elements.append(Spacer(1, 0.2*cm))
+
     else:
         elements.append(Paragraph("<i>Sin archivos adjuntos</i>", styles["Normal"]))
 
-    # 🔹 Pie de página
+    # ----------------------------------------------------------
+    #  FOOTER + MARCA DE AGUA
+    # ----------------------------------------------------------
     def footer(canvas, doc):
+        dibujar_marca_agua(canvas, doc)
         canvas.saveState()
         canvas.setFont("Helvetica", 8)
-        text = "Documento emitido por el Sistema de Historia Clínica - Centro Asistencial Universitario UNSAM"
-        fecha_texto = datetime.now().strftime("%d/%m/%Y")
-        canvas.drawString(2 * cm, 1.5 * cm, text)
-        canvas.drawRightString(19 * cm, 1.5 * cm, f"Fecha de emisión: {fecha_texto}")
+        canvas.drawString(2 * cm, 1.5 * cm,
+            "Documento emitido por el Sistema de Historia Clínica – CAU UNSAM")
         canvas.restoreState()
 
-    # 🔹 Construcción final
     doc.build(elements, onFirstPage=footer, onLaterPages=footer)
+
     buffer.seek(0)
 
     return send_file(
         buffer,
         as_attachment=True,
-        download_name=f"evolucion_{evo_id}_paciente_{paciente_id}.pdf",
+        download_name=f"evolucion_{evo_id}.pdf",
         mimetype="application/pdf"
     )
 
-
-from reportlab.lib.colors import Color
 
 def dibujar_marca_agua(canvas, doc):
     """
