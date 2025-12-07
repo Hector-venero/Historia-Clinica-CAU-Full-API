@@ -13,6 +13,7 @@ from reportlab.lib.enums import TA_CENTER, TA_RIGHT
 from datetime import datetime
 from app.routes.historias_routes import actualizar_historia
 import os
+from reportlab.lib.colors import Color
 
 # Registrar fuente compatible con UTF-8 (caracteres acentuados, español)
 pdfmetrics.registerFont(UnicodeCIDFont('HeiseiMin-W3'))
@@ -513,10 +514,20 @@ def exportar_historia_pdf(id):
         canvas.restoreState()
 
     # -------------------------------------------------------
+    # 🔹 Páginas con marca de agua + footer
+    # -------------------------------------------------------
+    def first_page(canvas, doc):
+        dibujar_marca_agua(canvas, doc)
+        footer(canvas, doc)
+
+    def later_pages(canvas, doc):
+        dibujar_marca_agua(canvas, doc)
+        footer(canvas, doc)
+
+    # -------------------------------------------------------
     # 🔹 CONSTRUCCIÓN FINAL
     # -------------------------------------------------------
-    doc.build(elements, onFirstPage=footer, onLaterPages=footer)
-
+    doc.build(elements, onFirstPage=first_page, onLaterPages=later_pages )
     buffer.seek(0)
     cursor.close(); conn.close()
 
@@ -526,6 +537,7 @@ def exportar_historia_pdf(id):
         download_name=f"historia_paciente_{id}.pdf",
         mimetype="application/pdf"
     )
+
 
 # ==========================================================
 # 📄 Exportar Evolución individual en PDF
@@ -667,3 +679,28 @@ def exportar_evolucion_pdf(paciente_id, evo_id):
         download_name=f"evolucion_{evo_id}_paciente_{paciente_id}.pdf",
         mimetype="application/pdf"
     )
+
+
+from reportlab.lib.colors import Color
+
+def dibujar_marca_agua(canvas, doc):
+    """
+    Dibuja una marca de agua diagonal suave en cada página.
+    """
+    canvas.saveState()
+
+    canvas.setFont("Helvetica-Bold", 50)
+    canvas.setFillColor(Color(0.6, 0.6, 0.6, alpha=0.12))  # gris suave transparente
+
+    # Mover al centro de página
+    width, height = A4
+    canvas.translate(width / 2, height / 2)
+
+    # Rotar texto 45 grados
+    canvas.rotate(35)
+
+    # Dibujar texto centrado
+    texto = "DOCUMENTO CONFIDENCIAL – CAU UNSAM"
+    canvas.drawCentredString(0, 0, texto)
+
+    canvas.restoreState()
