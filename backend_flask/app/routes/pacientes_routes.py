@@ -408,7 +408,7 @@ def exportar_historia_pdf(id):
     else:
         logo = Paragraph("<b>CAU UNSAM</b>", styles["Normal"])
 
-    titulo = Paragraph("<b>Centro Asistencial Universitario UNSAM</b>", styles["Title"])
+    titulo = Paragraph("<b>Centro Asistencial Universitario </b>", styles["Title"])
 
     # Tabla de dos columnas: título (izquierda) y logo (derecha)
     encabezado = Table([[titulo, logo]], colWidths=[11*cm, 5*cm])
@@ -493,13 +493,20 @@ def exportar_historia_pdf(id):
                             except Exception as e:
                                 elements.append(Paragraph(f"⚠️ No se pudo mostrar {filename}", styles["Normal"]))
                         else:
-                            url = f"/api/uploads/evoluciones/{evo['id']}/{filename}"
-                            elements.append(Paragraph(f"• {filename} — <i>Descargar:</i> {url}", styles["Normal"]))
-                elements.append(Spacer(1, 0.5*cm))
+                            base_url = request.host_url.rstrip('/')
+                            url = f"{base_url}/api/uploads/evoluciones/{evo['id']}/{filename}"
 
-            # Salto de página cada 4 evoluciones aprox.
-            if evoluciones.index(evo) % 4 == 3:
-                elements.append(PageBreak())
+                            elements.append(Paragraph(
+                                f"• <b>{filename}</b> — "
+                                f"<a href='{url}' color='blue'>Haga clic aquí para descargar</a>",
+                                styles['Normal']
+                            ))
+
+                            elements.append(Spacer(1, 0.5*cm))
+
+                        # Salto de página cada 4 evoluciones aprox.
+                        if evoluciones.index(evo) % 4 == 3:
+                            elements.append(PageBreak())
 
     # -------------------------------------------------------
     # 🔹 PIE DE PÁGINA

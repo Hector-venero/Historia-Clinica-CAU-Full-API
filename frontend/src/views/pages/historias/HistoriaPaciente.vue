@@ -9,6 +9,7 @@ import axios from 'axios'
 import { useRouter } from 'vue-router'
 import DatePicker from 'primevue/datepicker'
 import { fechaBonitaClinica } from '@/utils/formatDate.js'
+import { nextTick } from "vue"
 
 const route = useRoute()
 const pacienteId = route.params.id
@@ -118,46 +119,20 @@ const guardarEvolucion = async () => {
 /**
  * Exporta toda la historia clínica en PDF
  */
-const descargarHistoriaPDF = async () => {
-  try {
-    toast.add({ severity: 'info', summary: 'Generando PDF...', life: 2000 })
-    const res = await axios.get(`/api/pacientes/${pacienteId}/historia/pdf`, {
-      responseType: 'blob',
-      withCredentials: true
-    })
-    const url = window.URL.createObjectURL(new Blob([res.data]))
-    const link = document.createElement('a')
-    link.href = url
-    link.setAttribute('download', `historia_paciente_${pacienteId}.pdf`)
-    document.body.appendChild(link)
-    link.click()
-  } catch (err) {
-    console.error(err)
-    toast.add({ severity: 'error', summary: 'Error', detail: 'No se pudo generar el PDF', life: 3000 })
-  }
+const descargarHistoriaPDF = () => {
+  const base = import.meta.env.VITE_API_URL || "http://localhost:5000"
+  window.open(`${base}/api/pacientes/${pacienteId}/historia/pdf`, "_blank")
 }
+
 
 /**
  * Exporta una evolución individual en PDF
  */
-const descargarEvolucionPDF = async (evoId) => {
-  try {
-    toast.add({ severity: 'info', summary: 'Generando PDF...', life: 2000 })
-    const res = await axios.get(`/api/pacientes/${pacienteId}/evolucion/${evoId}/pdf`, {
-      responseType: 'blob',
-      withCredentials: true
-    })
-    const url = window.URL.createObjectURL(new Blob([res.data]))
-    const link = document.createElement('a')
-    link.href = url
-    link.setAttribute('download', `evolucion_${evoId}.pdf`)
-    document.body.appendChild(link)
-    link.click()
-  } catch (err) {
-    console.error(err)
-    toast.add({ severity: 'error', summary: 'Error', detail: 'No se pudo generar el PDF', life: 3000 })
-  }
+const descargarEvolucionPDF = (evoId) => {
+  const base = import.meta.env.VITE_API_URL || "http://localhost:5000"
+  window.open(`${base}/api/pacientes/${pacienteId}/evolucion/${evoId}/pdf`, "_blank")
 }
+
 const normalizar = (nombre) =>
   nombre.toLowerCase().replace(/\s+/g, '').replace(/[()]/g, '').trim()
 
@@ -217,30 +192,18 @@ const onFileRemove = (event) => {
   archivos.value = archivos.value.filter(a => a.name !== event.file.name)
 }
 
-/**
- * Verifica la integridad de toda la historia clínica
- */
-const verificarIntegridad = async () => {
-  try {
-    const { data } = await axios.get(`/api/blockchain/verificar/historia/${pacienteId}`, {
-      withCredentials: true
-    })
-    toast.add({
-      severity: data.valido ? 'success' : 'warn',
-      summary: 'Verificación Blockchain',
-      detail: data.mensaje,
-      life: 5000
-    })
-  } catch (err) {
-    console.error('Error al verificar integridad:', err)
-    toast.add({
-      severity: 'error',
-      summary: 'Error',
-      detail: 'No se pudo verificar la integridad de la historia.',
-      life: 4000
-    })
+const formRef = ref(null)
+
+const abrirFormEvolucion = async () => {
+  showForm.value = true
+  
+  await nextTick()
+
+  if (formRef.value) {
+    formRef.value.scrollIntoView({ behavior: "smooth", block: "start" })
   }
 }
+
 
 /**
  * Verifica la integridad de una evolución individual
@@ -343,11 +306,12 @@ onMounted(fetchHistoria)
           </button>
 
           <button
-            @click="showForm = !showForm"
+            @click="abrirFormEvolucion"
             class="flex items-center bg-green-600 text-white px-4 py-2 rounded-lg shadow-sm hover:bg-green-700 transition text-sm"
           >
             <i class="pi pi-plus mr-2"></i> {{ showForm ? 'Cancelar' : 'Agregar Evolución' }}
           </button>
+
         </div>
       </div>
 
@@ -393,8 +357,10 @@ onMounted(fetchHistoria)
     <!-- 📝 FORMULARIO NUEVA EVOLUCIÓN -->
     <div
       v-if="showForm"
+      ref="formRef"
       class="mt-6 border p-4 rounded-2xl bg-white shadow-sm animate-fade-in"
     >
+    
       <h3 class="text-lg font-semibold text-gray-700 mb-4">Registrar nueva evolución</h3>
 
       <label for="fecha" class="block font-medium mb-2 text-gray-700">Fecha</label>
