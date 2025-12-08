@@ -103,7 +103,7 @@ services:
       - web
     networks:
       - historia_net
-    # 🚫 No exponer el puerto 5173 en producción (solo se usa para desarrollo)
+    #  No exponer el puerto 5173 en producción (solo se usa para desarrollo)
     ports:
       - "5173:5173"
 

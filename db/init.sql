@@ -1,8 +1,3 @@
--- ==============================================
--- 🧩 BASE DE DATOS hc_bfa - VERSIÓN ACTUALIZADA
--- Incluye ajustes para integración con Blockchain BFA
--- ==============================================
-
 -- Crear la base de datos si no existe
 CREATE DATABASE IF NOT EXISTS hc_bfa
   CHARACTER SET utf8mb4
@@ -14,7 +9,7 @@ SET GLOBAL time_zone = '-3:00';
 SET time_zone = '-3:00';
 
 -- ==============================================
--- 🔄 ELIMINAR TABLAS (solo para entorno de desarrollo)
+--  ELIMINAR TABLAS (solo para entorno de desarrollo)
 -- ==============================================
 DROP TABLE IF EXISTS auditorias_blockchain;
 DROP TABLE IF EXISTS historias;
@@ -245,4 +240,11 @@ WHERE NOT EXISTS (
 DROP USER IF EXISTS 'hc_app'@'%';
 CREATE USER IF NOT EXISTS 'hc_app'@'%' IDENTIFIED BY 'HC_App_2025!';
 GRANT SELECT, INSERT, UPDATE, DELETE ON hc_bfa.* TO 'hc_app'@'%';
+
+-- Crear usuario para backups
+DROP USER IF EXISTS 'backup_user'@'%';
+CREATE USER IF NOT EXISTS 'backup_user'@'%' IDENTIFIED BY 'Backup_2025!';
+
+-- Permisos necesarios para mysqldump seguro
+GRANT SELECT, LOCK TABLES ON hc_bfa.* TO 'backup_user'@'%';
 FLUSH PRIVILEGES;

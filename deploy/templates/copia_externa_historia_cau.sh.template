@@ -1,0 +1,17 @@
+#!/bin/bash
+
+BACKUP_DIR="/var/backups/historia_cau"
+REMOTE_USER="{{REMOTE_USER}}"
+REMOTE_HOST="{{REMOTE_HOST}}"
+
+if [[ -z "$REMOTE_USER" || -z "$REMOTE_HOST" ]]; then
+    echo "⚠ Copia externa DESHABILITADA (REMOTE_USER o REMOTE_HOST vacío)"
+    exit 0
+fi
+
+DEST="$REMOTE_USER@$REMOTE_HOST:/backups/historia_cau"
+
+echo "📤 Enviando backups al servidor externo..."
+rsync -avz --delete "$BACKUP_DIR/" "$DEST"
+
+echo "✅ Copia externa completada"

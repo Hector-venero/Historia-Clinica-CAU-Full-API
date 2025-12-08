@@ -1,0 +1,22 @@
+#!/bin/bash
+
+if [ -z "$1" ]; then
+    echo "Uso: restaurar_historia_cau.sh archivo.gpg"
+    exit 1
+fi
+
+MYSQL_USER="{{MYSQL_USER}}"
+MYSQL_PASSWORD="{{MYSQL_PASSWORD}}"
+MYSQL_DB="{{MYSQL_DB}}"
+MYSQL_HOST="{{MYSQL_HOST}}"
+
+FILE="$1"
+
+echo "🔓 Descifrando backup..."
+gpg --batch --yes --passphrase "$MYSQL_PASSWORD" -o /tmp/restore.sql -d "$FILE"
+
+echo "📥 Restaurando en MySQL..."
+mysql -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" -h "$MYSQL_HOST" "$MYSQL_DB" < /tmp/restore.sql
+
+rm /tmp/restore.sql
+echo "✅ Base restaurada correctamente"

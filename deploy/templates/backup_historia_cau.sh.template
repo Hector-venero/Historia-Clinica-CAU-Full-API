@@ -1,0 +1,28 @@
+#!/bin/bash
+
+# ============ CONFIG (autocompletado por el instalador) ============
+MYSQL_USER="{{MYSQL_USER}}"
+MYSQL_PASSWORD="{{MYSQL_PASSWORD}}"
+MYSQL_DB="{{MYSQL_DB}}"
+MYSQL_HOST="{{MYSQL_HOST}}"
+
+BACKUP_DIR="/var/backups/historia_cau"
+DATE=$(date +"%Y-%m-%d_%H-%M")
+FILE="$BACKUP_DIR/backup_${DATE}.sql"
+ENCRYPTED="$FILE.gpg"
+
+echo "📦 Generando backup..."
+
+# Dump desde MySQL DENTRO DEL HOST, no desde Docker
+mysqldump -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" -h "$MYSQL_HOST" "$MYSQL_DB" > "$FILE"
+
+if [ $? -ne 0 ]; then
+    echo "❌ Error al generar el backup"
+    exit 1
+fi
+
+echo "🔐 Cifrando backup..."
+gpg --batch --yes --passphrase "$MYSQL_PASSWORD" -c "$FILE"
+
+rm "$FILE"
+echo "✅ Backup listo: $ENCRYPTED"
