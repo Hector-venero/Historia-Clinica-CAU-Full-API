@@ -156,16 +156,12 @@
 <script setup>
 import { ref, onMounted, computed } from "vue";
 import { useRouter } from "vue-router";
-import axios from "axios";
+import api from "@/api/axios"; 
 import { useUserStore } from "@/stores/user";
 
 const router = useRouter();
 const userStore = useUserStore();
 const usuario = ref(userStore);
-
-const irAlDashboard = () => {
-  router.push({ name: "dashboard" });   // o router.push('/')
-};
 
 // ░░ DIAS BASE ░░
 const diasSemana = ref([
@@ -196,8 +192,10 @@ const resumen = computed(() =>
 async function cargarDisponibilidades() {
   mensaje.value = "";
   error.value = "";
+
   try {
-    const res = await axios.get("/api/disponibilidades");
+    const res = await api.get("/disponibilidades");  // ← CORRECTO
+
     const datos = res.data;
 
     diasSemana.value.forEach((dia) => {
@@ -225,13 +223,13 @@ async function guardarDisponibilidades() {
     for (const dia of diasSemana.value) {
       if (dia.activo) {
         if (dia.id) {
-          await axios.put(`/api/disponibilidades/${dia.id}`, {
+          await api.put(`/disponibilidades/${dia.id}`, {
             hora_inicio: dia.hora_inicio,
             hora_fin: dia.hora_fin,
             activo: true
           });
         } else {
-          const res = await axios.post("/api/disponibilidades", {
+          const res = await api.post("/disponibilidades", {
             dia_semana: dia.nombre,
             hora_inicio: dia.hora_inicio,
             hora_fin: dia.hora_fin,
@@ -240,13 +238,14 @@ async function guardarDisponibilidades() {
           dia.id = res.data.id;
         }
       } else if (dia.id) {
-        await axios.put(`/api/disponibilidades/${dia.id}`, {
+        await api.put(`/disponibilidades/${dia.id}`, {
           hora_inicio: dia.hora_inicio,
           hora_fin: dia.hora_fin,
           activo: false
         });
       }
     }
+
     mensaje.value = "Disponibilidades actualizadas correctamente.";
   } catch (err) {
     console.error(err);
@@ -255,6 +254,8 @@ async function guardarDisponibilidades() {
     guardando.value = false;
   }
 }
+
+const irAlDashboard = () => router.push({ name: "dashboard" });
 
 onMounted(cargarDisponibilidades);
 </script>

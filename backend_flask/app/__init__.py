@@ -17,6 +17,7 @@ from flask import send_from_directory
 # -------------------------
 app = Flask(__name__)
 app.config.from_object(Config)
+app.config['FRONTEND_URL'] = os.getenv("FRONTEND_URL", "http://localhost")
 
 # Seguridad HTTP (headers CSP, HTTPS, etc.)
 csp = {
@@ -25,10 +26,24 @@ csp = {
     "style-src": ["'self'", "'unsafe-inline'"],
     "script-src": ["'self'"]
 }
-Talisman(app, content_security_policy=csp)
+# Seguridad HTTP (headers CSP, HTTPS según entorno)
+env = os.getenv("FLASK_ENV", "development")
+force_https = False #(env == "production")
+
+Talisman(
+    app,
+    content_security_policy=None, 
+    force_https=force_https
+)
+
 
 # CORS (permite peticiones desde el frontend React)
-CORS(app, supports_credentials=True, origins=["http://localhost:5173"])
+CORS(app, supports_credentials=True, origins=[
+    "http://localhost",        # NGINX
+    "http://localhost:80",     # NGINX explícito
+    "http://localhost:5173",   # Vite Dev
+    "http://localhost:4173"    # Vite Preview
+])
 
 # -------------------------
 # Configuración Login

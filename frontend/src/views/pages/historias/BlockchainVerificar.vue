@@ -1,6 +1,6 @@
 <script setup>
 import { ref, onMounted } from 'vue'
-import axios from 'axios'
+import api from '@/api/axios'
 
 // PrimeVue (si tu proyecto ya lo usa; si no, se renderiza igual con classes)
 import Button from 'primevue/button'
@@ -39,7 +39,7 @@ const registrarEnBfa = async () => {
   limpiarEstado()
   loadingAccion.value = true
   try {
-    const { data } = await axios.post(`/api/blockchain/registrar/${historiaId.value}`, {}, { withCredentials: true })
+    const { data } = await api.post(`/blockchain/registrar/${historiaId.value}`, {}, { withCredentials: true })
     resultado.value = {
       accion: 'registrar',
       mensaje: data.mensaje || 'Hash publicado correctamente',
@@ -63,7 +63,7 @@ const verificar = async () => {
   limpiarEstado()
   loadingAccion.value = true
   try {
-    const { data } = await axios.get(`/api/blockchain/verificar/${historiaId.value}`, { withCredentials: true })
+    const { data } = await api.get(`/blockchain/verificar/${historiaId.value}`, { withCredentials: true })
     resultado.value = {
       accion: 'verificar',
       mensaje: data.mensaje,
@@ -86,7 +86,7 @@ const cargarAuditorias = async () => {
   error.value = null
   try {
     // Backend devuelve todo; hacemos orden y paginado en front por simplicidad
-    const { data } = await axios.get('/api/blockchain/auditorias', { withCredentials: true })
+    const { data } = await api.get('/blockchain/auditorias', { withCredentials: true })
     // sort
     const sorted = [...data].sort((a, b) => {
       const aa = a[sortField.value]

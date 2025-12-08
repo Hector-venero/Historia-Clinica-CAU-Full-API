@@ -1,6 +1,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
-import axios from 'axios'
+import api from '@/api/axios'
+
 import { useUserStore } from '@/stores/user'
 import { buildFotoURL } from '@/utils/fotoUrl.js'
 
@@ -43,7 +44,7 @@ const actualizarPerfil = async () => {
     form.append('foto', archivoFoto.value)
   }
 
-  await axios.post('/api/usuario/perfil', form, {
+  await api.post('/usuario/perfil', form, {
     withCredentials: true,
     headers: { 'Content-Type': 'multipart/form-data' }
   })
@@ -57,7 +58,7 @@ const actualizarPerfil = async () => {
 
 /* ELIMINAR FOTO */
 const eliminarFoto = async () => {
-  await axios.delete('/api/usuario/foto', {
+  await api.delete('/usuario/foto', {
     withCredentials: true
   })
 

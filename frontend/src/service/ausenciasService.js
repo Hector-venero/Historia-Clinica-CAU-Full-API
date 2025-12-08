@@ -1,14 +1,14 @@
 // src/service/ausenciasService.js
-import axios from 'axios';
+import api from "@/api/axios";
 
 export default {
     listar() {
-        return axios.get('/api/ausencias', { withCredentials: true });
+        return api.get('/ausencias', { withCredentials: true });
     },
     crear(data) {
-        return axios.post('/api/ausencias', data, { withCredentials: true });
+        return api.post('/ausencias', data, { withCredentials: true });
     },
     eliminar(id) {
-        return axios.delete(`/api/ausencias/${id}`, { withCredentials: true });
+        return api.delete(`/ausencias/${id}`, { withCredentials: true });
     }
 };

@@ -88,7 +88,8 @@ def api_recover():
     # Generar token válido por 1 hora
     token = s.dumps(email, salt='reset-password')
 
-    reset_url = f"http://localhost:5173/reset/{token}"
+    #reset_url = f"http://localhost:5173/reset/{token}"
+    reset_url = f"{current_app.config['FRONTEND_URL']}/reset/{token}"
     msg = Message("Recuperación de contraseña - Historia Clínica CAU", recipients=[email])
     msg.body = (
         f"Hola {usuario['nombre']},\n\n"

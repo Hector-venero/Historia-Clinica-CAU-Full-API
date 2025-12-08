@@ -1,14 +1,13 @@
-FROM node:20-alpine
+# =============== 🧱 BUILD STAGE ===============
+FROM node:20-alpine AS build
 
 WORKDIR /app
-
 COPY package*.json ./
 RUN npm install
-
 COPY . .
+RUN npm run build
 
-EXPOSE 5173
+# =============== 🚀 DEPLOY STAGE ===============
+FROM nginx:latest AS deploy
 
-ENV VITE_API_URL=http://web:5000/api
-
-CMD ["npm", "run", "dev", "--", "--host"]
+COPY --from=build /app/dist /usr/share/nginx/html

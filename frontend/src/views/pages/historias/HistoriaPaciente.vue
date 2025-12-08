@@ -5,7 +5,7 @@ import { useToast } from 'primevue/usetoast'
 import { onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import historiaService from '@/service/historiaService'
-import axios from 'axios'
+import api from '@/api/axios'
 import { useRouter } from 'vue-router'
 import DatePicker from 'primevue/datepicker'
 import { fechaBonitaClinica, fechaBonitaCompleta } from '@/utils/formatDate.js'
@@ -65,13 +65,13 @@ const fetchHistoria = async () => {
   try {
     loading.value = true
 
-    const resPaciente = await axios.get(`/api/pacientes/${pacienteId}`, { withCredentials: true })
+    const resPaciente = await api.get(`/pacientes/${pacienteId}`, { withCredentials: true })
     paciente.value = resPaciente.data
 
     const resHistorias = await historiaService.getHistorias(pacienteId)
     historias.value = resHistorias.data
 
-    const resEvoluciones = await axios.get(`/api/pacientes/${pacienteId}/evoluciones`, { withCredentials: true })
+    const resEvoluciones = await api.get(`/pacientes/${pacienteId}/evoluciones`, { withCredentials: true })
     evoluciones.value = resEvoluciones.data
   } catch (err) {
     console.error(err)
@@ -115,7 +115,7 @@ const guardarEvolucion = async () => {
     })
 
 
-    await axios.post(`/api/pacientes/${pacienteId}/evolucion`, formData, {
+    await api.post(`/pacientes/${pacienteId}/evolucion`, formData, {
       headers: { "Content-Type": "multipart/form-data" },
       withCredentials: true
     })
@@ -241,7 +241,7 @@ const abrirFormEvolucion = async () => {
  */
 const verificarEvolucion = async (evoId) => {
   try {
-    const { data } = await axios.get(`/api/blockchain/verificar/evolucion/${evoId}`, {
+    const { data } = await api.get(`/blockchain/verificar/evolucion/${evoId}`, {
       withCredentials: true
     })
     toast.add({

@@ -1,6 +1,6 @@
 <script setup>
 import { ref, onMounted, computed } from 'vue'
-import axios from 'axios'
+import api from "@/api/axios";
 import Chart from 'primevue/chart'
 import { useUserStore } from '../stores/user'
 import { reactive, watch } from 'vue'
@@ -31,9 +31,9 @@ const fetchDashboard = async () => {
   try {
     loading.value = true
     const [resDashboard, resSemanal, resDisponibilidad] = await Promise.all([
-      axios.get('/api/dashboard', { withCredentials: true }),
-      axios.get('/api/dashboard/semanal', { withCredentials: true }),
-      axios.get('/api/disponibilidades', { withCredentials: true })
+      api.get('/dashboard', { withCredentials: true }),
+      api.get('/dashboard/semanal', { withCredentials: true }),
+      api.get('/disponibilidades', { withCredentials: true })
     ])
 
     dashboard.value = resDashboard.data

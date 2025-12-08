@@ -1,28 +1,42 @@
 // src/service/usuarioService.js
-import axios from 'axios'
+import api from "@/api/axios";
 
-const API_URL = '/api/usuarios'
+const API_URL = "/usuarios"; // api ya agrega /api
 
 export default {
   getUsuarios(params = {}) {
-    return axios.get(API_URL, { params, withCredentials: true })
+    return api.get(API_URL, { params, withCredentials: true });
   },
+
   getUsuario(id) {
-    return axios.get(`${API_URL}/${id}`, { withCredentials: true })
+    return api.get(`${API_URL}/${id}`, { withCredentials: true });
   },
+
   createUsuario({ nombre, username, email, password, rol, especialidad }) {
-    return axios.post(API_URL,
+    return api.post(
+      API_URL,
       { nombre, username, email, password, rol, especialidad },
       { withCredentials: true }
-    )
+    );
   },
+
   updateUsuario(id, data) {
-    return axios.put(`${API_URL}/${id}`, data, { withCredentials: true })
+    return api.put(`${API_URL}/${id}`, data, { withCredentials: true });
   },
+
   deleteUsuario(id) {
-    return axios.delete(`${API_URL}/${id}`, { withCredentials: true })
+    return api.delete(`${API_URL}/${id}`, { withCredentials: true });
   },
+
   activarUsuario(id) {
-    return axios.put(`${API_URL}/${id}/activar`, {}, { withCredentials: true })
+    return api.put(`${API_URL}/${id}/activar`, {}, { withCredentials: true });
+  },
+
+  actualizarDuracion(id, duracion_turno) {
+    return api.patch(
+      `${API_URL}/${id}/duracion`,
+      { duracion_turno },
+      { withCredentials: true }
+    );
   }
-}
+};

@@ -81,8 +81,7 @@
 
 <script setup>
 import { ref, onMounted } from "vue";
-import axios from "axios";
-
+import api from "@/api/axios";
 const grupo = ref({
   nombre: "",
   descripcion: "",
@@ -96,7 +95,7 @@ const error = ref("");
 // ✅ Cargar usuarios disponibles
 onMounted(async () => {
   try {
-    const res = await axios.get("/api/usuarios", { withCredentials: true });
+    const res = await api.get("/usuarios", { withCredentials: true });
     usuarios.value = res.data || [];
   } catch (err) {
     console.error("Error cargando usuarios:", err);
@@ -109,12 +108,12 @@ async function crearGrupo() {
 
   try {
     // 1️⃣ Crear grupo
-    const resGrupo = await axios.post("/api/grupos", grupo.value, { withCredentials: true });
+    const resGrupo = await api.post("/grupos", grupo.value, { withCredentials: true });
     const grupoId = resGrupo.data.id;
 
     // 2️⃣ Agregar miembros seleccionados
     for (const usuarioId of miembrosSeleccionados.value) {
-      await axios.post(`/api/grupos/${grupoId}/miembros`, { usuario_id: usuarioId }, { withCredentials: true });
+      await api.post(`/grupos/${grupoId}/miembros`, { usuario_id: usuarioId }, { withCredentials: true });
     }
 
     mensaje.value = "✅ Grupo creado y miembros asignados correctamente";

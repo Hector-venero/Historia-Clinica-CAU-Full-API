@@ -1,7 +1,7 @@
 <script setup>
 import logoUnsam from '@/assets/logo_unsam_sin_letras.png'
 import FloatingConfigurator from '@/components/FloatingConfigurator.vue'
-import axios from 'axios'
+import api from "@/api/axios";
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 
@@ -12,7 +12,7 @@ const router = useRouter()
 
 const login = async () => {
   try {
-    const res = await axios.post('/api/login', {
+    const res = await api.post('/login', {
       username: usuario.value,
       password: password.value
     }, { withCredentials: true })

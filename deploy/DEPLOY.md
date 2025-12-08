@@ -1,38 +1,43 @@
-# 🚀 Guía de Deploy – Historia Clínica CAU (UNSAM)
-
-Este documento describe el procedimiento oficial para desplegar la aplicación **Historia Clínica CAU – Full API (Flask + React + Docker + BFA)** en el servidor productivo.
-
----
-
-## 🧩 1️⃣ Requisitos previos
-
-- Acceso al servidor donde se ejecutará el proyecto.
-- Docker y Docker Compose instalados.
-- Acceso al repositorio GitHub:  
-  👉 [https://github.com/Hector-venero/Historia-Clinica-CAU-Full-API](https://github.com/Hector-venero/Historia-Clinica-CAU-Full-API)
-- Copia local del archivo `.env` (no se sube al repo por seguridad).
+# 
+Guía de Deploy – Historia Clínica CAU (UNSAM) 
+Este documento describe el procedimiento oficial para desplegar la aplicación **Historia Clínica CAU – Full API (Flask + React + Docker + Nginx + BFA)** en un entorno productivo.
 
 ---
 
-## ⚙️ 2️⃣ Estructura del proyecto
+#  1. Requisitos previos
+
+- Servidor Linux con:
+  - Docker ≥ 24
+  - Docker Compose ≥ 2
+- Acceso SSH
+- Acceso al repositorio GitHub:
+  - `git@github.com:Hector-venero/Historia-Clinica-CAU-Full-API.git`
+- Archivo `.env` de producción (NO se sube al repositorio)
+- Puerto 80 (y 443 si se usa SSL) habilitados
+
+---
+
+#  2. Estructura del proyecto
 
 ```
-Historia-Clinica-CAU-Full-API/
+Historia-Clinica-CAU/
 │
-├── backend_flask/           # API Flask (Python)
-├── frontend/                # Interfaz React (Vite)
-├── nginx/                   # Configuración Nginx
-├── db/                      # Scripts SQL
-├── bfa-node/                # Nodo Blockchain (geth)
+├── backend_flask/         # API Flask (Gunicorn en producción)
+├── frontend/              # React + Vite
+├── nginx/                 # Configuración Nginx
+├── db/                    # Archivos SQL iniciales
+├── bfa-node/              # Nodo Blockchain BFA (Geth en modo dev)
 ├── docker-compose.yml
-└── .env                     # Variables de entorno (local del servidor)
+└── .env                   # Variables de entorno (local del servidor)
 ```
 
 ---
 
-## 🧱 3️⃣ Pasos de instalación y despliegue
+#  3. Despliegue paso a paso
 
-### 🔹 Paso 1. Clonar el repositorio
+---
+
+##  Paso 1 — Clonar el repositorio
 
 ```bash
 git clone git@github.com:Hector-venero/Historia-Clinica-CAU-Full-API.git
@@ -41,137 +46,137 @@ cd Historia-Clinica-CAU-Full-API
 
 ---
 
-### 🔹 Paso 2. Copiar el archivo `.env`
+##  Paso 2 — Crear el archivo `.env`
 
+Copiar el archivo `.env` en la raíz del proyecto.
 
-### 🔹 Paso 3. Generar el build del frontend (React)
+Ejemplo mínimo de producción:
 
-```bash
-cd frontend
-npm install
-npm run build
-cd ..
+```
+FLASK_ENV=production
+FLASK_DEBUG=False
+
+VITE_API_URL=/api
+FRONTEND_URL=https://mi-dominio.com
+
+DB_HOST=db
+DB_USER=hc_app
+DB_PASSWORD=***
+DB_NAME=hc_bfa
 ```
 
-Esto generará la carpeta `frontend/dist` con los archivos productivos de la interfaz web.
-
-> ⚠️ Es importante ejecutar este paso dentro del servidor, ya que Nginx servirá directamente este `dist`.  
-> Si no se hace, se mostrará la plantilla base de Sakai Vue.
+⚠️ En producción **NO deben usarse URLs localhost**.
 
 ---
 
-### 🔹 Paso 4. Levantar todos los servicios
+## 🔹 Paso 3 — (IMPORTANTE) No ejecutar `npm run build` manualmente
 
-Desde la raíz del proyecto:
+El build del frontend **ya no se hace a mano**.
+
+Ahora se genera automáticamente dentro del contenedor Docker:
+
+```dockerfile
+FROM node:20 AS build
+WORKDIR /app
+COPY package*.json ./
+RUN npm install
+COPY . .
+RUN npm run build
+```
+
+y luego:
+
+```dockerfile
+FROM nginx
+COPY --from=build /app/dist /usr/share/nginx/html
+```
+
+Esto garantiza builds reproducibles y confiables.
+
+---
+
+## 🔹 Paso 4 — Levantar la aplicación
 
 ```bash
 docker compose --env-file .env up -d --build
 ```
 
-Esto levantará los siguientes contenedores:
+Esto crea y levanta los siguientes servicios:
 
-| Contenedor | Descripción |
-|-------------|--------------|
-| `historia_web` | Backend Flask |
-| `historia_db` | Base de datos MySQL |
-| `bfa-node` | Nodo Blockchain (Geth modo dev) |
-| `historia_frontend` | Build React (Vite) |
-| `historia_nginx` | Proxy inverso Nginx (sirve frontend y /api) |
+| Servicio | Función |
+|---------|---------|
+| `historia_web` | Backend Flask (Gunicorn) |
+| `historia_frontend` | Construcción del frontend |
+| `historia_nginx` | Servidor web + reverse proxy |
+| `historia_db` | Base MySQL |
+| `bfa-node` | Nodo blockchain BFA |
 
 ---
 
-### 🔹 Paso 5. Verificar contenedores activos
+# 🔍 4. Validaciones después del deploy
+
+---
+
+## ✔ Validar contenedores activos
 
 ```bash
 docker ps
 ```
 
-Deberían aparecer los 5 contenedores listados arriba en estado `Up`.
-
 ---
 
-### 🔹 Paso 6. Validar que Nginx sirva el build correcto
-
-Entrar al contenedor y revisar el contenido del build:
+## ✔ Verificar que Nginx está sirviendo el build final
 
 ```bash
-docker exec -it historia_nginx bash
-cat /usr/share/nginx/html/index.html | grep "<title>"
+docker exec -it historia_nginx ls /usr/share/nginx/html
 ```
-
-Debe mostrar:
-```
-<title>Historia Clínica CAU</title>
-```
-
-Si en cambio muestra “Sakai Vue” o “PrimeVue Template”, significa que el `npm run build` no se ejecutó correctamente.
 
 ---
 
-### 🔹 Paso 7. Acceder desde el navegador
+## ✔ Probar la API
 
-```
-https://tornamap.galileo.ar:51170/
-```
-
-o
-
-```
-http://tornamap.galileo.ar
-```
-
-Debería mostrarse la interfaz React real (login de Historia Clínica CAU) con conexión al backend Flask y Blockchain BFA.
-
----
-
-## 🧰 4️⃣ Comandos útiles
-
-### 🔸 Ver logs de un servicio
 ```bash
-docker logs historia_web
+curl -I http://localhost/api/health
 ```
 
-### 🔸 Reconstruir todo desde cero
+Esperado:
+
+```
+200 OK
+```
+
+---
+
+#  5. Acceso a la aplicación
+
+### Sin dominio
+```
+http://<IP-del-servidor>
+```
+
+### Con dominio
+```
+https://historia-cau.unsam.edu.ar
+```
+
+---
+
+#  6. Habilitar HTTPS
+
+```bash
+sudo certbot --nginx -d dominio.com
+```
+
+---
+
+# 🛠 7. Comandos útiles
+
 ```bash
 docker compose down -v
 docker compose --env-file .env up -d --build
 ```
 
-### 🔸 Entrar al contenedor Flask
-```bash
-docker exec -it historia_web bash
-```
-
-### 🔸 Entrar al contenedor Nginx
-```bash
-docker exec -it historia_nginx bash
-```
-
 ---
 
-## 🔒 5️⃣ Notas de seguridad
-
-- El archivo `.env` **no debe subirse a GitHub**.  
-  Contiene credenciales de base de datos y llaves privadas de BFA.
-- En producción, se recomienda configurar HTTPS con Certbot:
-  ```bash
-  sudo certbot --nginx -d historia-cau.unsam.edu.ar
-  ```
-  y descomentar el bloque HTTPS en `nginx/default.conf`.
-
----
-
-## ✅ Resultado esperado
-
-Tras seguir estos pasos:
-- La app se mostrará correctamente en el navegador.
-- Nginx servirá el build de React desde `frontend/dist`.
-- Las peticiones `/api/...` llegarán al backend Flask.
-- El nodo BFA se ejecutará localmente para registrar los hashes de las historias clínicas.
-
----
-
-🧾 **Autor:**  
-Héctor Manuel de Jesús Venero Monzón  
-Proyecto Final – Ingeniería en Telecomunicaciones – UNSAM  
-`Implementación de Blockchain para la Gestión Unificada de Historias Clínicas en Argentina`
+# 👨‍💻 Autor
+**Héctor Manuel de Jesús Venero Monzón**

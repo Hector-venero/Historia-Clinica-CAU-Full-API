@@ -1,12 +1,12 @@
 <script setup>
 import { ref, onMounted } from 'vue'
-import axios from 'axios'
+import api from "@/api/axios";
 
 const ausencias = ref([])
 
 onMounted(async () => {
   try {
-    const res = await axios.get('/api/ausencias', { withCredentials: true })
+    const res = await api.get('/ausencias', { withCredentials: true })
     ausencias.value = res.data
   } catch (err) {
     console.error('Error cargando ausencias:', err)

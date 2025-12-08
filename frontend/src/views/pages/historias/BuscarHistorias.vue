@@ -1,6 +1,6 @@
 <script setup>
 import { FilterMatchMode } from '@primevue/core/api'
-import axios from 'axios'
+import api from '@/api/axios'
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 
@@ -29,7 +29,7 @@ const buscarPacientes = async () => {
   try {
     loading.value = true
     mensaje.value = ''
-    const res = await axios.get(`/api/pacientes/buscar?q=${encodeURIComponent(query)}`, {
+    const res = await api.get(`/pacientes/buscar?q=${encodeURIComponent(query)}`, {
       withCredentials: true
     })
     pacientes.value = res.data.pacientes

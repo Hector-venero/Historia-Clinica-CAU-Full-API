@@ -121,7 +121,7 @@
 
 <script setup>
 import { ref, onMounted } from "vue";
-import axios from "axios";
+import api from "@/api/axios";
 import { useRoute, useRouter } from "vue-router";
 
 const route = useRoute();
@@ -150,15 +150,15 @@ const error = ref("");
 onMounted(async () => {
   try {
     // 1️⃣ Obtener datos del grupo
-    const resGrupo = await axios.get(`/api/grupos/${grupoId}`, { withCredentials: true });
+    const resGrupo = await api.get(`/grupos/${grupoId}`, { withCredentials: true });
     grupo.value = resGrupo.data;
 
     // 2️⃣ Obtener miembros actuales
-    const resMiembros = await axios.get(`/api/grupos/${grupoId}/miembros`, { withCredentials: true });
+    const resMiembros = await api.get(`/grupos/${grupoId}/miembros`, { withCredentials: true });
     miembros.value = resMiembros.data;
 
     // 3️⃣ Usuarios disponibles para agregar
-    const resUsuarios = await axios.get("/api/usuarios", { withCredentials: true });
+    const resUsuarios = await api.get("/usuarios", { withCredentials: true });
     usuariosDisponibles.value = resUsuarios.data.filter(u => u.rol === "profesional");
   } catch (err) {
     console.error("Error cargando grupo:", err);
@@ -176,7 +176,7 @@ async function guardarCambios() {
   error.value = "";
 
   try {
-    await axios.put(`/api/grupos/${grupoId}`, grupo.value, { withCredentials: true });
+    await api.put(`/grupos/${grupoId}`, grupo.value, { withCredentials: true });
     mensaje.value = "Cambios guardados correctamente ✔️";
   } catch (err) {
     console.error("Error guardando cambios:", err);
@@ -191,7 +191,7 @@ async function quitarMiembro(m) {
   if (!confirm(`¿Quitar a ${m.nombre} del grupo?`)) return;
 
   try {
-    await axios.delete(`/api/grupos/${grupoId}/miembros/${m.id}`, { withCredentials: true });
+    await api.delete(`/grupos/${grupoId}/miembros/${m.id}`, { withCredentials: true });
     miembros.value = miembros.value.filter(x => x.id !== m.id);
   } catch (err) {
     console.error("Error quitando miembro:", err);
@@ -212,8 +212,8 @@ async function agregarMiembro() {
   }
 
   try {
-    await axios.post(
-      `/api/grupos/${grupoId}/miembros`,
+    await api.post(
+      `/grupos/${grupoId}/miembros`,
       { usuario_id: nuevoMiembro.value },
       { withCredentials: true }
     );

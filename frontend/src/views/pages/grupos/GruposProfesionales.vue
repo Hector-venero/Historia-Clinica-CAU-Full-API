@@ -135,7 +135,7 @@
 
 <script setup>
 import { ref, onMounted } from "vue";
-import axios from "axios";
+import api from "@/api/axios";
 import { useRouter } from "vue-router";
 
 const grupos = ref([]);
@@ -158,7 +158,7 @@ const nuevoMiembro = ref("");
 // ================================
 onMounted(async () => {
   try {
-    const res = await axios.get("/api/grupos", { withCredentials: true });
+    const res = await api.get("/grupos", { withCredentials: true });
     grupos.value = res.data || [];
   } catch (err) {
     console.error("Error cargando grupos:", err);
@@ -189,7 +189,7 @@ async function eliminar(grupo) {
     return;
 
   try {
-    await axios.delete(`/api/grupos/${grupo.id}`, { withCredentials: true });
+    await api.delete(`/grupos/${grupo.id}`, { withCredentials: true });
     grupos.value = grupos.value.filter((g) => g.id !== grupo.id);
   } catch (err) {
     console.error("Error eliminando grupo:", err);
@@ -206,12 +206,12 @@ async function verMiembros(grupo) {
   cargandoMiembros.value = true;
 
   try {
-    const res = await axios.get(`/api/grupos/${grupo.id}/miembros`, {
+    const res = await api.get(`/grupos/${grupo.id}/miembros`, {
       withCredentials: true,
     });
     miembros.value = res.data || [];
 
-    const res2 = await axios.get("/api/usuarios", { withCredentials: true });
+    const res2 = await api.get("/usuarios", { withCredentials: true });
     usuarios.value = res2.data.filter((u) => u.rol === "profesional");
   } catch (err) {
     console.error("Error cargando miembros:", err);
@@ -234,8 +234,8 @@ async function agregarMiembro() {
   if (!nuevoMiembro.value) return;
 
   try {
-    await axios.post(
-      `/api/grupos/${grupoActual.value.id}/miembros`,
+    await api.post(
+      `/grupos/${grupoActual.value.id}/miembros`,
       { usuario_id: nuevoMiembro.value },
       { withCredentials: true }
     );
@@ -256,8 +256,8 @@ async function quitarMiembro(m) {
   if (!confirm(`¿Quitar a ${m.nombre} del grupo?`)) return;
 
   try {
-    await axios.delete(
-      `/api/grupos/${grupoActual.value.id}/miembros/${m.id}`,
+    await api.delete(
+      `/grupos/${grupoActual.value.id}/miembros/${m.id}`,
       { withCredentials: true }
     );
     miembros.value = miembros.value.filter((x) => x.id !== m.id);

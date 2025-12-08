@@ -1,7 +1,8 @@
 <script setup>
 import { onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import axios from 'axios'
+import api from '@/api/axios'
+
 
 const route = useRoute()
 const router = useRouter()
@@ -16,7 +17,7 @@ const error = ref(null)
 const fetchEvolucion = async () => {
   try {
     loading.value = true
-    const res = await axios.get(`/api/pacientes/${pacienteId}/evoluciones`, {
+    const res = await api.get(`/pacientes/${pacienteId}/evoluciones`, {
       withCredentials: true
     })
     const todas = res.data
@@ -36,7 +37,7 @@ const fetchEvolucion = async () => {
 
 const descargarEvolucionPDF = async () => {
   try {
-    const res = await axios.get(`/api/pacientes/${pacienteId}/evolucion/${evolucionId}/pdf`, {
+    const res = await api.get(`/pacientes/${pacienteId}/evolucion/${evolucionId}/pdf`, {
       responseType: 'blob',
       withCredentials: true
     })

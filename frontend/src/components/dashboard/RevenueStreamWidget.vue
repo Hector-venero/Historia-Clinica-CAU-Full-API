@@ -1,7 +1,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import Chart from 'primevue/chart'
-import axios from 'axios'
+import api from "@/api/axios";
 
 const chartData = ref({ labels: [], datasets: [] })
 const chartOptions = ref({
@@ -10,7 +10,7 @@ const chartOptions = ref({
 })
 
 onMounted(async () => {
-  const res = await axios.get('/api/dashboard/semanal', { withCredentials: true })
+  const res = await api.get('/dashboard/semanal', { withCredentials: true })
   const { labels, values } = res.data
 
   chartData.value = {

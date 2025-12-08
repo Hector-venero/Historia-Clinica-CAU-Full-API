@@ -9,7 +9,7 @@ services:
     container_name: historia_web
     restart: always
     ports:
-      - "5000:5000"
+      - "5000:5000"   # en producción podés comentar este puerto si no querés acceso directo
     volumes:
       - ./backend_flask/app:/app
       - ./backend_flask/app/static:/app/static
@@ -18,7 +18,6 @@ services:
         condition: service_healthy
       bfa-node:
         condition: service_started
-    # 🔹 Cargar todas las variables desde el archivo .env
     env_file:
       - .env
     environment:
@@ -26,11 +25,10 @@ services:
       - FLASK_DEBUG=${FLASK_DEBUG}
       - FLASK_APP=main.py
       - TZ=America/Argentina/Buenos_Aires
-    # 🔹 Usa script de inicio que detecta automáticamente el modo (dev/prod)
     command: bash -c "echo Starting Flask with ENV=$FLASK_ENV && /wait-for-it.sh db:3306 -- /app/start.sh"
     networks:
       - historia_net
-      
+
   # ============================
   # 🗄️ BASE DE DATOS (MySQL)
   # ============================
@@ -46,9 +44,6 @@ services:
     volumes:
       - db_data:/var/lib/mysql
       - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
-    # 🔹 Descomentá si necesitás acceso externo (ej. MySQL Workbench)
-    # ports:
-    #   - "3307:3306"
     networks:
       - historia_net
     healthcheck:
@@ -78,8 +73,6 @@ services:
     volumes:
       - ./bfa-node/nucleo:/nucleo
       - bfa_data:/nucleo/test2network/geth
-    environment:
-      - TZ=America/Argentina/Buenos_Aires
     networks:
       - historia_net
 
@@ -95,17 +88,14 @@ services:
     env_file:
       - .env
     environment:
-      #- VITE_API_URL=${API_URL}
-       - VITE_API_URL=${VITE_API_URL}
-    volumes:
-      - ./frontend:/app
+      - VITE_API_URL=${VITE_API_URL}
     depends_on:
       - web
     networks:
       - historia_net
-    #  No exponer el puerto 5173 en producción (solo se usa para desarrollo)
-    ports:
-      - "5173:5173"
+    # No exponemos 5173 (solo lo habilitás si querés usar Vite devserver)
+    # ports:
+    #   - "5173:5173"
 
   # ============================
   # 🌍 REVERSE PROXY (NGINX)
@@ -119,11 +109,11 @@ services:
       - frontend
     ports:
       - "80:80"
-      # - "443:443"  # ✅ Descomentar al habilitar HTTPS
+      # - "443:443"  # habilitá esto cuando tengas SSL
     volumes:
       - ./nginx/default.conf:/etc/nginx/conf.d/default.conf
+      # El dist de producción ya está dentro de la imagen del frontend → nginx lo verá automáticamente
       - ./frontend/dist:/usr/share/nginx/html
-      # - /etc/letsencrypt:/etc/letsencrypt  # ✅ Descomentar cuando tengas certificados SSL
     networks:
       - historia_net
 

@@ -1,6 +1,6 @@
 <script setup>
 import { ref } from 'vue'
-import axios from 'axios'
+import api from '@/api/axios'
 
 const actual = ref('')
 const nueva = ref('')
@@ -20,8 +20,8 @@ const cambiar = async () => {
 
   loading.value = true
   try {
-    const res = await axios.post(
-      '/api/usuario/cambiar-password',
+    const res = await api.post(
+      '/usuario/cambiar-password',
       {
         actual: actual.value,
         nueva: nueva.value,
