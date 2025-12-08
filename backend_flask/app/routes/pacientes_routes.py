@@ -14,6 +14,7 @@ from datetime import datetime
 from app.routes.historias_routes import actualizar_historia
 import os
 from reportlab.lib.colors import Color
+from reportlab.lib import colors
 
 # Registrar fuente compatible con UTF-8 (caracteres acentuados, español)
 pdfmetrics.registerFont(UnicodeCIDFont('HeiseiMin-W3'))
@@ -404,13 +405,21 @@ def exportar_historia_pdf(id):
         pagesize=A4,
         leftMargin=2*cm,
         rightMargin=2*cm,
-        topMargin=3*cm,
+        topMargin=2*cm,
         bottomMargin=2*cm
     )
-
     styles = getSampleStyleSheet()
-    styles.add(ParagraphStyle(name="Center", alignment=TA_CENTER))
     styles.add(ParagraphStyle(name="Right", alignment=TA_RIGHT, fontSize=9, textColor="#666666"))
+
+    style_box = TableStyle([
+        ('BOX', (0,0), (-1,-1), 0.6, colors.lightgrey),
+        ('INNERGRID', (0,0), (-1,-1), 0.3, colors.lightgrey),
+        ('BACKGROUND', (0,0), (-1,-1), colors.whitesmoke),
+        ('LEFTPADDING', (0,0), (-1,-1), 6),
+        ('RIGHTPADDING', (0,0), (-1,-1), 6),
+        ('TOPPADDING', (0,0), (-1,-1), 4),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 4),
+    ])
 
     elements = []
     # -------------------------------------------------------
@@ -436,12 +445,7 @@ def exportar_historia_pdf(id):
         ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
     ]))
     elements.append(encabezado)
-    elements.append(Spacer(1, 0.2*cm))
-
-    # Fecha alineada a la derecha
-    fecha_actual = datetime.now().strftime("%d/%m/%Y - %H:%M")
-    elements.append(Paragraph(f"<i>Fecha de generación: {fecha_actual}</i>", styles["Right"]))
-    elements.append(Spacer(1, 0.5*cm))
+    elements.append(Spacer(1, 0.1*cm))
 
     # -------------------------------------------------------
     # 🔹 TÍTULO PRINCIPAL Y DATOS DEL PACIENTE
@@ -473,19 +477,44 @@ def exportar_historia_pdf(id):
             medico = evo["medico"]
             especialidad = "Director" if evo["especialidad"] == "director" else evo["especialidad"].capitalize()
 
-            elements.append(Paragraph(f"<b>Fecha:</b> {fecha_str}",  styles["Normal"]))
-            elements.append(Paragraph(f"<b>Médico:</b> {evo['medico']} ({especialidad})", styles["Normal"]))
+            fecha_registro = evo["creado_en"].strftime("%d/%m/%Y %H:%M")
 
-            fecha_registro = evo["creado_en"].strftime("%d/%m/%Y %H:%M") 
-            elements.append(Paragraph( f"<font size='9' color='gray'>Registrado en el sistema: {fecha_registro}</font>", styles["Normal"]))
-            elements.append(Spacer(1, 0.2*cm))
+            fila_superior = Table([
+                [
+                    Paragraph(f"<b>Fecha:</b> {fecha_str}", styles["Normal"]),
+                    Paragraph(f"<font size='9' color='gray'>Registrado: {fecha_registro}</font>", styles["Right"])
+                ]
+            ], colWidths=[8*cm, 8*cm])
+
+            fila_superior.setStyle(TableStyle([
+                ('VALIGN', (0,0), (-1,-1), 'TOP'),
+            ]))
+
+            fila_medico = Paragraph(f"<b>Médico:</b> {medico} ({especialidad})", styles["Normal"])
+
+            fila_contenido = Paragraph(evo["contenido"].replace("\n", "<br/>"), styles["Normal"])
 
             if evo.get("indicaciones"):
-                elements.append(Paragraph( f"<b>Indicaciones:</b> {evo['indicaciones'].replace('\n', '<br/>')}", styles["Normal"]))
-                elements.append(Spacer(1, 0.2*cm))
+                fila_indicaciones = Paragraph(f"<b>Indicaciones:</b> {evo['indicaciones'].replace('\n','<br/>')}", styles["Normal"])
+            else:
+                fila_indicaciones = Paragraph("", styles["Normal"])
 
-            elements.append(Paragraph( evo["contenido"].replace("\n", "<br/>"),  styles["Normal"]))
-            elements.append(Spacer(1, 0.3*cm))
+            # --- ARMADO DEL BLOQUE FINAL ---
+            filas = [
+                [fila_superior],
+                [fila_medico],
+                [fila_contenido], 
+            ]
+
+            if evo.get("indicaciones"):
+                filas.append([fila_indicaciones])
+
+            bloque = Table(filas, colWidths=[16.5*cm])
+            bloque.setStyle(style_box)
+
+            elements.append(bloque)
+            elements.append(Spacer(1, 0.4*cm))
+            elements.append(Spacer(1, 0.1*cm))
 
             # 🔸 Buscar archivos adjuntos
             cursor.execute("""
@@ -538,10 +567,20 @@ def exportar_historia_pdf(id):
     def footer(canvas, doc):
         canvas.saveState()
         canvas.setFont("Helvetica", 8)
-        text = "Documento emitido por el Sistema de Historia Clínica - Centro Asistencial Universitario UNSAM"
-        fecha_texto = datetime.now().strftime("%d/%m/%Y")
-        canvas.drawString(2 * cm, 1.5 * cm, text)
-        canvas.drawRightString(19 * cm, 1.5 * cm, f"Fecha de emisión: {fecha_texto}")
+        canvas.setFillColorRGB(0.4, 0.4, 0.4)
+
+        # Texto institucional
+        texto = "Documento emitido por el Sistema de Historia Clínica – Centro Asistencial Universitario UNSAM"
+        canvas.drawString(2 * cm, 1.4 * cm, texto)
+
+        # Fecha y hora de emisión
+        fecha_hora = datetime.now().strftime("%d/%m/%Y - %H:%M")
+        canvas.drawRightString(19 * cm, 1.4 * cm, f"Emitido: {fecha_hora}")
+
+        # Número de página
+        numero_pagina = canvas.getPageNumber()
+        canvas.drawRightString(19 * cm, 1.0 * cm, f"Página {numero_pagina}")
+
         canvas.restoreState()
 
     # -------------------------------------------------------
@@ -631,10 +670,9 @@ def exportar_evolucion_pdf(paciente_id, evo_id):
         pagesize=A4,
         leftMargin=2*cm,
         rightMargin=2*cm,
-        topMargin=3*cm,
+        topMargin=2*cm,
         bottomMargin=2*cm
     )
-
     styles = getSampleStyleSheet()
     styles.add(ParagraphStyle(name="Right", alignment=TA_RIGHT, fontSize=9, textColor="#666666"))
 
@@ -686,29 +724,30 @@ def exportar_evolucion_pdf(paciente_id, evo_id):
     fecha_evo = evolucion["fecha"].strftime("%d/%m/%Y")
 
     elements.append(Paragraph(f"<b>Fecha:</b> {fecha_evo}", styles["Normal"]))
-    # Fecha de creación real en el sistema
+    elements.append(Spacer(1, 0.1*cm))
+    elements.append(Paragraph(f"<b>Médico:</b> {evolucion['medico']} ({evolucion['especialidad']})", styles["Normal"]))
+    elements.append(Spacer(1, 0.1*cm))
     fecha_creacion = evolucion["creado_en"].strftime("%d/%m/%Y %H:%M")
     elements.append(Paragraph(f"<b>Registrado en el sistema:</b> {fecha_creacion}", styles["Normal"]))
-    elements.append(Spacer(1, 0.2*cm))
+    elements.append(Spacer(1, 0.25*cm))
 
-    # Mostrar indicaciones si existen
+    # --- CONTENIDO DE LA EVOLUCIÓN ---
+    elements.append(Paragraph("<b>Evolución:</b>", styles["Normal"]))
+    elements.append(Paragraph(evolucion["contenido"].replace("\n", "<br/>"), styles["Normal"]))
+    elements.append(Spacer(1, 0.3*cm))
+
+    # --- INDICACIONES (OPCIONAL) ---
     if evolucion.get("indicaciones"):
         elements.append(Paragraph("<b>Indicaciones:</b>", styles["Normal"]))
-        elements.append(Paragraph(evolucion["indicaciones"].replace("\n", "<br/>"), styles["Normal"]))
+        elements.append(Paragraph(evolucion["indicaciones"].replace("\n","<br/>"), styles["Normal"]))
         elements.append(Spacer(1, 0.3*cm))
-
-    elements.append(Paragraph(f"<b>Médico:</b> {evolucion['medico']} ({evolucion['especialidad']})", styles["Normal"]))
-    elements.append(Spacer(1, 0.4*cm))
-
-    elements.append(Paragraph(evolucion["contenido"].replace("\n", "<br/>"), styles["Normal"]))
-    elements.append(Spacer(1, 0.6*cm))
 
     # ----------------------------------------------------------
     # ARCHIVOS ADJUNTOS (IMÁGENES + LINKS)
     # ----------------------------------------------------------
     if archivos:
         elements.append(Paragraph("<b>Archivos adjuntos:</b>", styles["Heading3"]))
-        elements.append(Spacer(1, 0.2*cm))
+        elements.append(Spacer(1, 0.1*cm))
 
         for a in archivos:
             nombre = a["filename"]
@@ -734,7 +773,7 @@ def exportar_evolucion_pdf(paciente_id, evo_id):
                 # LINK CLICKEABLE
                 url = f"{request.host_url.rstrip('/')}/api/uploads/evoluciones/{evo_id}/{nombre}"
                 elements.append(Paragraph(f"• <a href='{url}' color='blue'>{nombre}</a>", styles["Normal"]))
-                elements.append(Spacer(1, 0.2*cm))
+                elements.append(Spacer(1, 0.1*cm))
 
     else:
         elements.append(Paragraph("<i>Sin archivos adjuntos</i>", styles["Normal"]))
