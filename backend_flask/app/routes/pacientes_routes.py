@@ -262,6 +262,7 @@ def agregar_evolucion(id):
     """Agrega una nueva evolución a un paciente."""
     fecha = request.form.get('fecha')
     contenido = request.form.get('contenido')
+    indicaciones = request.form.get('indicaciones')  
     archivos = request.files.getlist('archivos')
 
     if not fecha or not contenido:
@@ -271,9 +272,9 @@ def agregar_evolucion(id):
     cursor = conn.cursor()
 
     cursor.execute("""
-        INSERT INTO evoluciones (paciente_id, fecha, contenido, usuario_id)
-        VALUES (%s, %s, %s, %s)
-    """, (id, fecha, contenido, current_user.id))
+            INSERT INTO evoluciones (paciente_id, fecha, contenido, indicaciones, usuario_id)
+            VALUES (%s, %s, %s, %s, %s)
+    """, (id, fecha, contenido, indicaciones, current_user.id))
     conn.commit()
     evolucion_id = cursor.lastrowid
 
@@ -315,6 +316,8 @@ def get_evoluciones(id):
             e.id,
             e.fecha,
             e.contenido,
+            e.indicaciones,
+            e.creado_en,
             e.usuario_id,
             u.nombre AS nombre_usuario,
             CASE 
@@ -326,6 +329,8 @@ def get_evoluciones(id):
         WHERE e.paciente_id = %s
         ORDER BY e.fecha DESC
     """, (id,))
+
+    
     evoluciones = cursor.fetchall()
 
     # Adjuntar archivos de cada evolución
@@ -374,12 +379,23 @@ def exportar_historia_pdf(id):
 
     # Evoluciones
     cursor.execute("""
-        SELECT e.id, e.fecha, e.contenido, u.nombre AS medico, u.rol AS especialidad
+        SELECT 
+            e.id,
+            e.fecha,
+            e.contenido,
+            e.indicaciones,
+            e.creado_en,
+            u.nombre AS medico,
+            CASE 
+                WHEN u.rol = 'director' THEN 'Director'
+                ELSE COALESCE(u.especialidad, 'Sin especificar')
+            END AS especialidad
         FROM evoluciones e
         JOIN usuarios u ON e.usuario_id = u.id
         WHERE e.paciente_id = %s
         ORDER BY e.fecha DESC
     """, (id,))
+
     evoluciones = cursor.fetchall()
 
     buffer = BytesIO()
@@ -457,10 +473,18 @@ def exportar_historia_pdf(id):
             medico = evo["medico"]
             especialidad = "Director" if evo["especialidad"] == "director" else evo["especialidad"].capitalize()
 
-            elements.append(Paragraph(f"<b>Fecha:</b> {fecha_str}", styles["Normal"]))
-            elements.append(Paragraph(f"<b>Médico:</b> {medico} ({especialidad})", styles["Normal"]))
+            elements.append(Paragraph(f"<b>Fecha:</b> {fecha_str}",  styles["Normal"]))
+            elements.append(Paragraph(f"<b>Médico:</b> {evo['medico']} ({especialidad})", styles["Normal"]))
+
+            fecha_registro = evo["creado_en"].strftime("%d/%m/%Y %H:%M") 
+            elements.append(Paragraph( f"<font size='9' color='gray'>Registrado en el sistema: {fecha_registro}</font>", styles["Normal"]))
             elements.append(Spacer(1, 0.2*cm))
-            elements.append(Paragraph(evo["contenido"].replace("\n", "<br/>"), styles["Normal"]))
+
+            if evo.get("indicaciones"):
+                elements.append(Paragraph( f"<b>Indicaciones:</b> {evo['indicaciones'].replace('\n', '<br/>')}", styles["Normal"]))
+                elements.append(Spacer(1, 0.2*cm))
+
+            elements.append(Paragraph( evo["contenido"].replace("\n", "<br/>"),  styles["Normal"]))
             elements.append(Spacer(1, 0.3*cm))
 
             # 🔸 Buscar archivos adjuntos
@@ -573,7 +597,7 @@ def exportar_evolucion_pdf(paciente_id, evo_id):
     #  2) DATOS DE LA EVOLUCIÓN
     # ==========================================================
     cursor.execute("""
-        SELECT e.id, e.fecha, e.contenido,
+        SELECT e.id, e.fecha, e.contenido, e.indicaciones, e.creado_en,
                u.nombre AS medico, 
                CASE WHEN u.rol = 'director' THEN 'Director'
                     ELSE COALESCE(u.especialidad, 'Sin especificar')
@@ -662,6 +686,17 @@ def exportar_evolucion_pdf(paciente_id, evo_id):
     fecha_evo = evolucion["fecha"].strftime("%d/%m/%Y")
 
     elements.append(Paragraph(f"<b>Fecha:</b> {fecha_evo}", styles["Normal"]))
+    # Fecha de creación real en el sistema
+    fecha_creacion = evolucion["creado_en"].strftime("%d/%m/%Y %H:%M")
+    elements.append(Paragraph(f"<b>Registrado en el sistema:</b> {fecha_creacion}", styles["Normal"]))
+    elements.append(Spacer(1, 0.2*cm))
+
+    # Mostrar indicaciones si existen
+    if evolucion.get("indicaciones"):
+        elements.append(Paragraph("<b>Indicaciones:</b>", styles["Normal"]))
+        elements.append(Paragraph(evolucion["indicaciones"].replace("\n", "<br/>"), styles["Normal"]))
+        elements.append(Spacer(1, 0.3*cm))
+
     elements.append(Paragraph(f"<b>Médico:</b> {evolucion['medico']} ({evolucion['especialidad']})", styles["Normal"]))
     elements.append(Spacer(1, 0.4*cm))
 

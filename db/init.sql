@@ -111,6 +111,7 @@ CREATE TABLE evoluciones (
     paciente_id INT NOT NULL,
     fecha DATE NOT NULL,
     contenido TEXT NOT NULL,
+    indicaciones TEXT,
     usuario_id INT NOT NULL,
     creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (paciente_id) REFERENCES pacientes(id),

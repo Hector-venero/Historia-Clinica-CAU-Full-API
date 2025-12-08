@@ -8,7 +8,7 @@ import historiaService from '@/service/historiaService'
 import axios from 'axios'
 import { useRouter } from 'vue-router'
 import DatePicker from 'primevue/datepicker'
-import { fechaBonitaClinica } from '@/utils/formatDate.js'
+import { fechaBonitaClinica, fechaBonitaCompleta } from '@/utils/formatDate.js'
 import { nextTick } from "vue"
 import { computed } from "vue"
 
@@ -27,6 +27,7 @@ const error = ref(null)
 const showForm = ref(false)
 const fecha = ref(new Date().toISOString().split('T')[0])
 const contenido = ref('')
+const indicaciones = ref('')
 const archivos = ref([])
 const fileUploader = ref(null)
 
@@ -107,6 +108,7 @@ const guardarEvolucion = async () => {
     const formData = new FormData()
     formData.append("fecha", fechaNormalizada)
     formData.append("contenido", contenido.value)
+    formData.append("indicaciones", indicaciones.value)
 
     archivos.value.forEach(a => {
       formData.append("archivos", a.file)
@@ -127,6 +129,7 @@ const guardarEvolucion = async () => {
 
     showForm.value = false
     contenido.value = ""
+    indicaciones.value = ""
     archivos.value = []
     fileUploader.value?.clear()
 
@@ -368,10 +371,20 @@ onMounted(fetchHistoria)
           >
             <div class="flex justify-between text-sm text-gray-600 mb-2">
               <span class="font-medium">{{ fechaBonitaClinica(evo.fecha) }}</span>
-              <span>{{ evo.nombre_usuario }} — {{ evo.especialidad_usuario || 'Director' }}</span>
+
+              <div class="flex flex-col items-end text-right">
+                <span>{{ evo.nombre_usuario }} — {{ evo.especialidad_usuario || 'Director' }}</span>
+                <span class="text-xs text-gray-400">
+                  Registrado: {{ fechaBonitaCompleta(evo.creado_en) }}
+                </span>
+              </div>
             </div>
 
             <p class="text-gray-800 text-sm mb-4 line-clamp-3">{{ evo.contenido }}</p>
+
+            <p v-if="evo.indicaciones" class="text-gray-700 text-sm mb-2">
+              <strong>Indicaciones:</strong> {{ evo.indicaciones }}
+            </p>
 
             <div class="flex justify-end gap-3">
               <button
@@ -426,6 +439,14 @@ onMounted(fetchHistoria)
         rows="5"
         class="p-2 border rounded w-full mb-4"
         placeholder="Escribí la evolución clínica..."
+      ></textarea>
+
+      <label for="indicaciones" class="block font-medium mb-2 text-gray-700">Indicaciones</label>
+      <textarea
+        v-model="indicaciones"
+        rows="3"
+        class="p-2 border rounded w-full mb-4"
+        placeholder="Escribí las indicaciones médicas (opcional)..."
       ></textarea>
 
       <label class="block font-medium mb-2 text-gray-700">Archivos adjuntos</label>

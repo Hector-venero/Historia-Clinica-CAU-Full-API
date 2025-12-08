@@ -367,7 +367,7 @@ def actualizar_perfil():
             nueva_foto = filename
             path_nuevo = os.path.join(carpeta_fotos, filename)
 
-            print("📁 La nueva foto se guardará como:", filename)
+            print(" La nueva foto se guardará como:", filename)
 
             # --------------------------
             # 3) OPTIMIZAR / COMPRIMIR IMAGEN
@@ -381,7 +381,7 @@ def actualizar_perfil():
 
                 # Guardar optimizada
                 image.save(path_nuevo, optimize=True, quality=85)
-                print("✨ Imagen comprimida y guardada correctamente")
+                print(" Imagen comprimida y guardada correctamente")
 
             except Exception as e:
                 print("⚠ Error al procesar imagen, guardando sin optimizar:", e)
@@ -390,7 +390,7 @@ def actualizar_perfil():
     else:
         print("⚠ No llegó campo foto")
 
-    print("➡️ Foto final:", nueva_foto)
+    print(" Foto final:", nueva_foto)
 
     # GUARDAR EN BASE DE DATOS
     cursor.execute("""

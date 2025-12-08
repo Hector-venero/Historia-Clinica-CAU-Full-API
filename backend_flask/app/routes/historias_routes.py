@@ -12,7 +12,7 @@ import hashlib, json
 bp_historias = Blueprint("historias", __name__)
 
 # =========================================================
-# 🧩 Función auxiliar: Actualizar historia consolidada
+#  Función auxiliar: Actualizar historia consolidada
 # =========================================================
 def actualizar_historia(paciente_id, usuario_id):
     """
@@ -63,7 +63,7 @@ def actualizar_historia(paciente_id, usuario_id):
 
 
 # =========================================================
-# 🩺 Crear nueva historia (manual o puntual)
+#  Crear nueva historia (manual o puntual)
 # =========================================================
 @bp_historias.route('/api/pacientes/<int:paciente_id>/historias', methods=['POST'])
 @login_required
@@ -84,7 +84,7 @@ def api_agregar_historia(paciente_id):
 
 
 # =========================================================
-# 📄 Listar historias del paciente
+#  Listar historias del paciente
 # =========================================================
 @bp_historias.route('/api/pacientes/<int:paciente_id>/historias', methods=['GET'])
 @login_required
