@@ -76,26 +76,24 @@ services:
     networks:
       - historia_net
 
-  # ============================
+# ============================
   # 💻 FRONTEND (React / Vite)
   # ============================
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        VITE_API_URL: /api
     container_name: historia_frontend
     restart: always
     env_file:
       - .env
-    environment:
-      - VITE_API_URL=${VITE_API_URL}
-    depends_on:
-      - web
+    # Quitamos el environment VITE_API_URL aquí, porque Vite lo necesita
+    # AL MOMENTO DEL BUILD (npm run build), no al momento de correr el contenedor.
+    # Ver nota abajo sobre ARG.
     networks:
       - historia_net
-    # No exponemos 5173 (solo lo habilitás si querés usar Vite devserver)
-    # ports:
-    #   - "5173:5173"
 
   # ============================
   # 🌍 REVERSE PROXY (NGINX)
@@ -109,11 +107,10 @@ services:
       - frontend
     ports:
       - "80:80"
-      # - "443:443"  # habilitá esto cuando tengas SSL
     volumes:
       - ./nginx/default.conf:/etc/nginx/conf.d/default.conf
-      # El dist de producción ya está dentro de la imagen del frontend → nginx lo verá automáticamente
-      - ./frontend/dist:/usr/share/nginx/html
+      # BORRA LA LÍNEA DE ABAJO:
+      # - ./frontend/dist:/usr/share/nginx/html  <-- ESTO CAUSABA EL ERROR DE REDIRECCION
     networks:
       - historia_net
 

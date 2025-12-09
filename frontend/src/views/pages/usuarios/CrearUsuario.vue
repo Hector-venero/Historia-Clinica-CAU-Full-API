@@ -121,6 +121,7 @@
 <script setup>
 import { reactive, ref } from 'vue'
 import usuarioService from '@/service/usuarioService'
+import { validarPasswordFuerte, validarEmail } from '@/utils/validators'
 
 const form = reactive({
   nombre: '',
@@ -143,12 +144,13 @@ function validate() {
     return 'Todos los campos son obligatorios'
   }
   const emailRx = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-  if (!emailRx.test(form.email)) {
-    return 'Email inválido'
+  if (!validarEmail(form.email)) {
+    return 'Email inválido';
   }
-  if (form.password.length < 4) {
-    return 'La contraseña debe tener al menos 4 caracteres'
-  }
+
+  const errPw = validarPasswordFuerte(form.password);
+  if (errPw) return errPw;
+
   if (!ROLES.includes(form.rol)) {
     return 'Rol inválido'
   }

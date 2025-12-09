@@ -152,7 +152,7 @@ const guardarEvolucion = async () => {
  */
 const descargarHistoriaPDF = () => {
   const base = import.meta.env.VITE_API_URL || "http://localhost:5000"
-  window.open(`${base}/api/pacientes/${pacienteId}/historia/pdf`, "_blank")
+  window.open(`${base}/pacientes/${pacienteId}/historia/pdf`, "_blank")
 }
 
 
@@ -161,7 +161,7 @@ const descargarHistoriaPDF = () => {
  */
 const descargarEvolucionPDF = (evoId) => {
   const base = import.meta.env.VITE_API_URL || "http://localhost:5000"
-  window.open(`${base}/api/pacientes/${pacienteId}/evolucion/${evoId}/pdf`, "_blank")
+  window.open(`${base}/pacientes/${pacienteId}/evolucion/${evoId}/pdf`, "_blank")
 }
 
 const normalizar = (nombre) =>

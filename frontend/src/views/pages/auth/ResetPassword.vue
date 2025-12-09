@@ -94,6 +94,7 @@
 import logoUnsam from '@/assets/logo_unsam_sin_letras.png'
 import { ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { validarPasswordFuerte } from '@/utils/validators'
 
 const route = useRoute()
 const router = useRouter()
@@ -107,6 +108,12 @@ const loading = ref(false)
 async function resetear() {
   mensaje.value = ''
   error.value = ''
+
+  const errPw = validarPasswordFuerte(password.value)
+  if (errPw) {
+    error.value = errPw;
+    return;
+  }
 
   if (password.value !== confirmPassword.value) {
     error.value = 'Las contraseñas no coinciden'

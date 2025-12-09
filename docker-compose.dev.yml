@@ -1,0 +1,51 @@
+version: "3.9"
+
+services:
+  web:
+    build: ./backend_flask/app
+    container_name: historia_web
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./backend_flask/app:/app
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - historia_net
+
+  db:
+    image: mysql:8.0
+    container_name: historia_db
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: hc_bfa
+    volumes:
+      - db_data:/var/lib/mysql
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -proot || exit 1"]
+      interval: 10s
+      retries: 10
+    networks:
+      - historia_net
+
+  bfa-node:
+    image: ethereum/client-go:stable
+    container_name: bfa-node
+    command: >
+      --dev --http --http.addr 0.0.0.0 --http.corsdomain="*"
+      --http.api admin,eth,net,web3,miner,personal,txpool
+    ports:
+      - "8545:8545"
+    networks:
+      - historia_net
+
+networks:
+  historia_net:
+
+volumes:
+  db_data:

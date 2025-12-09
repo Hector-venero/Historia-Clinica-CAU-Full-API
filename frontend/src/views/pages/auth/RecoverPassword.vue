@@ -3,6 +3,7 @@ import logoUnsam from '@/assets/logo_unsam_sin_letras.png'
 import FloatingConfigurator from '@/components/FloatingConfigurator.vue'
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { validarEmail } from '@/utils/validators'
 
 const email = ref('')
 const mensaje = ref('')
@@ -17,6 +18,11 @@ const recuperar = async () => {
   loading.value = true
 
   try {
+    if (!validarEmail(email.value)) {
+      error.value = "Ingresá un correo válido";
+      loading.value = false;
+      return;
+    }
     const res = await fetch('/api/recover', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

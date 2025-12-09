@@ -7,6 +7,8 @@ from app.utils.permisos import requiere_rol
 import os
 from PIL import Image
 import io
+from app.utils.validacion import password_valida, validar_email
+
 
 bp_usuarios = Blueprint("usuarios", __name__)
 
@@ -31,8 +33,13 @@ def api_crear_usuario():
     if not nombre or not username or not email or not password or not rol:
         return jsonify({'error': 'Todos los campos son obligatorios'}), 400
 
-    if len(password) < 4:
-        return jsonify({'error': 'La contraseña debe tener al menos 4 caracteres'}), 400
+    if not validar_email(email):
+        return jsonify({'error': 'Email inválido'}), 400
+
+    if not password_valida(password):
+        return jsonify({
+            'error': 'La contraseña debe tener mínimo 8 caracteres, incluir mayúscula, minúscula y número.'
+        }), 400
 
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
@@ -44,7 +51,7 @@ def api_crear_usuario():
     if existente:
         return jsonify({'error': 'Ya existe un usuario con ese nombre de usuario o email'}), 400
 
-    password_hash = generate_password_hash(password)
+    password_hash = generate_password_hash(password, method="scrypt")
 
     # Normalizar especialidad solo si es profesional
     if rol.lower() == 'profesional' and especialidad:
@@ -64,7 +71,7 @@ def api_crear_usuario():
     return jsonify({'message': f"Usuario '{username}' creado con éxito ✅"})
 
 
-@bp_usuarios.route('/api/usuarios', methods=['GET'])
+@bp_usuarios.route('/api/usuarios/me', methods=['GET'])
 @login_required
 @requiere_rol('director')
 def api_usuarios_listado():
@@ -176,7 +183,14 @@ def api_usuarios_editar(usuario_id):
             sets.append("especialidad=%s"); params.append(None)
 
     if password:
-        sets.append("password_hash=%s"); params.append(generate_password_hash(password))
+        if not password_valida(password):
+            cur.close(); conn.close()
+            return jsonify({
+                "error": "La contraseña debe tener mínimo 8 caracteres e incluir mayúscula, minúscula, número y símbolo."
+            }), 400
+
+        sets.append("password_hash=%s")
+        params.append(generate_password_hash(password, method="scrypt"))
 
     if not sets:
         cur.close(); conn.close()
@@ -413,28 +427,49 @@ def actualizar_perfil():
 @login_required
 def cambiar_password():
     data = request.json
+
     actual = data.get("actual")
     nueva = data.get("nueva")
+    confirmar = data.get("confirmar")
 
+    # Validación 1: campos completos
+    if not actual or not nueva or not confirmar:
+        return jsonify({"error": "Todos los campos son obligatorios"}), 400
+
+    # Validación 2: actual correcta
     if not check_password_hash(current_user.password_hash, actual):
         return jsonify({"error": "La contraseña actual es incorrecta"}), 400
 
-    nuevo_hash = generate_password_hash(nueva)
+    # Validación 3: fuerza de la nueva contraseña
+    if not password_valida(nueva):
+        return jsonify({
+            "error": "La contraseña debe tener mínimo 8 caracteres, incluir mayúscula, minúscula y número."
+        }), 400
+
+    # Validación 4: no permitir repetir contraseña
+    if actual == nueva:
+        return jsonify({"error": "La nueva contraseña no puede ser igual a la actual"}), 400
+
+    # Validación 5: confirmación
+    if nueva != confirmar:
+        return jsonify({"error": "Las contraseñas no coinciden"}), 400
+
+    # Guardar nueva contraseña usando método scrypt
+    nuevo_hash = generate_password_hash(nueva, method="scrypt")
 
     conn = get_connection()
     cursor = conn.cursor()
-
     cursor.execute("""
         UPDATE usuarios
         SET password_hash=%s
         WHERE id=%s
     """, (nuevo_hash, current_user.id))
-
     conn.commit()
     cursor.close()
     conn.close()
 
     return jsonify({"message": "Contraseña actualizada correctamente"})
+
 
 @bp_usuarios.route('/api/usuario/foto', methods=['DELETE'])
 @login_required

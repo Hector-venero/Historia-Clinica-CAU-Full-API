@@ -7,21 +7,26 @@ from app import mail
 from flask_mail import Message
 from app.database import get_connection
 from itsdangerous import URLSafeTimedSerializer, SignatureExpired, BadSignature
+from app.utils.validacion import password_valida, validar_email
 
 bp_auth = Blueprint("auth", __name__)
 
-# 🔹 Función auxiliar para crear el serializador cuando Flask ya está listo
 def get_serializer():
     return URLSafeTimedSerializer(current_app.secret_key)
 
 # =====================================================
-# 1️⃣ Login
+# 1️⃣ LOGIN
 # =====================================================
 @bp_auth.route('/api/login', methods=['POST'])
 def api_login():
-    data = request.json
-    username = data.get('username')
-    password = data.get('password')
+    data = request.json or {}
+    username = data.get('username', '').strip()
+    password = data.get('password', '').strip()
+
+    # validación mínima
+    if not username or not password:
+        return jsonify({'error': 'Usuario y contraseña son obligatorios'}), 400
+
     user = Usuario.obtener_por_username(username)
 
     if user and user.verificar_password(password):
@@ -41,7 +46,7 @@ def api_login():
 
 
 # =====================================================
-# 2️⃣ Logout
+# 2️⃣ LOGOUT
 # =====================================================
 @bp_auth.route('/api/logout', methods=['POST'])
 @login_required
@@ -51,7 +56,7 @@ def api_logout():
 
 
 # =====================================================
-# 3️⃣ Usuario logueado
+# 3️⃣ USUARIO LOGUEADO
 # =====================================================
 @bp_auth.route('/api/user', methods=['GET'])
 @login_required
@@ -68,13 +73,16 @@ def api_user():
 
 
 # =====================================================
-# 4️⃣ Enviar enlace de recuperación
+# 4️⃣ ENVIAR ENLACE DE RECUPERACIÓN
 # =====================================================
 @bp_auth.route('/api/recover', methods=['POST'])
 def api_recover():
-    s = get_serializer()  # ✅ se genera dentro del contexto
+    s = get_serializer()
     data = request.json
     email = data.get('email', '').strip().lower()
+
+    if not validar_email(email):
+        return jsonify({'error': 'Email inválido'}), 400
 
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
@@ -85,50 +93,51 @@ def api_recover():
     if not usuario:
         return jsonify({'error': 'No se encontró un usuario con ese email'}), 404
 
-    # Generar token válido por 1 hora
     token = s.dumps(email, salt='reset-password')
 
-    #reset_url = f"http://localhost:5173/reset/{token}"
     reset_url = f"{current_app.config['FRONTEND_URL']}/reset/{token}"
     msg = Message("Recuperación de contraseña - Historia Clínica CAU", recipients=[email])
     msg.body = (
         f"Hola {usuario['nombre']},\n\n"
-        f"Recibimos una solicitud para restablecer tu contraseña.\n"
-        f"Para continuar, hacé clic en el siguiente enlace:\n\n"
+        f"Para restablecer tu contraseña ingresá al siguiente enlace:\n\n"
         f"{reset_url}\n\n"
-        f"Este enlace expirará en 1 hora.\n\n"
-        f"Si no realizaste esta solicitud, podés ignorar este mensaje.\n\n"
-        f"Gracias,\nSistema de Historias Clínicas del CAU"
+        f"Este enlace expira en 1 hora."
     )
     mail.send(msg)
 
-    return jsonify({'message': 'Se envió un correo con el enlace para restablecer tu contraseña ✅'}), 200
+    return jsonify({'message': 'Correo enviado para restablecer contraseña ✅'}), 200
 
 
 # =====================================================
-# 5️⃣ Restablecer contraseña
+# 5️⃣ RESTABLECER CONTRASEÑA
 # =====================================================
 @bp_auth.route('/api/reset/<token>', methods=['POST'])
 def api_reset_password(token):
-    s = get_serializer()  # ✅ también aquí dentro
+    s = get_serializer()
+
     try:
-        # Verificar token (expira a la hora)
         email = s.loads(token, salt='reset-password', max_age=3600)
     except SignatureExpired:
-        return jsonify({'error': 'El enlace expiró. Solicitá uno nuevo.'}), 400
+        return jsonify({'error': 'El enlace expiró'}), 400
     except BadSignature:
-        return jsonify({'error': 'Token inválido.'}), 400
+        return jsonify({'error': 'Token inválido'}), 400
 
-    data = request.json
+    data = request.json or {}
     new_password = data.get('new_password')
     confirm_password = data.get('confirm_password')
 
     if not new_password or not confirm_password:
-        return jsonify({'error': 'Debes ingresar y confirmar la contraseña'}), 400
+        return jsonify({'error': 'Debes completar ambos campos'}), 400
+
     if new_password != confirm_password:
         return jsonify({'error': 'Las contraseñas no coinciden'}), 400
 
-    password_hash = generate_password_hash(new_password)
+    #  Validar contraseña fuerte
+    if not password_valida(new_password):
+        return jsonify({'error': 'La contraseña debe tener al menos 8 caracteres y contener mayúscula, minúscula, número y símbolo.'}), 400
+
+    #  Hash seguro
+    password_hash = generate_password_hash(new_password, method="scrypt")
 
     conn = get_connection()
     cursor = conn.cursor()
