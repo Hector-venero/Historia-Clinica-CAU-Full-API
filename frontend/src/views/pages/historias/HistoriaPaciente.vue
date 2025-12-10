@@ -355,7 +355,11 @@ onMounted(fetchHistoria)
         <!-- CABECERA DEL AÑO -->
         <button
           @click="accordionAbierto[año] = !accordionAbierto[año]"
-          class="w-full flex justify-between items-center px-4 py-3 bg-gray-200 hover:bg-gray-300 rounded-lg transition font-semibold text-gray-800"
+          class="w-full flex justify-between items-center px-4 py-3 
+                bg-gray-200 dark:bg-gray-800 
+                hover:bg-gray-300 dark:hover:bg-gray-700 
+                text-gray-800 dark:text-white 
+                rounded-lg transition font-semibold"
         >
           <span> {{ año }}</span>
           <i :class="accordionAbierto[año] ? 'pi pi-chevron-up' : 'pi pi-chevron-down'"></i>
@@ -502,13 +506,13 @@ onMounted(fetchHistoria)
           <span class="ml-auto text-green-600 font-medium">Listo</span>
         </li>
       </ul>
-
-      <button
-        @click="guardarEvolucion"
-        class="bg-blue-600 text-white px-5 py-2 rounded-lg shadow-sm hover:bg-blue-700 transition flex items-center"
-      >
-        <i class="pi pi-save mr-2"></i> Guardar Evolución
-      </button>
+      <div class="mt-4">
+          <Button 
+              label="Guardar Evolución" 
+              icon="pi pi-save" 
+              @click="guardarEvolucion" 
+          />
+      </div>
     </div>
   </div>
 </template>

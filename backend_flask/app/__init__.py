@@ -113,7 +113,20 @@ app.register_blueprint(bp_health)
 # -------------------------
 # Servir fotos de usuario
 # -------------------------
+# Agregamos ambas rutas por seguridad (con y sin /api) para que funcione
+# tanto si vas directo al backend como si pasas por el proxy.
+
+# backend_flask/app/__init__.py
+
 @app.route('/static/fotos_usuarios/<path:filename>')
+@app.route('/api/static/fotos_usuarios/<path:filename>') 
 def fotos_usuarios(filename):
-    carpeta = os.path.join(app.root_path, 'static', 'fotos_usuarios')
+    # Usamos la ruta absoluta segura basada en donde está este archivo
+    basedir = os.path.abspath(os.path.dirname(__file__))
+    carpeta = os.path.join(basedir, 'static', 'fotos_usuarios')
+    
+    # Debug para estar seguros
+    print(f"🔍 Buscando: {filename}")
+    print(f"📂 En carpeta: {carpeta}")
+    
     return send_from_directory(carpeta, filename)

@@ -1,68 +1,141 @@
 <template>
-  <div class="p-4">
-    <h1 class="text-2xl font-bold mb-4">Listado de Pacientes</h1>
+  <div class="p-6 md:p-8 w-full h-full">
+    
+    <div class="bg-white dark:bg-[#1e1e1e] shadow-xl rounded-2xl p-6 transition-colors">
+      
+      <div class="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
+        
+        <h1 class="text-3xl font-bold text-gray-800 dark:text-white">
+          Listado de Pacientes
+        </h1>
 
-    <input
-      v-model="busqueda"
-      type="text"
-      placeholder="Buscar por nombre o DNI"
-      class="p-inputtext p-component w-full mb-4 border rounded px-3 py-2"
-    />
+        <div class="flex gap-2 w-full md:w-auto">
+          <IconField iconPosition="left" class="w-full md:w-64">
+            <InputIcon class="pi pi-search" />
+            <InputText 
+              v-model="busqueda" 
+              placeholder="Buscar paciente..." 
+              class="w-full" 
+            />
+          </IconField>
+          
+          <Button 
+            icon="pi pi-user-plus" 
+            label="Nuevo" 
+            @click="router.push('/pacientes/registrar')" 
+          />
+        </div>
+      </div>
 
-    <div v-if="filtrados.length > 0" class="overflow-x-auto">
-      <table class="min-w-full bg-white rounded shadow">
-        <thead>
-          <tr>
-            <th class="py-2 px-4 border-b">DNI</th>
-            <th class="py-2 px-4 border-b">Apellido</th>
-            <th class="py-2 px-4 border-b">Nombre</th>
-            <th class="py-2 px-4 border-b">Nacimiento</th>
-            <th class="py-2 px-4 border-b">Sexo</th>
-            <th class="py-2 px-4 border-b">Teléfono</th>
-            <th class="py-2 px-4 border-b">Email</th>
-            <th class="py-2 px-4 border-b">Acciones</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="paciente in filtrados" :key="paciente.id">
-            <td class="py-2 px-4 border-b">{{ paciente.dni }}</td>
-            <td class="py-2 px-4 border-b">{{ paciente.apellido }}</td>
-            <td class="py-2 px-4 border-b">{{ paciente.nombre }}</td>
-            <td class="py-2 px-4 border-b">{{ formatFecha(paciente.fecha_nacimiento) }}</td>
-            <td class="py-2 px-4 border-b">{{ paciente.sexo }}</td>
-            <td class="py-2 px-4 border-b">{{ paciente.telefono }}</td>
-            <td class="py-2 px-4 border-b">{{ paciente.email }}</td>
-            <td class="py-2 px-4 border-b flex gap-2">
-              <button class="bg-green-500 text-white px-2 py-1 rounded" @click="editarPaciente(paciente.id)">
-                Editar
-              </button>
-              <button class="bg-red-500 text-white px-2 py-1 rounded" @click="confirmarEliminar(paciente)">
-                Eliminar
-              </button>
-            </td>
-          </tr>
-        </tbody>
-      </table>
+      <div class="overflow-x-auto">
+        <DataTable 
+          :value="filtrados" 
+          paginator 
+          :rows="10" 
+          :rowsPerPageOptions="[5, 10, 20]"
+          tableStyle="min-width: 60rem"
+          stripedRows
+          class="p-datatable-sm"
+        >
+          <template #empty>
+            <div class="text-center p-8 text-gray-500">
+              <i class="pi pi-users text-4xl mb-3 block"></i>
+              No se encontraron pacientes.
+            </div>
+          </template>
+
+          <Column field="dni" header="DNI" sortable class="font-bold"></Column>
+          <Column field="apellido" header="Apellido" sortable></Column>
+          <Column field="nombre" header="Nombre" sortable></Column>
+          
+          <Column field="fecha_nacimiento" header="Nacimiento" sortable>
+            <template #body="slotProps">
+              {{ formatFecha(slotProps.data.fecha_nacimiento) }}
+            </template>
+          </Column>
+
+          <Column field="sexo" header="Sexo" sortable></Column>
+          
+          <Column field="telefono" header="Teléfono">
+            <template #body="slotProps">
+              <span v-if="slotProps.data.telefono || slotProps.data.celular" class="text-sm flex items-center gap-1">
+                <i class="pi pi-phone text-gray-400"></i>
+                {{ slotProps.data.celular || slotProps.data.telefono }}
+              </span>
+              <span v-else class="text-gray-400 text-sm">-</span>
+            </template>
+          </Column>
+
+          <Column 
+            header="Acciones"
+            :exportable="false"
+            headerClass="text-right"
+            bodyClass="text-right"
+            style="width: 120px; text-align: right;"
+            headerStyle="width: 120px; text-align: right;"
+          >
+            <template #body="slotProps">
+              <div class="flex justify-end gap-2 pr-1">
+                <Button 
+                  icon="pi pi-pencil" 
+                  text rounded severity="info"
+                  @click="editarPaciente(slotProps.data.id)"
+                />
+                <Button 
+                  icon="pi pi-trash" 
+                  text rounded severity="danger"
+                  @click="confirmarEliminar(slotProps.data)"
+                />
+              </div>
+            </template>
+          </Column>
+
+
+        </DataTable>
+      </div> 
+
     </div>
-    <p v-else>No se encontraron pacientes.</p>
 
-    <!-- Modal de confirmación -->
-    <Dialog v-model:visible="mostrarDialog" modal header="Confirmar Eliminación" :style="{ width: '350px' }">
-      <p>⚠️ Esta acción eliminará permanentemente el paciente y sus datos.<br>¿Estás seguro que querés continuar?</p>
+    <Dialog 
+      v-model:visible="mostrarDialog" 
+      modal 
+      header="Confirmar Eliminación" 
+      :style="{ width: '400px' }"
+      :draggable="false"
+    >
+      <div class="flex items-center gap-3 mb-4">
+        <i class="pi pi-exclamation-triangle text-red-500 text-4xl"></i>
+        <div class="text-gray-700 dark:text-gray-300">
+          <p class="font-bold text-lg mb-1">¿Estás seguro?</p>
+          <p class="text-sm">
+            Vas a eliminar al paciente <strong>{{ pacienteAEliminar?.apellido }} {{ pacienteAEliminar?.nombre }}</strong>.
+            <br>Esta acción eliminará sus datos permanentemente.
+          </p>
+        </div>
+      </div>
+      
       <template #footer>
-        <Button label="Cancelar" icon="pi pi-times" class="p-button-text" @click="cancelarEliminar" />
-        <Button label="Eliminar" icon="pi pi-check" class="p-button-danger" @click="eliminarPacienteConfirmado" />
+        <Button label="Cancelar" text severity="secondary" @click="cancelarEliminar" />
+        <Button label="Sí, Eliminar" severity="danger" icon="pi pi-trash" @click="eliminarPacienteConfirmado" />
       </template>
     </Dialog>
+
   </div>
 </template>
 
 <script setup>
 import pacienteService from '@/service/pacienteService'
-import Button from 'primevue/button'
-import Dialog from 'primevue/dialog'
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
+
+// Imports PrimeVue
+import DataTable from 'primevue/datatable'
+import Column from 'primevue/column'
+import Button from 'primevue/button'
+import Dialog from 'primevue/dialog'
+import InputText from 'primevue/inputtext'
+import IconField from 'primevue/iconfield'
+import InputIcon from 'primevue/inputicon'
 
 const pacientes = ref([])
 const busqueda = ref('')
@@ -86,10 +159,11 @@ onMounted(() => {
 
 const filtrados = computed(() => {
   if (!busqueda.value) return pacientes.value
+  const q = busqueda.value.toLowerCase()
   return pacientes.value.filter(p =>
-    p.nombre.toLowerCase().includes(busqueda.value.toLowerCase()) ||
-    p.apellido.toLowerCase().includes(busqueda.value.toLowerCase()) ||
-    p.dni.includes(busqueda.value)
+    p.nombre.toLowerCase().includes(q) ||
+    p.apellido.toLowerCase().includes(q) ||
+    p.dni.includes(q)
   )
 })
 
@@ -116,14 +190,17 @@ const eliminarPacienteConfirmado = async () => {
     pacienteAEliminar.value = null
   } catch (error) {
     console.error(error)
-    alert('❌ Error al eliminar paciente.')
+    alert('❌ Error al eliminar paciente. Puede tener historias clínicas asociadas.')
   }
 }
 
 const formatFecha = (fecha) => {
-  if (!fecha) return ''
-  return new Intl.DateTimeFormat('es-AR').format(new Date(fecha))
+  if (!fecha) return '-'
+  const d = new Date(fecha)
+  return new Intl.DateTimeFormat('es-AR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric'
+  }).format(d)
 }
 </script>
-
-<style scoped></style>

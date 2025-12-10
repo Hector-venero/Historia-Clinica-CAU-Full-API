@@ -70,8 +70,12 @@ const verHistoria = (id) => {
       <input v-model="nroHc" placeholder="Nro Historia Clínica" class="p-2 border rounded" />
     </div>
 
-    <button @click="buscarPacientes" class="bg-blue-600 text-white px-4 py-2 rounded mb-4">Buscar</button>
-
+    <Button 
+        label="Buscar" 
+        @click="buscarPacientes" 
+        class="mb-4" 
+        :loading="loading"
+    />
     <DataTable
       :value="pacientes"
       :paginator="true"

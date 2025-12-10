@@ -18,13 +18,9 @@
             </span>
           </div>
 
-          <!-- Formulario -->
           <form @submit.prevent="resetear" class="space-y-6 w-full md:w-[28rem]">
             <div>
-              <label
-                for="password"
-                class="block text-surface-900 dark:text-surface-0 text-xl font-medium mb-2"
-              >
+              <label for="password" class="block text-surface-900 dark:text-surface-0 text-xl font-medium mb-2">
                 Nueva contraseña
               </label>
               <input
@@ -33,14 +29,19 @@
                 type="password"
                 placeholder="********"
                 class="w-full border border-gray-300 rounded-lg p-3 text-base focus:outline-none focus:ring-2 focus:ring-primary transition"
+                :class="{'border-red-500': passwordError}"
+                @input="validarEnVivo"
               />
+              <p v-if="passwordError" class="text-red-500 text-xs mt-1">
+                {{ passwordError }}
+              </p>
+              <p v-else class="text-gray-400 text-xs mt-1">
+                Mínimo 8 caracteres, una mayúscula, una minúscula, un número y un símbolo.
+              </p>
             </div>
 
             <div>
-              <label
-                for="confirmPassword"
-                class="block text-surface-900 dark:text-surface-0 text-xl font-medium mb-2"
-              >
+              <label for="confirmPassword" class="block text-surface-900 dark:text-surface-0 text-xl font-medium mb-2">
                 Confirmar contraseña
               </label>
               <input
@@ -49,37 +50,31 @@
                 type="password"
                 placeholder="********"
                 class="w-full border border-gray-300 rounded-lg p-3 text-base focus:outline-none focus:ring-2 focus:ring-primary transition"
+                :class="{'border-red-500': confirmError}"
               />
+              <p v-if="confirmError" class="text-red-500 text-xs mt-1">
+                Las contraseñas no coinciden.
+              </p>
             </div>
 
             <button
               type="submit"
               class="w-full bg-primary text-white py-3 rounded-lg text-lg font-medium hover:opacity-90 transition"
-              :disabled="loading"
+              :disabled="loading || !!passwordError || !!confirmError || !password"
             >
               <span v-if="!loading">Guardar nueva contraseña</span>
               <span v-else>Cargando...</span>
             </button>
 
-            <!-- Mensajes -->
-            <p
-              v-if="mensaje"
-              class="text-green-600 text-center mt-4 text-sm font-medium"
-            >
+            <p v-if="mensaje" class="text-green-600 text-center mt-4 text-sm font-medium bg-green-50 p-2 rounded border border-green-200">
               {{ mensaje }}
             </p>
-            <p
-              v-if="error"
-              class="text-red-600 text-center mt-4 text-sm font-medium"
-            >
+            <p v-if="error" class="text-red-600 text-center mt-4 text-sm font-medium bg-red-50 p-2 rounded border border-red-200">
               {{ error }}
             </p>
 
             <div class="text-center mt-6">
-              <router-link
-                to="/auth/login"
-                class="text-sm text-primary hover:underline"
-              >
+              <router-link to="/auth/login" class="text-sm text-primary hover:underline">
                 ← Volver al inicio de sesión
               </router-link>
             </div>
@@ -92,7 +87,7 @@
 
 <script setup>
 import logoUnsam from '@/assets/logo_unsam_sin_letras.png'
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { validarPasswordFuerte } from '@/utils/validators'
 
@@ -105,20 +100,33 @@ const mensaje = ref('')
 const error = ref('')
 const loading = ref(false)
 
+// Errores locales para feedback visual
+const passwordError = ref('')
+const confirmError = ref('')
+
+// Validar mientras escribe
+const validarEnVivo = () => {
+  const err = validarPasswordFuerte(password.value)
+  // Si validarPasswordFuerte devuelve string, es el error. Si devuelve null/false, está bien.
+  passwordError.value = err || ''
+}
+
+// Observar confirmación para avisar si coinciden
+watch([password, confirmPassword], () => {
+  if (confirmPassword.value && password.value !== confirmPassword.value) {
+    confirmError.value = 'Las contraseñas no coinciden'
+  } else {
+    confirmError.value = ''
+  }
+})
+
 async function resetear() {
   mensaje.value = ''
   error.value = ''
 
-  const errPw = validarPasswordFuerte(password.value)
-  if (errPw) {
-    error.value = errPw;
-    return;
-  }
-
-  if (password.value !== confirmPassword.value) {
-    error.value = 'Las contraseñas no coinciden'
-    return
-  }
+  // Validación final por seguridad
+  validarEnVivo()
+  if (passwordError.value || confirmError.value) return
 
   loading.value = true
   try {
@@ -131,8 +139,9 @@ async function resetear() {
       })
     })
     const data = await res.json()
+    
     if (res.ok) {
-      mensaje.value = data.message
+      mensaje.value = data.message || 'Contraseña actualizada correctamente ✅'
       setTimeout(() => router.push('/auth/login'), 2500)
     } else {
       error.value = data.error || 'No se pudo restablecer la contraseña'

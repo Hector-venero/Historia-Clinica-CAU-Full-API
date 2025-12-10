@@ -1,121 +1,116 @@
 <template>
-  <div class="p-8 max-w-3xl mx-auto bg-white shadow-xl rounded-2xl">
-    
-    <h1 class="text-3xl font-bold text-blue-700 mb-8">✏️ Editar Grupo Profesional</h1>
-    
-    <button
-    class="px-4 py-2 text-sm rounded-lg bg-gray-200 hover:bg-gray-300 text-gray-700 mb-4"
-    @click="router.push('/grupos')"
-    >
-    ⬅ Volver
-    </button>
-
-    <div v-if="cargando" class="text-gray-500">Cargando datos...</div>
-
-    <form v-else @submit.prevent="guardarCambios" class="space-y-6">
-
-      <!-- Nombre -->
-      <div>
-        <label class="block text-gray-700 font-semibold mb-2">Nombre del grupo</label>
-        <input
-          v-model="grupo.nombre"
-          type="text"
-          class="w-full border rounded-lg p-3 focus:ring-2 focus:ring-blue-500"
-          placeholder="Ejemplo: Rehabilitación, Terapia..."
-          required
+  <div class="flex justify-center items-start p-6 md:p-8">
+    <div class="bg-white dark:bg-[#1e1e1e] shadow-xl rounded-2xl p-8 w-full max-w-3xl transition-colors">
+      
+      <div class="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
+        <Button 
+          label="Volver" 
+          icon="pi pi-arrow-left" 
+          text 
+          severity="secondary" 
+          @click="router.push('/grupos')"
         />
-      </div>
-
-      <!-- Descripción -->
-      <div>
-        <label class="block text-gray-700 font-semibold mb-2">Descripción</label>
-        <textarea
-          v-model="grupo.descripcion"
-          rows="3"
-          class="w-full border rounded-lg p-3 focus:ring-2 focus:ring-blue-500"
-          placeholder="Describe el objetivo del grupo"
-        ></textarea>
-      </div>
-
-      <!-- Color -->
-      <div>
-        <label class="block text-gray-700 font-semibold mb-2">Color del grupo</label>
-        <div class="flex items-center gap-3">
-          <input
-            v-model="grupo.color"
-            type="color"
-            class="w-12 h-12 border rounded-lg cursor-pointer"
-          />
-          <span class="text-gray-600 text-sm">Se usará para identificar el grupo en los calendarios</span>
+        
+        <div class="text-center md:text-right">
+          <h1 class="text-3xl font-bold text-primary mb-1 flex items-center gap-2 justify-center md:justify-end">
+            <i class="pi pi-pencil text-2xl"></i> Editar Grupo
+          </h1>
+          <p class="text-gray-500 dark:text-gray-400 text-sm">
+            Modifica los detalles y gestiona los miembros
+          </p>
         </div>
       </div>
 
-      <!-- Miembros -->
-      <div>
-        <label class="block text-gray-700 font-semibold mb-2">Miembros del grupo</label>
+      <div v-if="cargando" class="flex flex-col items-center py-10">
+        <i class="pi pi-spin pi-spinner text-4xl text-primary mb-2"></i>
+        <p class="text-gray-500">Cargando datos del grupo...</p>
+      </div>
 
-        <div class="border rounded-lg p-3">
-          <p v-if="miembros.length === 0" class="text-gray-500">No hay miembros asignados.</p>
+      <form v-else @submit.prevent="guardarCambios" class="space-y-6">
 
-          <div
-            v-for="m in miembros"
-            :key="m.id"
-            class="flex justify-between items-center border-b py-2"
-          >
-            <span>{{ m.nombre }} — <span class="text-sm text-gray-500">{{ m.rol }}</span></span>
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div class="md:col-span-3 flex flex-col gap-2">
+            <label class="font-semibold text-gray-700 dark:text-gray-200">Nombre del grupo</label>
+            <InputText
+              v-model="grupo.nombre"
+              placeholder="Ej: Rehabilitación..."
+              class="w-full"
+              required
+            />
+          </div>
 
-            <button
-              type="button"
-              class="text-red-600 hover:text-red-800 text-sm"
-              @click="quitarMiembro(m)"
-            >
-              Quitar
-            </button>
+          <div class="flex flex-col gap-2">
+            <label class="font-semibold text-gray-700 dark:text-gray-200">Color</label>
+            <div class="flex items-center h-full">
+              <input
+                v-model="grupo.color"
+                type="color"
+                class="w-full h-[42px] p-1 bg-transparent border border-gray-300 dark:border-gray-600 rounded-lg cursor-pointer"
+              />
+            </div>
           </div>
         </div>
 
-        <!-- Agregar miembro -->
-        <div class="mt-4">
-          <label class="block text-gray-700 font-semibold mb-2">Agregar miembro</label>
-          <select
-            v-model="nuevoMiembro"
-            class="w-full border rounded-lg p-3"
-          >
-            <option disabled value="">Seleccione un profesional</option>
-            <option
-              v-for="u in usuariosDisponibles"
-              :key="u.id"
-              :value="u.id"
-            >
-              {{ u.nombre }} ({{ u.rol }})
-            </option>
-          </select>
-
-          <button
-            type="button"
-            class="mt-3 bg-green-600 hover:bg-green-700 text-white w-full py-2 rounded-lg shadow"
-            @click="agregarMiembro"
-          >
-            ➕ Agregar miembro
-          </button>
+        <div class="flex flex-col gap-2">
+          <label class="font-semibold text-gray-700 dark:text-gray-200">Descripción</label>
+          <Textarea
+            v-model="grupo.descripcion"
+            rows="3"
+            placeholder="Describe el objetivo del grupo..."
+            class="w-full"
+            autoResize
+          />
         </div>
+
+        <div class="flex flex-col gap-2">
+          <label class="font-semibold text-gray-700 dark:text-gray-200">
+            <i class="pi pi-users mr-1 text-primary"></i> Miembros del grupo
+          </label>
+          
+          <MultiSelect
+            v-model="miembrosSeleccionadosIds"
+            :options="usuariosDisponibles"
+            optionLabel="nombre"
+            optionValue="id"
+            placeholder="Gestionar miembros..."
+            display="chip"
+            filter
+            class="w-full"
+            :maxSelectedLabels="10"
+          >
+            <template #option="slotProps">
+              <div class="flex flex-col">
+                <span class="font-medium">{{ slotProps.option.nombre }}</span>
+                <span class="text-xs text-gray-500 capitalize">{{ slotProps.option.rol }}</span>
+              </div>
+            </template>
+          </MultiSelect>
+          
+          <small class="text-gray-500 dark:text-gray-400">
+            Agrega o quita usuarios seleccionándolos de la lista.
+          </small>
+        </div>
+
+        <div class="flex justify-center pt-6 border-t border-gray-100 dark:border-gray-800">
+          <Button 
+            type="submit" 
+            label="Guardar Cambios" 
+            icon="pi pi-save" 
+            class="w-full md:w-auto px-8 py-3 font-bold shadow-lg" 
+            :loading="guardando"
+          />
+        </div>
+
+      </form>
+
+      <div v-if="mensaje" class="mt-6 p-3 rounded-lg bg-green-100 text-green-700 text-center font-medium border border-green-200">
+        <i class="pi pi-check-circle mr-2"></i> {{ mensaje }}
+      </div>
+      <div v-if="error" class="mt-6 p-3 rounded-lg bg-red-100 text-red-700 text-center font-medium border border-red-200">
+        <i class="pi pi-exclamation-circle mr-2"></i> {{ error }}
       </div>
 
-      <!-- Botón Guardar -->
-      <div class="flex justify-center">
-        <button
-          type="submit"
-          class="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-8 py-3 rounded-xl shadow-md"
-        >
-          Guardar Cambios
-        </button>
-      </div>
-    </form>
-
-    <!-- Mensajes -->
-    <p v-if="mensaje" class="mt-6 text-green-600 font-semibold text-center">{{ mensaje }}</p>
-    <p v-if="error" class="mt-6 text-red-600 font-semibold text-center">{{ error }}</p>
-
+    </div>
   </div>
 </template>
 
@@ -124,109 +119,94 @@ import { ref, onMounted } from "vue";
 import api from "@/api/axios";
 import { useRoute, useRouter } from "vue-router";
 
+// Imports PrimeVue
+import InputText from 'primevue/inputtext';
+import Textarea from 'primevue/textarea';
+import Button from 'primevue/button';
+import MultiSelect from 'primevue/multiselect';
+
 const route = useRoute();
 const router = useRouter();
-
 const grupoId = route.params.id;
 
-const grupo = ref({
-  nombre: "",
-  descripcion: "",
-  color: "#00936B"
-});
-
-const miembros = ref([]);
+const grupo = ref({ nombre: "", descripcion: "", color: "#00936B" });
 const usuariosDisponibles = ref([]);
-
-const nuevoMiembro = ref("");
+const miembrosOriginalesIds = ref([]); // Para saber qué cambió
+const miembrosSeleccionadosIds = ref([]); // Modelo del MultiSelect
 
 const cargando = ref(true);
+const guardando = ref(false);
 const mensaje = ref("");
 const error = ref("");
 
-// ====================================
-// CARGAR DATOS DEL GRUPO
-// ====================================
 onMounted(async () => {
   try {
-    // 1️⃣ Obtener datos del grupo
+    // 1. Cargar Usuarios (Filtrar solo profesionales)
+    const resUsuarios = await api.get("/usuarios", { withCredentials: true });
+    usuariosDisponibles.value = (resUsuarios.data || []).filter(u => u.rol === 'profesional');
+
+    // 2. Cargar Grupo
     const resGrupo = await api.get(`/grupos/${grupoId}`, { withCredentials: true });
     grupo.value = resGrupo.data;
 
-    // 2️⃣ Obtener miembros actuales
+    // 3. Cargar Miembros actuales
     const resMiembros = await api.get(`/grupos/${grupoId}/miembros`, { withCredentials: true });
-    miembros.value = resMiembros.data;
+    
+    // Extraemos solo los IDs para el MultiSelect
+    const ids = resMiembros.data.map(m => m.id);
+    miembrosSeleccionadosIds.value = [...ids];
+    miembrosOriginalesIds.value = [...ids]; // Copia de seguridad
 
-    // 3️⃣ Usuarios disponibles para agregar
-    const resUsuarios = await api.get("/usuarios", { withCredentials: true });
-    usuariosDisponibles.value = resUsuarios.data.filter(u => u.rol === "profesional");
   } catch (err) {
-    console.error("Error cargando grupo:", err);
+    console.error("Error cargando datos:", err);
     error.value = "No se pudieron cargar los datos del grupo.";
   } finally {
     cargando.value = false;
   }
 });
 
-// ====================================
-// GUARDAR CAMBIOS DEL GRUPO
-// ====================================
 async function guardarCambios() {
   mensaje.value = "";
   error.value = "";
+  guardando.value = true;
 
   try {
+    // 1. Actualizar datos básicos (nombre, color, etc.)
     await api.put(`/grupos/${grupoId}`, grupo.value, { withCredentials: true });
+
+    // 2. Sincronizar Miembros (Calculamos diferencias)
+    const actuales = new Set(miembrosSeleccionadosIds.value);
+    const originales = new Set(miembrosOriginalesIds.value);
+
+    // A) Nuevos a agregar: están en actuales pero no en originales
+    const paraAgregar = [...actuales].filter(id => !originales.has(id));
+    
+    // B) Viejos a borrar: estaban en originales pero no en actuales
+    const paraBorrar = [...originales].filter(id => !actuales.has(id));
+
+    // Ejecutar peticiones
+    const promesas = [];
+    
+    for (const uid of paraAgregar) {
+        promesas.push(api.post(`/grupos/${grupoId}/miembros`, { usuario_id: uid }, { withCredentials: true }));
+    }
+    
+    for (const uid of paraBorrar) {
+        promesas.push(api.delete(`/grupos/${grupoId}/miembros/${uid}`, { withCredentials: true }));
+    }
+
+    await Promise.all(promesas);
+
+    // Actualizar referencia original
+    miembrosOriginalesIds.value = [...miembrosSeleccionadosIds.value];
+
     mensaje.value = "Cambios guardados correctamente ✔️";
+    
   } catch (err) {
     console.error("Error guardando cambios:", err);
     error.value = err.response?.data?.error || "Error al guardar cambios.";
+  } finally {
+    guardando.value = false;
   }
 }
-
-// ====================================
-// QUITAR MIEMBRO
-// ====================================
-async function quitarMiembro(m) {
-  if (!confirm(`¿Quitar a ${m.nombre} del grupo?`)) return;
-
-  try {
-    await api.delete(`/grupos/${grupoId}/miembros/${m.id}`, { withCredentials: true });
-    miembros.value = miembros.value.filter(x => x.id !== m.id);
-  } catch (err) {
-    console.error("Error quitando miembro:", err);
-    error.value = "No se pudo quitar el miembro.";
-  }
-}
-
-// ====================================
-// AGREGAR MIEMBRO
-// ====================================
-async function agregarMiembro() {
-  if (!nuevoMiembro.value) return;
-
-  // 🚫 Bloquear duplicados en frontend
-  if (miembros.value.some(m => m.id === nuevoMiembro.value)) {
-    error.value = "Este profesional ya pertenece al grupo.";
-    return;
-  }
-
-  try {
-    await api.post(
-      `/grupos/${grupoId}/miembros`,
-      { usuario_id: nuevoMiembro.value },
-      { withCredentials: true }
-    );
-
-    const user = usuariosDisponibles.value.find(u => u.id === nuevoMiembro.value);
-    if (user) miembros.value.push(user);
-
-    nuevoMiembro.value = "";
-    mensaje.value = "Miembro agregado correctamente ✔️";
-  } catch (err) {
-    console.error("Error agregando miembro:", err);
-    error.value = "No se pudo agregar el miembro.";
-  }
-}
-
 </script>

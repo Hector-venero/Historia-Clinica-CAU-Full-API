@@ -1,76 +1,137 @@
 <template>
-  <div class="p-4">
-    <h1 class="text-2xl font-bold mb-4">Usuarios registrados</h1>
+  <div class="p-6 md:p-8 w-full h-full">
+    
+    <div class="bg-white dark:bg-[#1e1e1e] shadow-xl rounded-2xl p-6 transition-colors">
+      
+      <div class="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
+        
+        <h1 class="text-3xl font-bold text-gray-800 dark:text-white">
+          Usuarios Registrados
+        </h1>
 
-    <input
-      v-model="busqueda"
-      type="text"
-      placeholder="Buscar por nombre o usuario"
-      class="p-inputtext p-component w-full mb-4 border rounded px-3 py-2"
-    />
+        <div class="flex gap-2 w-full md:w-auto">
+          <IconField iconPosition="left" class="w-full md:w-64">
+            <InputIcon class="pi pi-search" />
+            <InputText 
+              v-model="busqueda" 
+              placeholder="Buscar usuario..." 
+              class="w-full" 
+            />
+          </IconField>
+          
+          <Button 
+            icon="pi pi-plus" 
+            label="Nuevo" 
+            @click="router.push('/usuarios/crear')" 
+          />
+        </div>
+      </div>
 
-    <div v-if="filtrados.length > 0" class="overflow-x-auto">
-      <table class="min-w-full bg-white rounded shadow">
-        <thead>
-          <tr>
-            <th class="py-2 px-4 border-b">ID</th>
-            <th class="py-2 px-4 border-b">Nombre</th>
-            <th class="py-2 px-4 border-b">Usuario</th>
-            <th class="py-2 px-4 border-b">Email</th>
-            <th class="py-2 px-4 border-b">Rol</th>
-            <th class="py-2 px-4 border-b">Especialidad</th>
-            <th class="py-2 px-4 border-b">Estado</th>
-            <th class="py-2 px-4 border-b">Acciones</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="usuario in filtrados" :key="usuario.id">
-            <td class="py-2 px-4 border-b">{{ usuario.id }}</td>
-            <td class="py-2 px-4 border-b">{{ usuario.nombre }}</td>
-            <td class="py-2 px-4 border-b">{{ usuario.username }}</td>
-            <td class="py-2 px-4 border-b">{{ usuario.email }}</td>
-            <td class="py-2 px-4 border-b">{{ usuario.rol }}</td>
-            <td class="py-2 px-4 border-b">{{ usuario.especialidad }}</td>
-            <!-- ✅ Nuevo Badge de estado -->
-            <td class="py-2 px-4 border-b">
-              <span
-                :class="usuario.activo ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'"
-                class="px-3 py-1 text-xs font-semibold rounded-full"
-              >
-                {{ usuario.activo ? 'Activo' : 'Inactivo' }}
-              </span>
-            </td>
-            <td class="py-2 px-4 border-b flex gap-2">
-              <button class="bg-green-500 text-white px-2 py-1 rounded" @click="editarUsuario(usuario.id)">
-                Editar
-              </button>
-              <button class="bg-red-500 text-white px-2 py-1 rounded" @click="confirmarEliminar(usuario)">
-                Eliminar
-              </button>
-            </td>
-          </tr>
-        </tbody>
-      </table>
+      <div class="overflow-x-auto">
+        <DataTable 
+          :value="filtrados" 
+          paginator 
+          :rows="5" 
+          :rowsPerPageOptions="[5, 10, 20]"
+          tableStyle="min-width: 50rem"
+          stripedRows
+          class="p-datatable-sm"
+        >
+          <template #empty>
+            <div class="text-center p-4 text-gray-500">No se encontraron usuarios.</div>
+          </template>
+
+          <Column field="nombre" header="Nombre" sortable class="font-bold text-gray-700 dark:text-gray-200"></Column>
+          <Column field="username" header="Usuario" sortable></Column>
+          <Column field="email" header="Email" sortable></Column>
+          
+          <Column field="rol" header="Rol" sortable>
+            <template #body="slotProps">
+              <span class="capitalize">{{ slotProps.data.rol }}</span>
+            </template>
+          </Column>
+          
+          <Column field="especialidad" header="Especialidad">
+            <template #body="slotProps">
+              {{ slotProps.data.especialidad || '-' }}
+            </template>
+          </Column>
+
+          <Column field="activo" header="Estado" sortable>
+            <template #body="slotProps">
+              <Tag 
+                :value="slotProps.data.activo ? 'Activo' : 'Inactivo'" 
+                :severity="slotProps.data.activo ? 'success' : 'danger'" 
+                rounded
+              />
+            </template>
+          </Column>
+
+          <Column header="Acciones" :exportable="false" style="min-width: 8rem">
+            <template #body="slotProps">
+              <div class="flex gap-2">
+                <Button 
+                  icon="pi pi-pencil" 
+                  text 
+                  rounded 
+                  severity="info" 
+                  @click="editarUsuario(slotProps.data.id)" 
+                  v-tooltip.top="'Editar'"
+                />
+                <Button 
+                  icon="pi pi-trash" 
+                  text 
+                  rounded 
+                  severity="danger" 
+                  @click="confirmarEliminar(slotProps.data)" 
+                  v-tooltip.top="'Eliminar'"
+                />
+              </div>
+            </template>
+          </Column>
+        </DataTable>
+      </div>
+
     </div>
-    <p v-else>No se encontraron usuarios.</p>
 
-    <!-- Modal de confirmación -->
-    <Dialog v-model:visible="mostrarDialog" modal header="Confirmar Eliminación" :style="{ width: '350px' }">
-      <p>⚠️ Esta acción marcará el usuario como inactivo.<br>¿Estás seguro que querés continuar?</p>
+    <Dialog 
+      v-model:visible="mostrarDialog" 
+      modal 
+      header="Confirmar acción" 
+      :style="{ width: '400px' }"
+      :draggable="false"
+    >
+      <div class="flex items-center gap-3 mb-4">
+        <i class="pi pi-exclamation-triangle text-orange-500 text-4xl"></i>
+        <span class="text-gray-700 dark:text-gray-300">
+          Esta acción marcará al usuario <strong>{{ usuarioAEliminar?.username }}</strong> como inactivo.
+          <br><br>¿Estás seguro de continuar?
+        </span>
+      </div>
+      
       <template #footer>
-        <Button label="Cancelar" icon="pi pi-times" class="p-button-text" @click="cancelarEliminar" />
-        <Button label="Eliminar" icon="pi pi-check" class="p-button-danger" @click="eliminarUsuarioConfirmado" />
+        <Button label="Cancelar" text severity="secondary" @click="cancelarEliminar" />
+        <Button label="Sí, Eliminar" severity="danger" icon="pi pi-check" @click="eliminarUsuarioConfirmado" />
       </template>
     </Dialog>
+
   </div>
 </template>
 
 <script setup>
-import usuarioService from '@/service/usuarioService'
-import Button from 'primevue/button'
-import Dialog from 'primevue/dialog'
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import usuarioService from '@/service/usuarioService'
+
+// Imports PrimeVue
+import DataTable from 'primevue/datatable'
+import Column from 'primevue/column'
+import Button from 'primevue/button'
+import Dialog from 'primevue/dialog'
+import InputText from 'primevue/inputtext'
+import IconField from 'primevue/iconfield'
+import InputIcon from 'primevue/inputicon'
+import Tag from 'primevue/tag'
 
 const usuarios = ref([])
 const busqueda = ref('')
@@ -117,7 +178,10 @@ const eliminarUsuarioConfirmado = async () => {
   if (!usuarioAEliminar.value) return
   try {
     await usuarioService.deleteUsuario(usuarioAEliminar.value.id)
-    usuarios.value = usuarios.value.filter(u => u.id !== usuarioAEliminar.value.id)
+    const index = usuarios.value.findIndex(u => u.id === usuarioAEliminar.value.id)
+    if (index !== -1) {
+        usuarios.value[index].activo = 0 
+    }
     mostrarDialog.value = false
     usuarioAEliminar.value = null
   } catch (error) {

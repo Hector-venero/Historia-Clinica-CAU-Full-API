@@ -1,255 +1,208 @@
 <template>
-  <div class="p-10 max-w-6xl mx-auto">
-    <div class="rounded-2xl shadow-xl border border-gray-200 bg-white dark:bg-[#1b1b1b] p-10">
+  <div class="p-6 md:p-8 w-full max-w-5xl mx-auto">
+    
+    <Toast />
 
-      <!-- ENCABEZADO -->
-      <div class="flex items-center justify-between mb-8">
+    <div class="bg-white dark:bg-[#1e1e1e] shadow-xl rounded-2xl p-6 md:p-8 transition-colors border border-gray-100 dark:border-gray-800">
+
+      <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
         <div>
-          <h1 class="text-4xl font-bold text-gray-800 dark:text-gray-100">
-            Disponibilidad del Profesional
+          <h1 class="text-3xl font-bold text-gray-800 dark:text-white">
+            Disponibilidad Horaria
           </h1>
-          <p class="text-gray-500 dark:text-gray-400 text-lg">
-            Configurá tus días y horarios de atención.
+          <p class="text-gray-500 dark:text-gray-400 mt-1">
+            Configurá los días y franjas horarias en las que atendés turnos.
           </p>
         </div>
 
-        <div
-          v-if="usuario && usuario.nombre"
-          class="bg-blue-50 dark:bg-[#00bfa51a] px-5 py-3 rounded-xl border border-blue-100 
-                 dark:border-[#00bfa533] flex items-center gap-2 shadow-sm"
-        >
-          <i class="pi pi-user text-blue-500 dark:text-[#00bfa5]"></i>
-          <p class="text-gray-700 dark:text-gray-100 font-medium">{{ usuario.nombre }}</p>
+        <div class="flex items-center gap-3 bg-primary-50 dark:bg-primary-900/20 px-4 py-2 rounded-xl border border-primary-100 dark:border-primary-800">
+          <Avatar :label="usuario?.nombre?.charAt(0)" shape="circle" class="bg-primary text-white" />
+          <span class="font-bold text-primary-700 dark:text-primary-300">{{ usuario?.nombre }}</span>
         </div>
       </div>
 
-      <!-- RESUMEN -->
-      <div v-if="resumen.length > 0" class="mb-8">
-        <h2 class="text-xl font-semibold text-gray-700 dark:text-gray-200 mb-3">Resumen</h2>
-
-        <div class="flex flex-col gap-1">
-          <p
-            v-for="item in resumen"
-            :key="item.dia"
-            class="text-blue-600 dark:text-blue-400 font-medium flex items-center gap-2"
-          >
-            <span class="w-3 h-3 bg-blue-500 rounded-sm"></span>
-            Atendés <strong>{{ item.dia }}</strong> de 
-            <strong>{{ item.inicio }}</strong> a <strong>{{ item.fin }}</strong>
-          </p>
+      <div class="space-y-4">
+        
+        <div class="hidden md:grid grid-cols-12 gap-4 px-4 text-sm font-bold text-gray-500 uppercase tracking-wider mb-2">
+          <div class="col-span-3">Día</div>
+          <div class="col-span-2 text-center">Estado</div>
+          <div class="col-span-7 text-center">Horario de Atención</div>
         </div>
-      </div>
 
-      <!-- TABLA -->
-      <div class="overflow-x-auto">
-        <table
-          class="min-w-full border border-gray-200 dark:border-gray-700 rounded-2xl shadow-sm text-base overflow-hidden"
+        <div 
+          v-for="dia in diasSemana" 
+          :key="dia.nombre"
+          class="group grid grid-cols-1 md:grid-cols-12 gap-4 items-center p-4 rounded-xl border border-gray-200 dark:border-gray-700 hover:border-primary-300 dark:hover:border-primary-700 hover:shadow-md transition-all bg-gray-50 dark:bg-[#252525]"
+          :class="{'opacity-60 grayscale': !dia.activo}"
         >
-          <thead
-            class="bg-gradient-to-r from-blue-50 to-blue-100 dark:from-[#242424] dark:to-[#2a2a2a] 
-                   text-gray-700 dark:text-gray-100"
-          >
-            <tr>
-              <th class="px-6 py-4 text-left">Día</th>
-              <th class="px-6 py-4 text-center">Activo</th>
-              <th class="px-6 py-4 text-center">Hora inicio</th>
-              <th class="px-6 py-4 text-center">Hora fin</th>
-            </tr>
-          </thead>
-
-          <tbody>
-            <tr
-              v-for="dia in diasSemana"
-              :key="dia.nombre"
-              class="transition-all hover:bg-blue-50 dark:hover:bg-[#2a2a2a]"
+          
+          <div class="col-span-1 md:col-span-3 flex items-center gap-3">
+            <div 
+              class="w-10 h-10 rounded-lg flex items-center justify-center font-bold text-lg transition-colors"
+              :class="dia.activo ? 'bg-primary text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-500'"
             >
-              <td class="px-6 py-4 font-medium text-lg">
-                {{ dia.nombre }}
-              </td>
+              {{ dia.nombre.charAt(0) }}
+            </div>
+            <span class="text-lg font-semibold text-gray-800 dark:text-gray-200 capitalize">
+              {{ dia.nombre }}
+            </span>
+          </div>
 
-              <!-- SWITCH -->
-              <td class="text-center">
-                <label class="relative inline-flex items-center cursor-pointer">
-                  <input
-                    type="checkbox"
-                    v-model="dia.activo"
-                    class="sr-only peer"
-                  />
+          <div class="col-span-1 md:col-span-2 flex items-center md:justify-center justify-between">
+            <span class="md:hidden text-sm font-medium text-gray-500">¿Atiende este día?</span>
+            <InputSwitch v-model="dia.activo" />
+          </div>
 
-                  <!-- FONDO -->
-                  <div
-                    class="w-12 h-6 rounded-full
-                    bg-gray-300 dark:bg-gray-600
-                    peer-checked:bg-blue-500
-                    transition duration-300"
-                  ></div>
+          <div class="col-span-1 md:col-span-7 flex flex-col md:flex-row items-center justify-center gap-3">
+            
+            <div class="flex items-center gap-2 w-full md:w-auto">
+              <i class="pi pi-sun text-gray-400"></i>
+              <label class="md:hidden text-sm text-gray-500 w-16">Desde:</label>
+              <input
+                type="time"
+                v-model="dia.hora_inicio"
+                :disabled="!dia.activo"
+                class="p-inputtext p-component w-full md:w-32 text-center"
+              />
+            </div>
 
-                  <!-- BOLITA -->
-                  <div
-                    class="absolute top-1 left-1 w-4 h-4 rounded-full bg-white dark:bg-gray-200 shadow
-                    transition-transform duration-300 peer-checked:translate-x-6"
-                  ></div>
-                </label>
-              </td>
+            <span class="hidden md:block text-gray-400">—</span>
 
-              <!-- HORA INICIO -->
-              <td class="text-center">
-                <input
-                  type="time"
-                  v-model="dia.hora_inicio"
-                  :disabled="!dia.activo"
-                  class="border dark:bg-[#2a2a2a] px-3 py-2 rounded-lg w-32 disabled:opacity-50"
-                />
-              </td>
+            <div class="flex items-center gap-2 w-full md:w-auto">
+              <i class="pi pi-moon text-gray-400"></i>
+              <label class="md:hidden text-sm text-gray-500 w-16">Hasta:</label>
+              <input
+                type="time"
+                v-model="dia.hora_fin"
+                :disabled="!dia.activo"
+                class="p-inputtext p-component w-full md:w-32 text-center"
+              />
+            </div>
 
-              <!-- HORA FIN -->
-              <td class="text-center">
-                <input
-                  type="time"
-                  v-model="dia.hora_fin"
-                  :disabled="!dia.activo"
-                  class="border dark:bg-[#2a2a2a] px-3 py-2 rounded-lg w-32 disabled:opacity-50"
-                />
-              </td>
-            </tr>
-          </tbody>
-        </table>
+          </div>
+
+        </div>
       </div>
 
-      <!-- BOTONES -->
-      <div class="flex justify-between mt-10">
-
-        <!-- SALIR -->
-        <button
-          @click="irAlDashboard"
-          class="bg-gray-100 hover:bg-gray-200 text-gray-800 px-6 py-3 rounded-lg border 
-                shadow-sm transition flex items-center gap-2"
-        >
-          <i class="pi pi-chevron-left"></i> Salir
-        </button>
-
-        <!-- GUARDAR -->
-        <button
-          @click="guardarDisponibilidades"
-          :disabled="guardando"
-          class="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-lg shadow 
-                 disabled:opacity-50 transition flex items-center gap-2"
-        >
-          <i class="pi pi-save"></i>
-          {{ guardando ? "Guardando..." : "Guardar cambios" }}
-        </button>
+      <div class="flex justify-end items-center gap-4 mt-8 pt-6 border-t border-gray-100 dark:border-gray-800">
+        <Button 
+          label="Cancelar" 
+          icon="pi pi-times" 
+          text 
+          severity="secondary" 
+          @click="irAlDashboard" 
+        />
+        <Button 
+          label="Guardar Cambios" 
+          icon="pi pi-check" 
+          :loading="guardando" 
+          @click="guardarDisponibilidades" 
+        />
       </div>
 
-      <!-- MENSAJES -->
-      <div class="mt-6">
-        <p v-if="mensaje" class="text-green-600 font-semibold text-lg">
-          ✅ {{ mensaje }}
-        </p>
-        <p v-if="error" class="text-red-500 font-semibold text-lg">
-          ⚠️ {{ error }}
-        </p>
-      </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from "vue";
+import { ref, onMounted } from "vue";
 import { useRouter } from "vue-router";
 import api from "@/api/axios"; 
 import { useUserStore } from "@/stores/user";
+import { useToast } from "primevue/usetoast";
+
+// Imports PrimeVue
+import InputSwitch from 'primevue/inputswitch';
+import Button from 'primevue/button';
+import Avatar from 'primevue/avatar';
+import Toast from 'primevue/toast';
 
 const router = useRouter();
 const userStore = useUserStore();
+const toast = useToast();
 const usuario = ref(userStore);
 
-// ░░ DIAS BASE ░░
+// Días con tildes para que se vea bonito en la pantalla
 const diasSemana = ref([
   { nombre: "Lunes", id: null, activo: false, hora_inicio: "09:00", hora_fin: "17:00" },
   { nombre: "Martes", id: null, activo: false, hora_inicio: "09:00", hora_fin: "17:00" },
-  { nombre: "Miercoles", id: null, activo: false, hora_inicio: "09:00", hora_fin: "17:00" },
+  { nombre: "Miércoles", id: null, activo: false, hora_inicio: "09:00", hora_fin: "17:00" },
   { nombre: "Jueves", id: null, activo: false, hora_inicio: "09:00", hora_fin: "17:00" },
   { nombre: "Viernes", id: null, activo: false, hora_inicio: "09:00", hora_fin: "17:00" },
-  { nombre: "Sabado", id: null, activo: false, hora_inicio: "09:00", hora_fin: "13:00" }
+  { nombre: "Sábado", id: null, activo: false, hora_inicio: "09:00", hora_fin: "13:00" }
 ]);
 
-const mensaje = ref("");
-const error = ref("");
 const guardando = ref(false);
 
-// ░░ RESUMEN COMPUTADO ░░
-const resumen = computed(() =>
-  diasSemana.value
-    .filter(d => d.activo)
-    .map(d => ({
-      dia: d.nombre,
-      inicio: d.hora_inicio,
-      fin: d.hora_fin
-    }))
-);
+// 🛠️ Función para normalizar texto (Miércoles -> Miercoles)
+const quitarTildes = (str) => {
+  if (!str) return "";
+  return str.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+}
 
 // ░░ CARGA DE DISPONIBILIDADES ░░
 async function cargarDisponibilidades() {
-  mensaje.value = "";
-  error.value = "";
-
   try {
-    const res = await api.get("/disponibilidades");  // ← CORRECTO
-
+    const res = await api.get("/disponibilidades", { withCredentials: true });
     const datos = res.data;
 
     diasSemana.value.forEach((dia) => {
-      const encontrado = datos.find((d) => d.dia_semana === dia.nombre);
+      // Normalizamos el nombre local para comparar
+      const nombreLocalSinTilde = quitarTildes(dia.nombre); 
+      
+      // Buscamos en los datos del backend normalizando también por seguridad
+      const encontrado = datos.find((d) =>
+          quitarTildes(d.dia_semana) === nombreLocalSinTilde
+      )
+
       if (encontrado) {
         dia.id = encontrado.id;
-        dia.activo = encontrado.activo;
+        // El backend devuelve 1 o 0, lo convertimos a Boolean para el Switch
+        dia.activo = Boolean(encontrado.activo); 
         dia.hora_inicio = encontrado.hora_inicio.slice(0, 5);
         dia.hora_fin = encontrado.hora_fin.slice(0, 5);
       }
     });
   } catch (err) {
     console.error(err);
-    error.value = "No se pudieron cargar las disponibilidades";
+    toast.add({ severity: 'error', summary: 'Error', detail: 'No se cargaron los horarios', life: 3000 });
   }
 }
 
-// ░░ GUARDAR CAMBIOS ░░
+// ░░ GUARDAR CAMBIOS (Corregido) ░░
 async function guardarDisponibilidades() {
   guardando.value = true;
-  mensaje.value = "";
-  error.value = "";
 
   try {
-    for (const dia of diasSemana.value) {
-      if (dia.activo) {
-        if (dia.id) {
-          await api.put(`/disponibilidades/${dia.id}`, {
-            hora_inicio: dia.hora_inicio,
-            hora_fin: dia.hora_fin,
-            activo: true
-          });
-        } else {
-          const res = await api.post("/disponibilidades", {
-            dia_semana: dia.nombre,
-            hora_inicio: dia.hora_inicio,
-            hora_fin: dia.hora_fin,
-            activo: true
-          });
-          dia.id = res.data.id;
-        }
-      } else if (dia.id) {
-        await api.put(`/disponibilidades/${dia.id}`, {
+    const promesas = diasSemana.value.map(async (dia) => {
+      if (dia.activo || dia.id) {
+        const diaBackend = quitarTildes(dia.nombre);
+
+        const payload = {
+          dia_semana: diaBackend,        // ⭐ NECESARIO
           hora_inicio: dia.hora_inicio,
           hora_fin: dia.hora_fin,
-          activo: false
-        });
-      }
-    }
+          activo: dia.activo
+        };
 
-    mensaje.value = "Disponibilidades actualizadas correctamente.";
+        if (dia.id) {
+          // PUT → actualiza correctamente
+          await api.put(`/disponibilidades/${dia.id}`, payload, { withCredentials: true });
+        } else if (dia.activo) {
+          // POST → ahora ya funciona
+          const res = await api.post("/disponibilidades", payload, { withCredentials: true });
+          dia.id = res.data.id;
+        }
+      }
+    });
+
+    await Promise.all(promesas);
+
+    toast.add({ severity: 'success', summary: 'Guardado', detail: 'Horarios actualizados correctamente', life: 3000 });
+
   } catch (err) {
     console.error(err);
-    error.value = "Error al guardar los cambios.";
+    toast.add({ severity: 'error', summary: 'Error', detail: 'Hubo un problema al guardar', life: 3000 });
   } finally {
     guardando.value = false;
   }
@@ -259,3 +212,14 @@ const irAlDashboard = () => router.push({ name: "dashboard" });
 
 onMounted(cargarDisponibilidades);
 </script>
+
+<style scoped>
+/* Ajuste para que el input time nativo se vea como PrimeVue */
+input[type="time"] {
+  font-family: inherit;
+  cursor: pointer;
+}
+.p-inputtext {
+  transition: background-color 0.2s, color 0.2s, border-color 0.2s, box-shadow 0.2s;
+}
+</style>

@@ -1,96 +1,131 @@
 <template>
-  <div class="p-8 max-w-3xl mx-auto bg-white shadow-xl rounded-2xl">
-    <h1 class="text-3xl font-bold text-blue-700 mb-8">➕ Crear Nuevo Grupo Profesional</h1>
-
-    <form @submit.prevent="crearGrupo" class="space-y-6">
-      <!-- Nombre -->
-      <div>
-        <label class="block text-gray-700 font-semibold mb-2">Nombre del grupo</label>
-        <input
-          v-model="grupo.nombre"
-          type="text"
-          class="w-full border rounded-lg p-3 focus:ring-2 focus:ring-blue-500"
-          placeholder="Ejemplo: Kinesiología, Pediatría..."
-          required
-        />
+  <div class="flex justify-center items-start p-6 md:p-8">
+    <div class="bg-white dark:bg-[#1e1e1e] shadow-xl rounded-2xl p-8 w-full max-w-3xl transition-colors">
+      
+      <div class="text-center mb-8">
+        <h1 class="text-3xl font-bold text-gray-800 dark:text-white mb-2">
+          Crear Grupo Profesional
+        </h1>
+        
+        <p class="text-gray-500 dark:text-gray-400">
+          Agrupa profesionales por especialidad para gestionar sus agendas
+        </p>
       </div>
 
-      <!-- Descripción -->
-      <div>
-        <label class="block text-gray-700 font-semibold mb-2">Descripción</label>
-        <textarea
-          v-model="grupo.descripcion"
-          rows="3"
-          class="w-full border rounded-lg p-3 focus:ring-2 focus:ring-blue-500"
-          placeholder="Describe brevemente el propósito del grupo"
-        ></textarea>
-      </div>
-
-      <!-- Color -->
-      <div>
-        <label class="block text-gray-700 font-semibold mb-2">Color del grupo</label>
-        <div class="flex items-center gap-3">
-          <input
-            v-model="grupo.color"
-            type="color"
-            class="w-12 h-12 border rounded-lg cursor-pointer"
-          />
-          <span class="text-gray-600 text-sm">Usado para identificar el grupo en los calendarios</span>
-        </div>
-      </div>
-
-      <!-- Miembros -->
-      <div>
-        <label class="block text-gray-700 font-semibold mb-2">Seleccionar miembros</label>
-        <div class="border rounded-lg p-3 max-h-60 overflow-y-auto">
-          <div
-            v-for="usuario in usuarios"
-            :key="usuario.id"
-            class="flex items-center mb-2"
-          >
-            <input
-              type="checkbox"
-              :id="'user-' + usuario.id"
-              :value="usuario.id"
-              v-model="miembrosSeleccionados"
-              class="mr-2"
-            />
-            <label :for="'user-' + usuario.id" class="text-gray-700">
-              {{ usuario.nombre }} — <span class="text-sm text-gray-500">{{ usuario.rol }}</span>
+      <form @submit.prevent="crearGrupo" class="space-y-6">
+        
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div class="md:col-span-3 flex flex-col gap-2">
+            <label class="font-semibold text-gray-700 dark:text-gray-200">
+              Nombre del grupo
             </label>
+            <InputText
+              v-model="grupo.nombre"
+              placeholder="Ej: Kinesiología, Pediatría..."
+              class="w-full"
+              required
+            />
+          </div>
+
+          <div class="flex flex-col gap-2">
+            <label class="font-semibold text-gray-700 dark:text-gray-200">
+              Color
+            </label>
+            <div class="flex items-center h-full">
+              <input
+                v-model="grupo.color"
+                type="color"
+                class="w-full h-[42px] p-1 bg-transparent border border-gray-300 dark:border-gray-600 rounded-lg cursor-pointer"
+                title="Elige un color identificativo"
+              />
+            </div>
           </div>
         </div>
+
+        <div class="flex flex-col gap-2">
+          <label class="font-semibold text-gray-700 dark:text-gray-200">
+            Descripción
+          </label>
+          <Textarea
+            v-model="grupo.descripcion"
+            rows="3"
+            placeholder="Describe el propósito de este grupo..."
+            class="w-full"
+            autoResize
+          />
+        </div>
+
+        <div class="flex flex-col gap-2">
+          <label class="font-semibold text-gray-700 dark:text-gray-200">
+            <i class="pi pi-user-plus mr-1 text-primary"></i> Asignar Miembros
+          </label>
+          <MultiSelect
+            v-model="miembrosSeleccionados"
+            :options="usuarios"
+            optionLabel="nombre"
+            optionValue="id"
+            placeholder="Buscar y seleccionar profesionales..."
+            display="chip"
+            filter
+            class="w-full"
+            :maxSelectedLabels="3"
+          >
+            <template #option="slotProps">
+              <div class="flex flex-col">
+                <span class="font-medium">{{ slotProps.option.nombre }}</span>
+                <span class="text-xs text-gray-500 capitalize">{{ slotProps.option.rol }}</span>
+              </div>
+            </template>
+          </MultiSelect>
+          <small class="text-gray-500 dark:text-gray-400">
+            Puedes buscar por nombre. Los seleccionados aparecerán como etiquetas.
+          </small>
+        </div>
+
+        <div class="flex justify-center pt-4">
+          <Button 
+            type="submit" 
+            label="Guardar Grupo" 
+            icon="pi pi-check" 
+            class="w-full md:w-auto px-8 py-3 font-bold shadow-lg" 
+            :loading="loading"
+          />
+        </div>
+
+      </form>
+
+      <div v-if="mensaje" class="mt-6 p-3 rounded-lg bg-green-100 text-green-700 text-center font-medium border border-green-200">
+        <i class="pi pi-check-circle mr-2"></i> {{ mensaje }}
+      </div>
+      <div v-if="error" class="mt-6 p-3 rounded-lg bg-red-100 text-red-700 text-center font-medium border border-red-200">
+        <i class="pi pi-exclamation-circle mr-2"></i> {{ error }}
       </div>
 
-      <!-- Botón Guardar -->
-      <div class="flex justify-center">
-        <button
-          type="submit"
-          class="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-8 py-3 rounded-xl shadow-md transition"
-        >
-          Guardar Grupo
-        </button>
-      </div>
-    </form>
-
-    <!-- Mensajes -->
-    <p v-if="mensaje" class="mt-6 text-green-600 font-semibold text-center">{{ mensaje }}</p>
-    <p v-if="error" class="mt-6 text-red-600 font-semibold text-center">{{ error }}</p>
+    </div>
   </div>
 </template>
 
 <script setup>
 import { ref, onMounted } from "vue";
 import api from "@/api/axios";
+
+// Imports de PrimeVue
+import InputText from 'primevue/inputtext';
+import Textarea from 'primevue/textarea';
+import Button from 'primevue/button';
+import MultiSelect from 'primevue/multiselect';
+
 const grupo = ref({
   nombre: "",
   descripcion: "",
-  color: "#00936B"
+  color: "#3B82F6" // Un azul por defecto más bonito
 });
+
 const usuarios = ref([]);
-const miembrosSeleccionados = ref([]);
+const miembrosSeleccionados = ref([]); // MultiSelect guardará un array de IDs gracias a optionValue="id"
 const mensaje = ref("");
 const error = ref("");
+const loading = ref(false);
 
 // ✅ Cargar usuarios disponibles
 onMounted(async () => {
@@ -105,6 +140,7 @@ onMounted(async () => {
 async function crearGrupo() {
   mensaje.value = "";
   error.value = "";
+  loading.value = true;
 
   try {
     // 1️⃣ Crear grupo
@@ -112,17 +148,25 @@ async function crearGrupo() {
     const grupoId = resGrupo.data.id;
 
     // 2️⃣ Agregar miembros seleccionados
-    for (const usuarioId of miembrosSeleccionados.value) {
-      await api.post(`/grupos/${grupoId}/miembros`, { usuario_id: usuarioId }, { withCredentials: true });
+    // Nota: Si tu backend soportara recibir un array de IDs de una sola vez sería más eficiente,
+    // pero mantenemos tu lógica actual de bucle para no romper nada.
+    if (miembrosSeleccionados.value.length > 0) {
+        for (const usuarioId of miembrosSeleccionados.value) {
+            await api.post(`/grupos/${grupoId}/miembros`, { usuario_id: usuarioId }, { withCredentials: true });
+        }
     }
 
     mensaje.value = "✅ Grupo creado y miembros asignados correctamente";
-    grupo.value = { nombre: "", descripcion: "", color: "#00936B" };
+    
+    // Resetear formulario
+    grupo.value = { nombre: "", descripcion: "", color: "#3B82F6" };
     miembrosSeleccionados.value = [];
+    
   } catch (err) {
     console.error("Error creando grupo:", err);
-    error.value =
-      err.response?.data?.error || "Error al crear el grupo. Verifique los datos o permisos.";
+    error.value = err.response?.data?.error || "Error al crear el grupo.";
+  } finally {
+    loading.value = false;
   }
 }
 </script>

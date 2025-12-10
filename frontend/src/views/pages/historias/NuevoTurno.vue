@@ -1,7 +1,7 @@
 <template>
   <div class="flex justify-center items-start p-8">
     <div class="bg-white shadow-xl rounded-2xl p-8 w-full max-w-2xl">
-      <h1 class="text-3xl font-bold text-center mb-8 text-blue-700">
+      <h1 class="text-3xl font-bold text-center mb-8 text-gray-800 dark:text-white">
         Nuevo Turno
       </h1>
 
@@ -126,12 +126,11 @@
 
         <!-- Botón -->
         <div class="flex justify-center">
-          <button
-            type="submit"
-            class="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-3 rounded-xl shadow-lg transition"
-          >
-            Guardar Turno
-          </button>
+          <Button 
+              type="submit" 
+              label="Guardar Turno" 
+              class="w-full md:w-auto px-6 py-3 font-semibold shadow-lg" 
+          />
         </div>
       </form>
 
@@ -150,6 +149,7 @@
 import { ref, onMounted } from 'vue'
 import { useUserStore } from '@/stores/user'
 import DatePicker from 'primevue/datepicker'
+import Button from 'primevue/button' 
 
 const userStore = useUserStore()
 const searchPaciente = ref('')

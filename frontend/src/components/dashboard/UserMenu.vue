@@ -1,78 +1,144 @@
 <script setup>
-import { useUserStore } from '@/stores/user';
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
 import { useRouter } from 'vue-router';
-import { ref, computed } from 'vue';
+import { useUserStore } from '@/stores/user';
 import { buildFotoURL } from '@/utils/fotoUrl.js';
 
-const userStore = useUserStore();
 const router = useRouter();
+const userStore = useUserStore();
 
-const abierto = ref(false);
+const menuActive = ref(false);
+const menuRef = ref(null);
+const imageError = ref(false); // Variable para saber si la imagen falló
 
-// URL completa de la foto con helper reutilizable
-const fotoURL = computed(() => buildFotoURL(userStore.foto));
+onMounted(async () => {
+    if (!userStore.id) {
+        await userStore.fetchUser();
+    }
+    document.addEventListener('click', onOutsideClick);
+});
 
-// 👉 Ir a la pantalla de perfil
+onBeforeUnmount(() => {
+    document.removeEventListener('click', onOutsideClick);
+});
+
+// URL de la foto (escuchando la versión para romper caché)
+const fotoUrl = computed(() => {
+    // Si hubo error de carga, devolvemos null para mostrar la inicial
+    if (imageError.value) return null;
+    
+    if (userStore.foto) {
+        return buildFotoURL(userStore.foto, userStore.fotoVersion);
+    }
+    return null;
+});
+
+// Inicial del nombre
+const inicial = computed(() => 
+    userStore.nombre ? userStore.nombre.charAt(0).toUpperCase() : 'U'
+);
+
+// Resetear el error si cambia la versión de la foto (nueva subida)
+userStore.$subscribe((mutation, state) => {
+    if (mutation.events.key === 'fotoVersion') {
+        imageError.value = false;
+    }
+});
+
+// --- ACCIONES ---
+const toggleMenu = () => { menuActive.value = !menuActive.value; };
+const closeMenu = () => { menuActive.value = false; };
+
+const onOutsideClick = (event) => {
+    if (menuRef.value && !menuRef.value.contains(event.target)) {
+        closeMenu();
+    }
+};
+
 const irPerfil = () => {
-  router.push('/mi-perfil');
-  abierto.value = false;
+    closeMenu();
+    router.push('/mi-perfil');
 };
 
-// 👉 Ir a cambiar contraseña
 const irPassword = () => {
-  router.push('/cambiar-password');
-  abierto.value = false;
+    closeMenu();
+    router.push('/cambiar-password');
 };
 
-// 👉 Logout: usamos la ruta /logout que ya tienes definida
-const logout = () => {
-  abierto.value = false;     // cerramos el menú para evitar el error de outside click
-  router.push('/logout');    // aquí tu vista Logout se encarga de hacer /api/logout y redirigir
+const logout = async () => {
+    await userStore.logout();
+    router.push('/auth/login');
 };
 </script>
 
 <template>
-  <div class="relative">
+    <div class="relative" ref="menuRef">
+        
+        <button 
+            @click="toggleMenu"
+            class="flex items-center gap-3 p-1.5 rounded-lg hover:bg-gray-100 transition focus:outline-none focus:ring-2 focus:ring-blue-100 cursor-pointer border-none bg-transparent"
+        >
+            <div class="hidden md:flex flex-col items-end leading-tight text-right mr-1">
+                <span class="font-bold text-sm text-gray-700">{{ userStore.nombre || 'Usuario' }}</span>
+                <span class="text-[10px] uppercase tracking-wide text-gray-500 font-semibold">{{ userStore.rol }}</span>
+            </div>
 
-    <!-- Botón con foto o inicial -->
-    <button
-      class="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center overflow-hidden shadow cursor-pointer hover:ring-2 hover:ring-blue-400"
-      @click="abierto = !abierto"
-    >
-      <img
-        v-if="fotoURL"
-        :src="fotoURL"
-        class="w-full h-full object-cover"
-      />
-      <span v-else class="font-bold text-gray-700">
-        {{ userStore.nombre?.charAt(0)?.toUpperCase() }}
-      </span>
-    </button>
+            <div class="relative w-9 h-9">
+                <img 
+                    v-if="fotoUrl" 
+                    :src="fotoUrl" 
+                    alt="Perfil" 
+                    class="w-full h-full rounded-full object-cover border border-gray-300 shadow-sm"
+                    @error="imageError = true"
+                />
+                
+                <div 
+                    v-else 
+                    class="w-full h-full rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-sm shadow-sm select-none"
+                >
+                    {{ inicial }}
+                </div>
 
-    <!-- Menú flotante -->
-    <div
-      v-if="abierto"
-      class="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg border p-3 z-50"
-    >
-      <div class="pb-3 mb-3 border-b">
-        <div class="font-semibold">{{ userStore.nombre }}</div>
-        <div class="text-xs text-gray-500">{{ userStore.email }}</div>
-        <span class="text-xs font-medium bg-blue-100 text-blue-700 px-2 py-1 rounded mt-1 inline-block">
-          {{ userStore.rol }}
-        </span>
-      </div>
+                <span class="absolute bottom-0 right-0 block h-2.5 w-2.5 rounded-full bg-green-500 ring-2 ring-white"></span>
+            </div>
+        </button>
 
-      <button class="w-full text-left px-2 py-2 rounded hover:bg-gray-100" @click="irPerfil">
-        👤 Mi Perfil
-      </button>
+        <transition 
+            enter-active-class="transition ease-out duration-100" 
+            enter-from-class="transform opacity-0 scale-95" 
+            enter-to-class="transform opacity-100 scale-100" 
+            leave-active-class="transition ease-in duration-75" 
+            leave-from-class="transform opacity-100 scale-100" 
+            leave-to-class="transform opacity-0 scale-95"
+        >
+            <div 
+                v-if="menuActive" 
+                class="absolute right-0 mt-2 w-64 origin-top-right bg-white rounded-xl shadow-xl ring-1 ring-black ring-opacity-5 z-50 overflow-hidden"
+            >
+                <div class="px-4 py-3 border-b border-gray-100 md:hidden bg-gray-50">
+                    <p class="text-sm font-medium text-gray-900">{{ userStore.nombre }}</p>
+                    <p class="text-xs text-gray-500 truncate">{{ userStore.email }}</p>
+                </div>
 
-      <button class="w-full text-left px-2 py-2 rounded hover:bg-gray-100" @click="irPassword">
-        🔐 Cambiar contraseña
-      </button>
+                <div class="py-1">
+                    <button @click="irPerfil" class="flex w-full items-center px-4 py-2.5 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 transition text-left">
+                        <i class="pi pi-user mr-3 text-blue-500"></i>
+                        Mi Perfil
+                    </button>
 
-      <button class="w-full text-left px-2 py-2 rounded hover:bg-red-100 text-red-600" @click="logout">
-        🚪 Cerrar sesión
-      </button>
+                    <button @click="irPassword" class="flex w-full items-center px-4 py-2.5 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 transition text-left">
+                        <i class="pi pi-key mr-3 text-gray-400"></i>
+                        Cambiar contraseña
+                    </button>
+                    
+                    <div class="border-t border-gray-100 my-1"></div>
+
+                    <button @click="logout" class="flex w-full items-center px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 hover:text-red-700 transition text-left">
+                        <i class="pi pi-sign-out mr-3"></i>
+                        Cerrar Sesión
+                    </button>
+                </div>
+            </div>
+        </transition>
     </div>
-  </div>
 </template>

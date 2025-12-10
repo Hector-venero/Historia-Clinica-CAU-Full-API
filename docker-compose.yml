@@ -12,7 +12,7 @@ services:
       - "5000:5000"   # en producción podés comentar este puerto si no querés acceso directo
     volumes:
       - ./backend_flask/app:/app
-      - ./backend_flask/app/static:/app/static
+     # - ./backend_flask/app/static:/app/static
     depends_on:
       db:
         condition: service_healthy

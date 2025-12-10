@@ -1,118 +1,120 @@
 <template>
-  <div class="flex justify-center items-start p-8">
-    <div class="bg-white shadow-xl rounded-2xl p-8 w-full max-w-2xl">
-      <h1 class="text-3xl font-bold text-center mb-8 text-blue-700">
-        Crear usuario
-      </h1>
+  <div class="flex justify-center items-start p-6 md:p-8">
+    <div class="bg-white dark:bg-[#1e1e1e] shadow-xl rounded-2xl p-8 w-full max-w-2xl transition-colors">
+      
+      <div class="text-center mb-8">
+        <h1 class="text-3xl font-bold text-gray-800 dark:text-white mb-2">
+          Crear Usuario
+        </h1>
+        <p class="text-gray-500 dark:text-gray-400">
+          Registrar un nuevo miembro del personal
+        </p>
+      </div>
 
       <form @submit.prevent="onSubmit" class="space-y-6">
-        <!-- Nombre -->
-        <div>
-          <label class="block mb-2 font-semibold text-gray-700">Nombre completo</label>
-          <input
+        
+        <div class="flex flex-col gap-2">
+          <label class="font-semibold text-gray-700 dark:text-gray-200">
+            <i class="pi pi-id-card mr-1 text-primary"></i> Nombre completo
+          </label>
+          <InputText
             v-model.trim="form.nombre"
-            type="text"
-            class="w-full p-3 border rounded-xl shadow-sm focus:ring-2 focus:ring-blue-500"
             placeholder="Ej: Ana Pérez"
+            class="w-full"
             :disabled="loading"
-            required
           />
         </div>
 
-        <!-- Usuario -->
-        <div>
-          <label class="block mb-2 font-semibold text-gray-700">Usuario</label>
-          <input
-            v-model.trim="form.username"
-            type="text"
-            class="w-full p-3 border rounded-xl shadow-sm focus:ring-2 focus:ring-blue-500"
-            placeholder="Ej: aperez"
-            :disabled="loading"
-            required
-          />
-        </div>
-
-        <!-- Email -->
-        <div>
-          <label class="block mb-2 font-semibold text-gray-700">Email</label>
-          <input
-            v-model.trim="form.email"
-            type="email"
-            class="w-full p-3 border rounded-xl shadow-sm focus:ring-2 focus:ring-blue-500"
-            placeholder="ana@ejemplo.com"
-            :disabled="loading"
-            required
-          />
-        </div>
-
-        <!-- Contraseña -->
-        <div>
-          <label class="block mb-2 font-semibold text-gray-700">Contraseña</label>
-          <div class="flex gap-2">
-            <input
-              v-model="form.password"
-              :type="showPwd ? 'text' : 'password'"
-              class="w-full p-3 border rounded-xl shadow-sm focus:ring-2 focus:ring-blue-500"
-              placeholder="********"
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="flex flex-col gap-2">
+            <label class="font-semibold text-gray-700 dark:text-gray-200">
+              <i class="pi pi-user mr-1 text-primary"></i> Usuario
+            </label>
+            <InputText
+              v-model.trim="form.username"
+              placeholder="Ej: aperez"
+              class="w-full"
               :disabled="loading"
-              required
             />
-            <button
-              type="button"
-              class="px-4 py-2 border rounded-xl shadow-sm bg-gray-50 hover:bg-gray-100"
-              @click="showPwd = !showPwd"
+          </div>
+
+          <div class="flex flex-col gap-2">
+            <label class="font-semibold text-gray-700 dark:text-gray-200">
+              <i class="pi pi-envelope mr-1 text-primary"></i> Email
+            </label>
+            <InputText
+              v-model.trim="form.email"
+              type="email"
+              placeholder="ana@ejemplo.com"
+              class="w-full"
               :disabled="loading"
-            >
-              {{ showPwd ? 'Ocultar' : 'Ver' }}
-            </button>
+            />
           </div>
         </div>
 
-        <!-- Rol -->
-        <div>
-          <label class="block mb-2 font-semibold text-gray-700">Rol</label>
-          <select
-            v-model="form.rol"
-            class="w-full p-3 border rounded-xl shadow-sm focus:ring-2 focus:ring-blue-500"
+        <div class="flex flex-col gap-2">
+          <label class="font-semibold text-gray-700 dark:text-gray-200">
+            <i class="pi pi-lock mr-1 text-primary"></i> Contraseña
+          </label>
+          <Password
+            v-model="form.password"
+            :feedback="false"
+            toggleMask
+            placeholder="********"
+            class="w-full"
+            inputClass="w-full"
             :disabled="loading"
-            required
-          >
-            <option value="" disabled>Seleccioná un rol…</option>
-            <option v-for="r in ROLES" :key="r" :value="r">{{ r }}</option>
-          </select>
+          />
+          <small class="text-gray-500 dark:text-gray-400">
+            Mínimo 8 caracteres, mayúscula, minúscula y número.
+          </small>
         </div>
 
-        <!-- Especialidad SOLO si es profesional -->
-        <div v-if="form.rol === 'profesional'">
-          <label class="block mb-2 font-semibold text-gray-700">Especialidad</label>
-          <input
-            v-model.trim="form.especialidad"
-            type="text"
-            class="w-full p-3 border rounded-xl shadow-sm focus:ring-2 focus:ring-blue-500"
-            placeholder="Ej: Cardiología"
+        <div class="flex flex-col gap-2">
+          <label class="font-semibold text-gray-700 dark:text-gray-200">
+            <i class="pi pi-briefcase mr-1 text-primary"></i> Rol
+          </label>
+          <Select
+            v-model="form.rol"
+            :options="ROLES"
+            placeholder="Seleccioná un rol"
+            class="w-full"
             :disabled="loading"
-            required
           />
         </div>
 
-        <!-- Mensajes -->
-        <div v-if="error" class="bg-red-50 border border-red-200 text-red-700 p-3 rounded-lg text-sm">
-          {{ error }}
+        <transition name="fade">
+          <div v-if="form.rol === 'profesional'" class="flex flex-col gap-2 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-xl border border-blue-100 dark:border-blue-800">
+            <label class="font-semibold text-gray-700 dark:text-gray-200">
+              <i class="pi pi-heart mr-1 text-primary"></i> Especialidad
+            </label>
+            <InputText
+              v-model.trim="form.especialidad"
+              placeholder="Ej: Cardiología, Pediatría..."
+              class="w-full"
+              :disabled="loading"
+            />
+          </div>
+        </transition>
+
+        <div v-if="error" class="p-3 rounded-lg bg-red-100 text-red-700 text-center font-medium border border-red-200">
+          <i class="pi pi-times-circle mr-2"></i> {{ error }}
         </div>
-        <div v-if="ok" class="bg-green-50 border border-green-200 text-green-700 p-3 rounded-lg text-sm">
-          {{ ok }}
+        
+        <div v-if="ok" class="p-3 rounded-lg bg-green-100 text-green-700 text-center font-medium border border-green-200">
+          <i class="pi pi-check-circle mr-2"></i> {{ ok }}
         </div>
 
-        <!-- Botón -->
         <div class="flex justify-center pt-4">
-          <button
-            type="submit"
-            class="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-3 rounded-xl shadow-lg transition disabled:opacity-60"
-            :disabled="loading"
-          >
-            {{ loading ? 'Creando…' : 'Crear usuario' }}
-          </button>
+          <Button 
+            type="submit" 
+            label="Crear Usuario" 
+            icon="pi pi-user-plus" 
+            class="w-full md:w-auto px-8 py-3 font-bold shadow-lg" 
+            :loading="loading"
+          />
         </div>
+
       </form>
     </div>
   </div>
@@ -122,6 +124,12 @@
 import { reactive, ref } from 'vue'
 import usuarioService from '@/service/usuarioService'
 import { validarPasswordFuerte, validarEmail } from '@/utils/validators'
+
+// Imports de PrimeVue
+import InputText from 'primevue/inputtext'
+import Password from 'primevue/password'
+import Select from 'primevue/select'
+import Button from 'primevue/button'
 
 const form = reactive({
   nombre: '',
@@ -134,7 +142,6 @@ const form = reactive({
 
 const ROLES = ['director', 'profesional', 'administrativo']
 
-const showPwd = ref(false)
 const loading = ref(false)
 const error = ref('')
 const ok = ref('')
@@ -143,7 +150,7 @@ function validate() {
   if (!form.nombre || !form.username || !form.email || !form.password || !form.rol) {
     return 'Todos los campos son obligatorios'
   }
-  const emailRx = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+  
   if (!validarEmail(form.email)) {
     return 'Email inválido';
   }
@@ -154,15 +161,18 @@ function validate() {
   if (!ROLES.includes(form.rol)) {
     return 'Rol inválido'
   }
+  
   if (form.rol === 'profesional' && !form.especialidad) {
     return 'La especialidad es obligatoria para profesionales'
   }
+  
   return ''
 }
 
 async function onSubmit() {
   error.value = ''
   ok.value = ''
+  
   const v = validate()
   if (v) {
     error.value = v
@@ -172,9 +182,16 @@ async function onSubmit() {
   loading.value = true
   try {
     const resp = await usuarioService.createUsuario(form)
-    ok.value = resp.data?.message || 'Usuario creado ✅'
+    ok.value = resp.data?.message || 'Usuario creado correctamente ✅'
+    
+    // Limpiar campos sensibles
+    form.nombre = ''
+    form.username = ''
+    form.email = ''
     form.password = ''
+    form.rol = ''
     form.especialidad = ''
+    
   } catch (e) {
     error.value = e.response?.data?.error || e.message || 'Error al crear usuario'
   } finally {
@@ -182,3 +199,16 @@ async function onSubmit() {
   }
 }
 </script>
+
+<style scoped>
+/* Animación suave para cuando aparece el campo especialidad */
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+  transform: translateY(-10px);
+}
+</style>

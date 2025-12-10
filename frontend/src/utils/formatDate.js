@@ -112,3 +112,18 @@ export function fechaRangoBonito(inicio, fin) {
   // Si los días son distintos → mostrar fechas completas
   return `${dia}/${mes}/${año} ${h1}:${m1} – ${d2.toLocaleDateString("es-AR")} ${h2}:${m2}`;
 }
+
+export function horaExacta(fecha) {
+  if (!fecha) return "-";
+
+  const d = new Date(fecha);
+  if (isNaN(d.getTime())) return "-";
+
+  // ✔ Ajuste Argentina: sumar 3 horas
+  d.setHours(d.getHours() + 3);
+
+  const h = String(d.getHours()).padStart(2, "0");
+  const m = String(d.getMinutes()).padStart(2, "0");
+
+  return `${h}:${m}`;
+}

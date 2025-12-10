@@ -1,17 +1,37 @@
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, reactive, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import api from "@/api/axios";
+import { useUserStore } from '@/stores/user'
+import { horaExacta, fechaRangoBonito } from '@/utils/formatDate';
+
+// Imports PrimeVue
 import Chart from 'primevue/chart'
-import { useUserStore } from '../stores/user'
-import { reactive, watch } from 'vue'
-import { fechaBonitaDashboard, fechaBonitaCompleta, fechaRangoBonito } from '@/utils/formatDate'
-
+import DataTable from 'primevue/datatable'
+import Column from 'primevue/column'
+import Button from 'primevue/button'
+import Accordion from 'primevue/accordion'
+import AccordionTab from 'primevue/accordiontab'
+import Tag from 'primevue/tag'
+import Avatar from 'primevue/avatar'
 
 // ===============================
-//  Usuario actual
+//  Configuración
 // ===============================
+const router = useRouter()
 const user = useUserStore()
 const esDirector = computed(() => user.rol?.toLowerCase().trim() === 'director')
+
+// ===============================
+//  Saludo Dinámico 🌤️
+// ===============================
+const saludo = computed(() => {
+  const hora = new Date().getHours()
+  if (hora < 12) return 'Buenos días'
+  if (hora < 19) return 'Buenas tardes'
+  return 'Buenas noches'
+})
+
 // ===============================
 //  Variables reactivas
 // ===============================
@@ -19,17 +39,30 @@ const loading = ref(true)
 const error = ref(null)
 const dashboard = ref(null)
 const disponibilidades = ref([])
+const profesionalesAgrupados = reactive([])
 
-//  Datos del gráfico (solo turnos)
-const chartData = ref({ labels: [], datasets: [] })
-const chartOptions = ref({})
+// Gráficos
+const chartData = ref(null)
+const chartOptions = ref(null)
 
 // ===============================
-//  Cargar datos del backend
+//  Acciones
+// ===============================
+const atenderPaciente = (turno) => {
+  if (turno.paciente_id) {
+    router.push({ name: 'historiaPaciente', params: { id: turno.paciente_id } });
+  } else {
+    console.warn("El turno no tiene ID de paciente asociado.");
+  }
+}
+
+// ===============================
+//  Cargar Datos
 // ===============================
 const fetchDashboard = async () => {
   try {
     loading.value = true
+    
     const [resDashboard, resSemanal, resDisponibilidad] = await Promise.all([
       api.get('/dashboard', { withCredentials: true }),
       api.get('/dashboard/semanal', { withCredentials: true }),
@@ -37,283 +70,305 @@ const fetchDashboard = async () => {
     ])
 
     dashboard.value = resDashboard.data
-
-    // 🔹 Si es director → ver todas las disponibilidades
-    // 🔹 Si es profesional → ver solo las propias (backend ya filtra)
     disponibilidades.value = resDisponibilidad.data
 
-    //  Configurar gráfico de turnos
+    // --- Configurar Gráfico ---
     const { labels, turnos } = resSemanal.data
-    const colores = turnos.map(v => (v > 5 ? '#00936B' : '#3DB5E6'))
+    // Usamos el color primary de tu tema o un verde/azul estándar
+    const colores = turnos.map(v => (v > 5 ? '#10B981' : '#3B82F6'))
 
     chartData.value = {
       labels,
-      datasets: [
-        {
-          label: 'Turnos programados',
-          data: turnos,
-          backgroundColor: colores,
-          borderRadius: 8,
-          hoverBackgroundColor: '#0073A7',
-          borderWidth: 0
-        }
-      ]
+      datasets: [{
+        label: 'Turnos',
+        data: turnos,
+        backgroundColor: colores,
+        borderRadius: 6,
+        barThickness: 20,
+      }]
     }
 
     chartOptions.value = {
       responsive: true,
-      animation: { duration: 1000, easing: 'easeOutQuart' },
+      maintainAspectRatio: false,
       plugins: {
-        legend: {
-          position: 'bottom',
-          labels: { color: '#374151', font: { size: 13 } }
-        },
-        tooltip: {
-          backgroundColor: '#111827',
-          titleFont: { size: 14, weight: 'bold' },
-          bodyFont: { size: 13 },
-          callbacks: { label: (context) => `Turnos: ${context.parsed.y}` }
-        },
-        title: {
-          display: true,
-          text: 'Turnos programados — próximos 7 días',
-          font: { size: 16, weight: 'bold' },
-          color: '#1E3A8A'
-        }
+        legend: { display: false },
+        title: { display: false }
       },
       scales: {
-        x: {
-          title: { display: true, text: 'Día', color: '#374151', font: { weight: 'bold' } },
-          ticks: { color: '#6B7280' },
-          grid: { display: false }
+        x: { 
+          ticks: { color: '#9CA3AF', font: { size: 11 } }, 
+          grid: { display: false } 
         },
-        y: {
-          title: { display: true, text: 'Cantidad de turnos', color: '#374151', font: { weight: 'bold' } },
-          beginAtZero: true,
-          ticks: { stepSize: 1, color: '#6B7280' },
-          grid: { color: '#E5E7EB' }
+        y: { 
+          ticks: { stepSize: 1, color: '#9CA3AF' }, 
+          beginAtZero: true, 
+          grid: { color: '#F3F4F6' },
+          border: { display: false }
         }
-      }
+      },
+      layout: { padding: 0 }
     }
+
   } catch (err) {
-    console.error('Error cargando dashboard:', err)
-    error.value = 'Error al cargar el panel.'
+    console.error('Error dashboard:', err)
+    error.value = 'No se pudo cargar el panel de control.'
   } finally {
     loading.value = false
   }
 }
 
-// 🔹 Agrupar disponibilidades por profesional
-const profesionalesAgrupados = reactive([])
-
-// Cada vez que cambia la lista de disponibilidades, reconstruimos el agrupado
+// --- Agrupar Disponibilidades (Solo Director) ---
 watch(disponibilidades, (nuevas) => {
   profesionalesAgrupados.length = 0
   const mapa = {}
-
   for (const d of nuevas) {
     if (!mapa[d.profesional]) {
-      mapa[d.profesional] = { nombre: d.profesional, disponibilidades: [], mostrar: false }
+      mapa[d.profesional] = { nombre: d.profesional, disponibilidades: [] }
     }
     mapa[d.profesional].disponibilidades.push(d)
   }
-
-  for (const key in mapa) {
-    profesionalesAgrupados.push(mapa[key])
-  }
+  for (const key in mapa) profesionalesAgrupados.push(mapa[key])
 }, { immediate: true })
 
-//  Inicialización
 onMounted(fetchDashboard)
 </script>
 
 <template>
-  <div class="p-4">
-    <h1 class="text-3xl font-semibold mb-6 text-[#003B70]">Panel de Control</h1>
+  <div class="p-6 md:p-8 w-full transition-colors">
+    
+    <div class="mb-8">
+      <h1 class="text-3xl font-bold text-gray-800 dark:text-white flex items-center gap-2">
+        <span v-if="user.nombre">{{ saludo }}, {{ user.nombre.split(' ')[0] }}</span>
+        <span v-else>Panel de Control</span>
+        <span class="text-3xl">👋</span>
+      </h1>
+      <p class="text-gray-500 dark:text-gray-400 text-base mt-1">
+        Este es el resumen de tu actividad para hoy.
+      </p>
+    </div>
 
-    <div v-if="loading" class="text-gray-500">Cargando información...</div>
-    <div v-if="error" class="text-red-500">{{ error }}</div>
+    <div v-if="loading" class="flex flex-col items-center justify-center py-20 text-gray-400">
+      <i class="pi pi-spin pi-spinner text-4xl mb-3"></i>
+      <p>Cargando información...</p>
+    </div>
+    
+    <div v-else-if="error" class="bg-red-50 border border-red-200 text-red-700 p-4 rounded-xl flex items-center gap-3">
+      <i class="pi pi-exclamation-triangle text-xl"></i>
+      <span>{{ error }}</span>
+    </div>
 
-    <div v-if="dashboard && !loading" class="grid grid-cols-12 gap-6">
-      <!-- TARJETAS -->
+    <div v-else class="grid grid-cols-12 gap-6">
+      
       <div
-        class="col-span-12 sm:col-span-6 lg:col-span-3 transition-all duration-300 hover:scale-[1.02]"
+        class="col-span-12 sm:col-span-6 xl:col-span-3 transition-transform hover:-translate-y-1 duration-300"
         v-for="(value, key) in dashboard.estadisticas"
         :key="key"
       >
-        <div class="card shadow-md border border-gray-100 bg-white rounded-xl p-4">
-          <div class="flex justify-between mb-3">
+        <div class="bg-white dark:bg-[#1e1e1e] shadow-lg rounded-2xl p-5 h-full flex flex-col justify-between relative overflow-hidden group">
+          <div class="absolute right-[-10px] top-[-10px] bg-blue-50 dark:bg-blue-900/10 w-24 h-24 rounded-full transition-transform group-hover:scale-110"></div>
+          
+          <div class="relative z-10 flex justify-between items-start">
             <div>
-              <span class="block text-gray-500 capitalize text-sm">{{ key }}</span>
-              <div class="text-2xl font-semibold text-[#00936B]">{{ value }}</div>
+              <span class="block text-gray-500 dark:text-gray-400 capitalize text-sm font-medium mb-1">
+                {{ key.replace('_', ' ') }}
+              </span>
+              <div class="text-4xl font-bold text-gray-800 dark:text-white">{{ value }}</div>
             </div>
-            <div class="flex items-center justify-center bg-[#E0F7FA] rounded-full w-10 h-10">
-              <i class="pi pi-chart-bar text-[#0073A7] text-lg"></i>
+            
+            <div class="bg-white dark:bg-[#2a2a2a] p-2 rounded-xl shadow-sm">
+              <i class="pi pi-chart-bar text-blue-500 text-xl"></i>
             </div>
           </div>
         </div>
       </div>
 
-      <!-- TURNOS DEL DÍA -->
       <div class="col-span-12 lg:col-span-6">
-        <div class="card shadow-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-xl p-5 transition">
-          <h2 class="text-xl font-semibold mb-4 text-[#003B70]">📅 Turnos de Hoy</h2>
-          <p v-if="dashboard.turnos.length === 0" class="text-gray-500">No hay turnos programados para hoy.</p>
-          <DataTable
-            v-else
-            :value="dashboard.turnos"
-            paginator
-            :rows="5"
-            responsiveLayout="scroll"
-            class="p-datatable-sm dark:bg-gray-800 dark:text-gray-200 rounded-xl"
-          >
-            <Column field="fecha" header="Fecha/Hora" :body="(r) => fechaBonitaDashboard(r.fecha)" />
-            <Column field="paciente" header="Paciente" />
-            <Column field="profesional" header="Profesional" />
-            <Column field="motivo" header="Motivo" />
-          </DataTable>
-        </div>
-      </div>
-
-      <!-- PRÓXIMO TURNO 
-      <div class="col-span-12 lg:col-span-6">
-        <div class="card shadow-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-xl p-5 transition">
-          <h2 class="text-xl font-semibold mb-4 text-[#003B70]">🕒 Próximo Turno</h2>
-          <div v-if="dashboard.proximo_turno" class="space-y-2 text-gray-700">
-            <p><strong>Paciente:</strong> {{ dashboard.proximo_turno.paciente }} {{ dashboard.proximo_turno.apellido }}</p>
-            <p><strong>Fecha:</strong> {{ new Date(dashboard.proximo_turno.fecha).toLocaleString() }}</p>
-            <p><strong>Motivo:</strong> {{ dashboard.proximo_turno.motivo }}</p>
+        <div class="bg-white dark:bg-[#1e1e1e] shadow-lg rounded-2xl p-6 h-full flex flex-col">
+          <div class="flex items-center justify-between mb-4">
+            <h2 class="text-xl font-bold text-gray-800 dark:text-white flex items-center gap-2">
+              <i class="pi pi-calendar text-blue-500"></i> Turnos de Hoy
+            </h2>
+            <Tag :value="dashboard.turnos.length + ' pendientes'" severity="info" rounded></Tag>
           </div>
-          <p v-else class="text-gray-500">No hay próximos turnos.</p>
-        </div>
-      </div>
--->
-
-      <!-- PRÓXIMO TURNO -->
-      <div class="col-span-12 lg:col-span-6">
-        <div class="card shadow-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-xl p-5 transition">
-          <h2 class="text-xl font-semibold mb-4 text-[#003B70] dark:text-white">🕒 Próximo Turno</h2>
-
-          <div v-if="dashboard.proximo_turno" class="space-y-2 text-gray-700 dark:text-gray-200">
-            <p><strong>Paciente:</strong> {{ dashboard.proximo_turno.paciente }} {{ dashboard.proximo_turno.apellido }}</p>
-            <p><strong>Fecha:</strong>{{ fechaRangoBonito(dashboard.proximo_turno.fecha_inicio, dashboard.proximo_turno.fecha_fin) }}</p>
-            <p><strong>Motivo:</strong> {{ dashboard.proximo_turno.motivo }}</p>
+          
+          <div v-if="dashboard.turnos.length === 0" class="flex flex-col items-center justify-center py-10 text-gray-400 flex-1">
+            <i class="pi pi-calendar-times text-4xl mb-2 opacity-50"></i>
+            <p>No hay turnos programados.</p>
           </div>
-
-          <p v-else class="text-gray-500 dark:text-gray-400">
-            No hay próximos turnos.
-          </p>
-        </div>
-      </div>
-
-      <!-- GRÁFICO -->
-      <div class="col-span-12 lg:col-span-8">
-        <div class="card shadow-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-xl p-5 transition">
-          <h2 class="text-xl font-semibold mb-4 text-[#003B70]">📈 Turnos programados (próximos 7 días)</h2>
-          <Chart
-            v-if="chartData && chartData.labels.length > 0"
-            type="bar"
-            :data="chartData"
-            :options="chartOptions"
-            class="h-80"
-          />
-          <p v-else class="text-gray-500">Sin datos disponibles para el gráfico.</p>
-        </div>
-      </div>
-
-      <!-- DISPONIBILIDAD -->
-      <div class="col-span-12 lg:col-span-4">
-        <div class="card shadow-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-xl p-5 transition">
-          <h2 class="text-xl font-semibold mb-4 text-[#003B70] flex items-center gap-2">🩺 Disponibilidad</h2>
-
-          <!-- 👨‍⚕️ PROFESIONAL -->
-          <template v-if="!esDirector">
-            <div v-if="disponibilidades.length > 0" class="space-y-2">
-              <div
-                v-for="(d, i) in disponibilidades"
-                :key="i"
-                class="flex justify-between text-gray-700 border-b border-gray-100 pb-1"
-              >
-                <span class="font-medium">{{ d.dia_semana }}</span>
-                <span
-                  :class="[
-                    'text-sm',
-                    d.activo ? 'text-gray-600' : 'text-red-500 font-semibold'
-                  ]"
-                >
-                  {{ d.activo ? `${d.hora_inicio} – ${d.hora_fin}` : 'No disponible' }}
-                </span>
-              </div>
-            </div>
-            <p v-else class="text-gray-500 italic">No hay disponibilidades cargadas.</p>
-
-            <div class="mt-4 text-right">
-              <router-link
-                to="/disponibilidad"
-                class="text-blue-600 hover:text-blue-800 text-sm font-medium transition"
-              >
-                🔧 Editar disponibilidad
-              </router-link>
-            </div>
-          </template>
-
-        <!-- 🧑‍💼 DIRECTOR: vista agrupada -->
-        <template v-else>
-          <div v-if="disponibilidades.length > 0" class="space-y-4 overflow-y-auto max-h-96">
-            <div
-              v-for="(prof, index) in profesionalesAgrupados"
-              :key="index"
-              class="border rounded-lg shadow-sm bg-white"
+          
+          <div v-else class="overflow-x-auto">
+            <DataTable
+              :value="dashboard.turnos"
+              paginator
+              :rows="3"
+              class="p-datatable-sm"
+              responsiveLayout="scroll"
+              :pt="{
+                headerRow: { class: 'text-sm text-gray-600' },
+                bodyRow: { class: 'text-sm' }
+              }"
             >
-              <!-- Encabezado -->
-              <div
-                @click="prof.mostrar = !prof.mostrar"
-                class="flex justify-between items-center cursor-pointer bg-blue-50 hover:bg-blue-100 px-4 py-3 rounded-t-lg transition-all"
-              >
-                <h3 class="font-semibold text-gray-800 text-lg">{{ prof.nombre }}</h3>
-                <i
-                  :class="[
-                    'pi',
-                    prof.mostrar ? 'pi-chevron-up' : 'pi-chevron-down',
-                    'text-blue-700'
-                  ]"
-                ></i>
-              </div>
+              <Column field="fecha_inicio" header="Hora">
+                <template #body="slotProps">
+                  <span class="font-bold text-gray-700 dark:text-gray-200">
+                    {{ horaExacta(slotProps.data.fecha_inicio) }}
+                  </span>
+                </template>
+              </Column>
+              
+              <Column field="paciente" header="Paciente" class="font-medium text-gray-600 dark:text-gray-300"></Column>
+              <Column field="motivo" header="Motivo" class="hidden sm:table-cell text-gray-500"></Column>
 
-              <!-- Detalle expandible -->
-              <div v-if="prof.mostrar" class="p-4 border-t">
-                <table class="w-full text-sm border-collapse">
-                  <thead>
-                    <tr class="bg-blue-50 text-gray-700">
-                      <th class="px-2 py-1 text-left">Día</th>
-                      <th class="px-2 py-1 text-center">Horario</th>
-                      <th class="px-2 py-1 text-center">Estado</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr
-                      v-for="(d, i) in prof.disponibilidades"
-                      :key="i"
-                      :class="['hover:bg-gray-50 transition-all', !d.activo ? 'bg-red-50 text-red-600' : '']"
-                    >
-                      <td class="px-2 py-1">{{ d.dia_semana }}</td>
-                      <td class="px-2 py-1 text-center">{{ d.hora_inicio }} – {{ d.hora_fin }}</td>
-                      <td class="px-2 py-1 text-center font-semibold">
-                        <span :class="d.activo ? 'text-green-600' : 'text-red-500'">
-                          {{ d.activo ? 'Activo' : 'Inactivo' }}
-                        </span>
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
+              <Column header="Acción" headerClass="text-right" bodyClass="text-right">
+                <template #body="slotProps">
+                  <Button 
+                    icon="pi pi-play" 
+                    rounded 
+                    outlined
+                    size="small"
+                    severity="success"
+                    v-tooltip.top="'Atender ahora'"
+                    @click="atenderPaciente(slotProps.data)"
+                  />
+                </template>
+              </Column>
+            </DataTable>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-span-12 lg:col-span-6">
+        <div class="bg-white dark:bg-[#1e1e1e] shadow-lg rounded-2xl p-6 h-full flex flex-col">
+          <h2 class="text-xl font-bold text-gray-800 dark:text-white mb-4 flex items-center gap-2">
+            <i class="pi pi-clock text-blue-500"></i> Próximo Turno
+          </h2>
+
+          <div v-if="dashboard.proximo_turno" class="flex-1 flex flex-col justify-center">
+            <div class="p-6 bg-gray-50 dark:bg-[#252525] rounded-2xl border border-gray-100 dark:border-gray-700">
+              <div class="flex items-start gap-4">
+                <Avatar :label="dashboard.proximo_turno.paciente.charAt(0)" size="large" shape="circle" class="bg-blue-500 text-white" />
+                <div>
+                  <h3 class="text-lg font-bold text-gray-800 dark:text-white">
+                    {{ dashboard.proximo_turno.paciente }} {{ dashboard.proximo_turno.apellido }}
+                  </h3>
+                  <div class="mt-1 flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 font-medium">
+                    <i class="pi pi-calendar"></i>
+                    {{ fechaRangoBonito(dashboard.proximo_turno.fecha_inicio, dashboard.proximo_turno.fecha_fin) }}
+                  </div>
+                </div>
+              </div>
+              
+              <div class="mt-5 pt-4 border-t border-gray-200 dark:border-gray-600">
+                <p class="text-xs text-gray-400 uppercase font-bold tracking-wider mb-1">Motivo de consulta</p>
+                <p class="text-gray-700 dark:text-gray-300 italic">
+                  "{{ dashboard.proximo_turno.motivo }}"
+                </p>
+              </div>
+              
+              <div class="mt-6 flex justify-end">
+                 <Button 
+                    label="Iniciar Consulta" 
+                    icon="pi pi-arrow-right" 
+                    iconPos="right" 
+                    rounded
+                    @click="atenderPaciente(dashboard.proximo_turno)"
+                 />
               </div>
             </div>
           </div>
-
-          <p v-else class="text-gray-500 italic">No hay disponibilidades cargadas.</p>
-        </template>
+          
+          <div v-else class="flex flex-col items-center justify-center py-10 text-gray-400 flex-1">
+            <i class="pi pi-check-circle text-4xl mb-2 opacity-50"></i>
+            <p>Todo al día. No hay próximos turnos.</p>
+          </div>
         </div>
       </div>
+
+      <div class="col-span-12 lg:col-span-8">
+        <div class="bg-white dark:bg-[#1e1e1e] shadow-lg rounded-2xl p-6 h-full border-l-4 border-blue-500">
+          <div class="flex justify-between items-center mb-4">
+            <h2 class="text-xl font-bold text-gray-800 dark:text-white">
+              Estadística Semanal
+            </h2>
+            <small class="text-gray-400">Últimos 7 días</small>
+          </div>
+          <div class="h-[250px] w-full relative"> 
+            <Chart type="bar" :data="chartData" :options="chartOptions" class="h-full w-full" />
+          </div>
+        </div>
+      </div>
+
+      <div class="col-span-12 lg:col-span-4">
+        <div class="bg-white dark:bg-[#1e1e1e] shadow-lg rounded-2xl p-6 h-full flex flex-col max-h-[380px]">
+          <h2 class="text-xl font-bold text-gray-800 dark:text-white mb-4 flex items-center gap-2">
+            <i class="pi pi-briefcase text-blue-500"></i> Disponibilidad
+          </h2>
+
+          <div class="overflow-y-auto pr-2 custom-scrollbar flex-1">
+            
+            <template v-if="esDirector">
+              <Accordion :multiple="true" class="w-full shadow-none">
+                <AccordionTab v-for="(prof, index) in profesionalesAgrupados" :key="index" :header="prof.nombre">
+                  <ul class="space-y-2">
+                    <li v-for="(d, i) in prof.disponibilidades" :key="i" class="flex justify-between text-sm border-b dark:border-gray-700 pb-1 last:border-0">
+                      <span class="text-gray-600 dark:text-gray-400">{{ d.dia_semana }}</span>
+                      <span :class="d.activo ? 'text-green-600 font-bold' : 'text-red-400'">
+                        {{ d.activo ? 'Activo' : 'Inactivo' }}
+                      </span>
+                    </li>
+                  </ul>
+                </AccordionTab>
+              </Accordion>
+              <p v-if="profesionalesAgrupados.length === 0" class="text-gray-500 text-sm mt-2">Sin datos.</p>
+            </template>
+
+            <template v-else>
+              <ul v-if="disponibilidades.length > 0" class="space-y-3">
+                <li v-for="(d, i) in disponibilidades" :key="i" class="flex justify-between items-center p-3 bg-gray-50 dark:bg-[#2a2a2a] rounded-xl hover:bg-gray-100 dark:hover:bg-[#333] transition-colors">
+                  <div class="flex items-center gap-3">
+                    <div class="w-2 h-2 rounded-full" :class="d.activo ? 'bg-green-500' : 'bg-red-500'"></div>
+                    <span class="font-medium text-gray-700 dark:text-gray-200">{{ d.dia_semana }}</span>
+                  </div>
+                  
+                  <div class="flex items-center gap-3">
+                    <span v-if="d.activo" class="text-sm text-gray-500 dark:text-gray-400 font-mono">
+                      {{ d.hora_inicio }} - {{ d.hora_fin }}
+                    </span>
+                  </div>
+                </li>
+              </ul>
+              <p v-else class="text-gray-500 text-sm text-center py-4">No has cargado horarios.</p>
+              
+              <div class="mt-4 text-center">
+                <Button label="Editar Horarios" link size="small" @click="$router.push('/disponibilidad')" />
+              </div>
+            </template>
+
+          </div>
+        </div>
+      </div>
+
     </div>
   </div>
 </template>
+
+<style scoped>
+/* Scrollbar fino y elegante */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 4px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background-color: #e5e7eb;
+  border-radius: 10px;
+}
+.dark .custom-scrollbar::-webkit-scrollbar-thumb {
+  background-color: #4b5563;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: #d1d5db;
+}
+</style>

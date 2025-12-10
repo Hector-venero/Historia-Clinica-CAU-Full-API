@@ -14,6 +14,8 @@ DIAS_ORDENADOS = [
     "Lunes", "Martes", "Miercoles",
     "Jueves", "Viernes", "Sabado", "Domingo"
 ]
+orden_sql = ",".join([f"'{d}'" for d in DIAS_ORDENADOS])
+
 
 def normalizar_dia(dia):
     mapa = {
@@ -44,10 +46,10 @@ def listar_disponibilidades():
 
     if current_user.rol == 'profesional':
         cursor.execute(f"""
-            SELECT id, dia_semana, hora_inicio, hora_fin, activo
+            SELECT id, usuario_id, dia_semana, hora_inicio, hora_fin, activo
             FROM disponibilidades
             WHERE usuario_id = %s
-            ORDER BY FIELD(dia_semana, '{','.join(DIAS_ORDENADOS)}')
+            ORDER BY FIELD(dia_semana, {orden_sql})
         """, (current_user.id,))
     else:
         cursor.execute(f"""
@@ -55,7 +57,7 @@ def listar_disponibilidades():
                    d.dia_semana, d.hora_inicio, d.hora_fin, d.activo
             FROM disponibilidades d
             JOIN usuarios u ON d.usuario_id = u.id
-            ORDER BY u.nombre ASC, FIELD(d.dia_semana, '{','.join(DIAS_ORDENADOS)}')
+            ORDER BY u.nombre ASC, FIELD(d.dia_semana, {orden_sql})
         """)
 
     disponibilidades = cursor.fetchall()

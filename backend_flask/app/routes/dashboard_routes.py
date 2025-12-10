@@ -36,6 +36,7 @@ def get_dashboard():
             # Turnos del día (filtrados por fecha_inicio)
             cursor.execute("""
                 SELECT t.id, t.fecha_inicio, t.fecha_fin, t.motivo,
+                       p.id AS paciente_id,  -- 👈 AGREGADO AQUÍ
                        p.nombre AS paciente, p.apellido,
                        u.nombre AS profesional
                 FROM turnos t
@@ -53,6 +54,7 @@ def get_dashboard():
             # Próximo turno (fecha futura)
             cursor.execute("""
                 SELECT t.id, t.fecha_inicio, t.fecha_fin, t.motivo,
+                       p.id AS paciente_id, -- 👈 AGREGADO AQUÍ
                        p.nombre AS paciente, p.apellido
                 FROM turnos t
                 JOIN pacientes p ON p.id = t.paciente_id
@@ -103,6 +105,7 @@ def get_dashboard():
             # Listado de turnos del día
             cursor.execute("""
                 SELECT t.id, t.fecha_inicio, t.fecha_fin, t.motivo,
+                       p.id AS paciente_id, -- 👈 AGREGADO AQUÍ
                        p.nombre AS paciente, p.apellido,
                        u.nombre AS profesional
                 FROM turnos t

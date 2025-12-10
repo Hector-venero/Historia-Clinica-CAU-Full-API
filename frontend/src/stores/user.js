@@ -11,7 +11,10 @@ export const useUserStore = defineStore("user", {
     rol: "",
     email: "",
     duracion_turno: 20,
-    foto: null
+    foto: null,
+    
+    // 🆕 Agregamos esto para controlar el caché de la imagen
+    fotoVersion: Date.now() 
   }),
 
   actions: {
@@ -31,14 +34,22 @@ export const useUserStore = defineStore("user", {
 
     async fetchUser() {
       try {
-        const res = await usuarioService.getUsuario("me"); // o /user si es tu endpoint
+        const res = await usuarioService.getUsuario("me");
         this.setUser(res.data);
         return res.data;
       } catch (err) {
         console.error("❌ Error cargando usuario:", err);
-        this.logout();
+        // Evitamos logout automático si solo falló la carga por red momentánea, 
+        // pero si prefieres seguridad estricta, descomenta la línea de abajo:
+        // this.logout();
         throw err;
       }
+    },
+
+    // 🆕 Acción mágica: Llamar a esto cuando subimos o borramos foto
+    recargarImagen() {
+      this.fotoVersion = Date.now();
+      console.log("🔄 Forzando recarga de imagen...");
     },
 
     async actualizarDuracion(nuevaDuracion) {

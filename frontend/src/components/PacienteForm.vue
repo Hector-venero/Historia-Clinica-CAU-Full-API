@@ -163,13 +163,8 @@
       </div>
 
     <!--  <button type="submit" class="p-button p-component mt-6 bg-green-500 text-white">Registrar</button> -->
-      <button
-        type="submit"
-        class="mt-6 px-6 py-3 rounded-lg bg-green-600 text-white font-semibold shadow-md 
-              hover:bg-green-700 hover:shadow-lg transition-all active:scale-95"
-      >
-        Registrar Paciente
-      </button>
+
+      <Button type="submit" label="Registrar Paciente" class="mt-6 w-auto" />
 
     </form>
 
