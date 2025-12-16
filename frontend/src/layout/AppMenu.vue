@@ -1,10 +1,10 @@
 <script setup>
-import { computed } from 'vue'; // 1. Importar computed
+import { computed } from 'vue'; 
 import AppMenuItem from './AppMenuItem.vue';
 import authService from '@/service/authService';
 import { useRouter } from 'vue-router';
 import { useSession } from './composables/useSession';
-import { useUserStore } from '@/stores/user'; // 2. Importar el store de usuario
+import { useUserStore } from '@/stores/user'; 
 
 const router = useRouter();
 const { clearUser } = useSession();
@@ -78,7 +78,7 @@ const model = computed(() => {
       label: 'Agendas Grupales',
       items: [
         { label: 'Ver grupos', icon: 'pi pi-fw pi-users', to: '/grupos' },
-        { label: 'Crear grupo', icon: 'pi pi-plus', to: '/grupos/crear' }
+        { label: 'Crear grupo', icon: 'pi pi-plus', to: '/grupos/crear', visible: esDirector }
       ]
     },
     {

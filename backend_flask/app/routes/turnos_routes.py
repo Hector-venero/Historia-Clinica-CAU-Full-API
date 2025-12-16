@@ -165,18 +165,26 @@ def api_turnos():
                     msg = Message(
                         subject="Confirmación de turno médico",
                         recipients=[paciente["email"]],
-                        body=f"""
-Estimado {paciente['nombre']} {paciente['apellido']},
+                        body=f"""Estimado {paciente['nombre']} {paciente['apellido']},
 
-Su turno ha sido registrado correctamente.
+Le confirmamos que su turno ha sido agendado correctamente en el Centro Asistencial Universitario.
 
+DETALLES DEL TURNO:
+👨‍⚕️ Profesional: {profesional['nombre']}
 📅 Fecha: {fecha_legible}
 🕒 Hora: {hora_legible} hs
-👨‍⚕️ Profesional: {profesional['nombre']}
 📋 Motivo: {motivo}
 
-Muchas gracias,
-Centro Asistencial Universitario
+📍 UBICACIÓN: Campus Miguelete - UNSAM
+⚠️ IMPORTANTE: Por favor, asista con 10 minutos de anticipación y su DNI.
+
+CONTACTO:
+Ante cualquier consulta o para reprogramar, puede contactarnos:
+💬 WhatsApp: 11 3759-7667
+📞 Teléfono: 011 2033-1400 (Int. 6090)
+
+Saludos cordiales,
+Equipo CAU UNSAM
 """
                     )
                     mail.send(msg)
@@ -241,20 +249,23 @@ def eliminar_turno(id):
             msg = Message(
                 subject="Cancelación de turno médico",
                 recipients=[paciente["email"]],
-                body=f"""
-Estimado/a {paciente['nombre']} {paciente['apellido']},
+                body=f"""Estimado {paciente['nombre']} {paciente['apellido']},
 
-Le informamos que su turno programado ha sido CANCELADO.
+Le informamos que su turno ha sido CANCELADO.
 
+DATOS DEL TURNO CANCELADO:
+👨‍⚕️ Profesional: {turno['profesional']}
 📅 Fecha: {fecha_legible}
 🕒 Hora: {hora_legible} hs
-👨‍⚕️ Profesional: {turno['profesional']}
 
-Para más información, puede comunicarse con nosotros al:
-📞 011 2033-1400 (interno 6090)
+Si usted no solicitó esta cancelación o desea reprogramar un nuevo turno, por favor ingrese al sistema o comuníquese con nosotros.
 
-Muchas gracias,
-Centro Asistencial Universitario – UNSAM
+CANALES DE ATENCIÓN:
+💬 WhatsApp: 11 3759-7667
+📞 Teléfono: 011 2033-1400 (Int. 6090)
+
+Saludos cordiales,
+Equipo CAU UNSAM
 """
             )
             mail.send(msg)

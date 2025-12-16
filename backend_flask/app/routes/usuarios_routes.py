@@ -245,15 +245,33 @@ def api_listar_profesionales():
     especialidad = request.args.get('especialidad')
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
+
+    # Nota: Mantenemos el SELECT igual
+    base_query = """
+        SELECT id, nombre, username, especialidad, duracion_turno, rol 
+        FROM usuarios 
+        WHERE rol IN ('profesional', 'director') 
+        AND activo = 1
+    """
+
     if especialidad:
-        cursor.execute("SELECT id, nombre, username, especialidad FROM usuarios WHERE rol = 'profesional' AND UPPER(especialidad) = UPPER(%s) ORDER BY nombre", (especialidad,))
+        cursor.execute(base_query + " AND UPPER(especialidad) = UPPER(%s) ORDER BY nombre", (especialidad,))
     else:
-        cursor.execute("SELECT id, nombre, username, especialidad FROM usuarios WHERE rol = 'profesional' ORDER BY nombre")
+        cursor.execute(base_query + " ORDER BY nombre")
+    
     profesionales = cursor.fetchall()
-    cursor.close(); conn.close()
+    cursor.close()
+    conn.close()
+
+    # --- AQUÍ ESTÁ LA MAGIA ---
+    # Recorremos la lista antes de enviarla y "arreglamos" los datos visualmente
+    for p in profesionales:
+        if p['rol'] == 'director':
+            p['especialidad'] = 'DIRECTOR'  # <--- Forzamos este texto
+        elif p['especialidad'] is None:
+            p['especialidad'] = 'General'
+
     return jsonify(profesionales)
-
-
 @bp_usuarios.route("/api/usuarios/<int:usuario_id>/duracion", methods=["PATCH"])
 @login_required
 def actualizar_duracion_turno(usuario_id):

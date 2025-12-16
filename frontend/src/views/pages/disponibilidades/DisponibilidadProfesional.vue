@@ -141,23 +141,25 @@ const quitarTildes = (str) => {
 }
 
 // ░░ CARGA DE DISPONIBILIDADES ░░
+// En Disponibilidad.vue
+
 async function cargarDisponibilidades() {
   try {
-    const res = await api.get("/disponibilidades", { withCredentials: true });
+
+    const url = `/disponibilidades?usuario_id=${userStore.id}`;
+    
+    const res = await api.get(url, { withCredentials: true });
     const datos = res.data;
 
     diasSemana.value.forEach((dia) => {
-      // Normalizamos el nombre local para comparar
       const nombreLocalSinTilde = quitarTildes(dia.nombre); 
       
-      // Buscamos en los datos del backend normalizando también por seguridad
       const encontrado = datos.find((d) =>
           quitarTildes(d.dia_semana) === nombreLocalSinTilde
       )
 
       if (encontrado) {
         dia.id = encontrado.id;
-        // El backend devuelve 1 o 0, lo convertimos a Boolean para el Switch
         dia.activo = Boolean(encontrado.activo); 
         dia.hora_inicio = encontrado.hora_inicio.slice(0, 5);
         dia.hora_fin = encontrado.hora_fin.slice(0, 5);

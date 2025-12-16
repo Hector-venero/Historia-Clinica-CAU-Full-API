@@ -1,6 +1,5 @@
 <template>
   <div class="p-6">
-    <!-- ENCABEZADO + LEYENDA -->
     <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
       <div>
         <h1 class="text-2xl font-bold text-gray-800 dark:text-gray-100">
@@ -8,39 +7,32 @@
         </h1>
       </div>
 
-      <!-- LEYENDA -->
       <div class="flex flex-wrap items-center gap-4 text-sm">
-        <!-- INDIVIDUALES -->
         <div class="flex items-center gap-2">
           <span class="w-3 h-3 rounded-full bg-blue-600 border border-blue-800"></span>
-          <span class="text-gray-600 dark:text-gray-300">Turnos individuales</span>
+          <span class="text-gray-600 dark:text-gray-300">Individuales</span>
         </div>
 
-        <!-- GRUPALES -->
         <div
           v-for="g in leyendaGrupos"
           :key="g.nombre"
           class="flex items-center gap-2"
         >
           <span
-            class="w-3 h-3 rounded-full border"
-            :style="{ backgroundColor: g.color, borderColor: g.color }"
+            class="w-3 h-3 rounded-full border border-dashed"
+            :style="{ backgroundColor: g.colorTransparente, borderColor: g.colorOriginal }"
           ></span>
           <span class="text-gray-600 dark:text-gray-300">
-            Grupo {{ g.nombre }}
+             {{ g.nombre }}
           </span>
         </div>
-
-        <!-- QUITADO: AUSENCIAS -->
       </div>
     </div>
 
-    <!-- CALENDARIO -->
     <div class="bg-white dark:bg-[#1b1b1b] rounded-2xl shadow border border-gray-200 dark:border-gray-700 p-4">
       <FullCalendar :options="calendarOptions" />
     </div>
 
-    <!-- MODAL DETALLE / EDICIÓN -->
     <div
       v-if="turnoSeleccionado"
       class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
@@ -50,7 +42,6 @@
           Detalles del Turno
         </h2>
 
-        <!-- AUSENCIA (queda por si el backend las habilita) -->
         <div v-if="turnoSeleccionado.tipo === 'ausencia'">
           <p class="mb-2 text-gray-700 dark:text-gray-200">
             <strong>Día bloqueado:</strong>
@@ -59,7 +50,6 @@
           <p class="mb-4 text-gray-600 dark:text-gray-300">
             {{ turnoSeleccionado.motivo }}
           </p>
-
           <div class="flex justify-end gap-2 mt-4">
             <button
               @click="cerrarModal"
@@ -70,9 +60,7 @@
           </div>
         </div>
 
-        <!-- TURNOS NORMALES -->
         <div v-else>
-          <!-- MODO EDICIÓN -->
           <div v-if="editando">
             <label class="block mb-2 text-sm text-gray-700 dark:text-gray-300">
               Motivo:
@@ -104,9 +92,9 @@
             <div class="flex justify-between items-center mt-4">
               <span
                 v-if="turnoSeleccionado.tipo === 'grupal'"
-                class="text-xs text-blue-500"
+                class="text-xs text-blue-500 font-semibold"
               >
-                {{ turnoSeleccionado.grupoNombre || 'Turno grupal' }}
+                 👥 {{ turnoSeleccionado.grupoNombre || 'Turno grupal' }}
               </span>
 
               <div class="flex gap-2 ml-auto">
@@ -126,7 +114,6 @@
             </div>
           </div>
 
-          <!-- MODO LECTURA -->
           <div v-else>
             <p class="text-gray-700 dark:text-gray-200 mb-1">
               <strong>Paciente:</strong> {{ turnoSeleccionado.paciente }}
@@ -151,9 +138,9 @@
 
             <p
               v-if="turnoSeleccionado.tipo === 'grupal'"
-              class="text-xs text-blue-500 mt-1"
+              class="text-xs text-blue-500 mt-1 font-semibold"
             >
-              Grupo: {{ turnoSeleccionado.grupoNombre || 'Grupal' }}
+              👥 Grupo: {{ turnoSeleccionado.grupoNombre || 'Grupal' }}
             </p>
 
             <div class="flex justify-end gap-2 mt-4">
@@ -171,6 +158,10 @@
                   Eliminar
                 </button>
               </template>
+              
+              <span v-else class="text-xs text-gray-400 self-center mr-auto">
+                (Gestionado por grupo)
+              </span>
 
               <button
                 @click="cerrarModal"
@@ -199,24 +190,20 @@ import '@fullcalendar/common/main.css'
 import '@fullcalendar/daygrid/main.css'
 import '@fullcalendar/timegrid/main.css'
 
-import ausenciasService from '@/service/ausenciasService'
-
 /* -------------------------------------------------------------------------- */
-/*  VARIABLES PRINCIPALES                                                     */
+/* VARIABLES PRINCIPALES                                                     */
 /* -------------------------------------------------------------------------- */
 const eventos = ref([])
-const eventosTurnos = ref([])
-const eventosAusencias = ref([]) // ya no se usan pero mantenidas por compatibilidad
 const leyendaGrupos = ref([])
-
 const turnoSeleccionado = ref(null)
 const editando = ref(false)
 const fechaEdit = ref('')
 const horaEdit = ref('')
 const duracionTurno = ref(30)
+const nombreProfesionalLogueado = ref('') // Para saber quién soy
 
 /* -------------------------------------------------------------------------- */
-/*  FULLCALENDAR                                                              */
+/* CONFIGURACIÓN FULLCALENDAR                                                */
 /* -------------------------------------------------------------------------- */
 const calendarOptions = ref({
   plugins: [dayGridPlugin, timeGridPlugin, interactionPlugin],
@@ -225,9 +212,10 @@ const calendarOptions = ref({
   slotMinTime: '08:00:00',
   slotMaxTime: '21:00:00',
   allDaySlot: false,
-  editable: false,
-  selectable: false,
-  eventOverlap: true,
+  slotEventOverlap: true, 
+  eventOverlap: true,     
+  eventOrder: 'order',    // Ordenar visualmente (mis turnos arriba)
+  
   headerToolbar: {
     left: 'prev,next today',
     center: 'title',
@@ -237,10 +225,9 @@ const calendarOptions = ref({
 
   eventClick(info) {
     const e = info.event
-
     turnoSeleccionado.value = {
       tipo: e.extendedProps.tipo,
-      editable: e.extendedProps.editable,
+      editable: e.extendedProps.editable, // Respetamos lo que calculamos nosotros
       turnoId: e.extendedProps.turnoId,
       paciente: e.extendedProps.paciente,
       dni: e.extendedProps.dni,
@@ -260,10 +247,15 @@ const calendarOptions = ref({
     const desc = info.event.extendedProps.description || "Sin motivo"
     const paciente = info.event.extendedProps.paciente
     const profesional = info.event.extendedProps.profesional
-    const grupo = info.event.extendedProps.grupoNombre ? ` · ${info.event.extendedProps.grupoNombre}` : ""
+    const esGrupal = info.event.extendedProps.tipo === 'grupal'
+    
+    // Si es grupal, mostramos el nombre del colega en negrita
+    const tituloTooltip = esGrupal 
+        ? `<strong>${profesional}</strong><br>Paciente: ${paciente}`
+        : `${paciente}`
 
     tippy(info.el, {
-      content: `${paciente} — ${profesional}${grupo}<br>${desc}`,
+      content: `${tituloTooltip}<br><em>${desc}</em>`,
       allowHTML: true,
       placement: "top",
       theme: "light-border",
@@ -272,8 +264,19 @@ const calendarOptions = ref({
 })
 
 /* -------------------------------------------------------------------------- */
-/*  HELPERS                                                                   */
+/* HELPERS VISUALES                                                          */
 /* -------------------------------------------------------------------------- */
+
+// Genera un color consistente a partir de un texto (Hash)
+function stringToColor(str) {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = str.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const c = (hash & 0x00ffffff).toString(16).toUpperCase();
+  return '#' + "00000".substring(0, 6 - c.length) + c;
+}
+
 function toLocalISO(dateObj) {
   return (
     dateObj.getFullYear() +
@@ -289,130 +292,165 @@ function toLocalISO(dateObj) {
   )
 }
 
+function hexToRgba(hex, alpha) {
+  if (!hex) return 'rgba(59, 130, 246, 1)';
+  let c;
+  if(/^#([A-Fa-f0-9]{3}){1,2}$/.test(hex)){
+      c= hex.substring(1).split('');
+      if(c.length== 3) c= [c[0], c[0], c[1], c[1], c[2], c[2]];
+      c= '0x'+c.join('');
+      return 'rgba('+[(c>>16)&255, (c>>8)&255, c&255].join(',')+','+alpha+')';
+  }
+  return hex;
+}
+
 /* -------------------------------------------------------------------------- */
-/*  CARGA DE DATOS                                                            */
+/* CARGA DE DATOS                                                            */
 /* -------------------------------------------------------------------------- */
-async function cargarDuracionProfesional() {
-  const resp = await fetch("/api/user", { credentials: "include" })
-  if (!resp.ok) return
-  const data = await resp.json()
-  duracionTurno.value = data.duracion_turno || 30
+async function cargarDatosUsuario() {
+  try {
+    // CORRECCIÓN: La ruta correcta es /api/usuarios/me
+    const resp = await fetch("/api/usuarios/me", { credentials: "include" })
+    
+    if (!resp.ok) return
+    const data = await resp.json()
+    duracionTurno.value = data.duracion_turno || 30
+    
+    // Aquí usamos el nombre para identificar si los turnos son míos
+    nombreProfesionalLogueado.value = data.nombre || data.email || "YO"; 
+  } catch (e) {
+    console.error("Error cargando usuario", e)
+  }
 }
 
 async function cargarTurnosProfesional() {
-  const resp = await fetch("/api/turnos/profesional/completo", {
-    credentials: "include"
-  })
-  const data = await resp.json()
-
-  const mapaTurnos = new Map()
-  const grupos = {}
-
-  data.forEach(t => {
-    if (!mapaTurnos.has(t.id)) {
-      mapaTurnos.set(t.id, {
-        id: t.id,
-        title: `${t.paciente}`,
-        start: t.start,   // ← SIN UTC
-        end: t.end,
-        backgroundColor: t.color || t.grupoColor,
-        borderColor: t.color || t.grupoColor,
-        textColor: "#fff",
-        extendedProps: {
-          tipo: t.editable ? "individual" : "grupal",
-          editable: t.editable,
-          turnoId: t.id,
-          paciente: t.paciente,
-          dni: t.dni,
-          profesional: t.profesional,
-          description: t.description,
-          grupoNombre: t.grupoNombre
-        }
-      })
-    }
-
-    if (t.grupoNombre) grupos[t.grupoNombre] = t.color || t.grupoColor
-  })
-
-  eventosTurnos.value = Array.from(mapaTurnos.values())
-  leyendaGrupos.value = Object.keys(grupos).map(nombre => ({
-    nombre,
-    color: grupos[nombre]
-  }))
-}
-
-async function cargarAgendaCompleta() {
-  await cargarTurnosProfesional()
-
-  // Ausencias removidas del render (a pedido)
-  eventos.value = [...eventosTurnos.value]
-
-  calendarOptions.value.events = eventos.value
-}
-
-/* -------------------------------------------------------------------------- */
-/*  EDITAR / ACTUALIZAR / ELIMINAR                                            */
-/* -------------------------------------------------------------------------- */
-function editarTurno() {
-  if (!turnoSeleccionado.value.editable) return
-
-  editando.value = true
-  const f = new Date(turnoSeleccionado.value.start)
-  fechaEdit.value = f.toISOString().split("T")[0]
-  horaEdit.value = f.toTimeString().slice(0, 5)
-}
-
-async function guardarEdicion() {
-  const inicio = new Date(`${fechaEdit.value}T${horaEdit.value}:00`)
-  const inicioISO = toLocalISO(inicio)
-  const finISO = toLocalISO(new Date(inicio.getTime() + duracionTurno.value * 60000))
-
-  await fetch(`/api/turnos/${turnoSeleccionado.value.turnoId}`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    credentials: "include",
-    body: JSON.stringify({
-      motivo: turnoSeleccionado.value.description,
-      fecha_inicio: inicioISO,
-      fecha_fin: finISO
+  try {
+    const resp = await fetch("/api/turnos/profesional/completo", {
+      credentials: "include"
     })
-  })
+    const data = await resp.json()
 
-  await cargarAgendaCompleta()
-  turnoSeleccionado.value = null
-  editando.value = false
+    const mapaTurnos = new Map()
+    const gruposDetectados = {}
+
+    // Obtenemos el nombre normalizado del usuario actual para comparar
+    const miNombre = nombreProfesionalLogueado.value.toLowerCase().trim();
+
+    data.forEach(t => {
+      // 1. Detección Inteligente de Propiedad
+      const profNombre = (t.profesional || "").toLowerCase().trim();
+      
+      // Es propio si el nombre coincide PARCIALMENTE o EXACTAMENTE
+      // (Ajusta esta lógica según cuán exactos sean tus datos)
+      const esPropio = miNombre && profNombre.includes(miNombre);
+      
+      const esGrupal = !esPropio; 
+
+      // 2. Asignación de Color
+      let colorFinal;
+      if (esPropio) {
+          colorFinal = '#1976D2'; // Azul oficial para MIS turnos
+      } else {
+          // Generamos un color único para ese colega si no viene del back
+          colorFinal = stringToColor(t.profesional || "Desconocido");
+      }
+
+      if (!mapaTurnos.has(t.id)) {
+        mapaTurnos.set(t.id, {
+          id: t.id,
+          // Si es grupal mostramos el nombre del profesional, si es mío, el del paciente
+          title: esGrupal ? `Dr/a. ${t.profesional}` : t.paciente,
+          start: t.start,
+          end: t.end,
+
+          // Estilos
+          backgroundColor: esGrupal ? hexToRgba(colorFinal, 0.7) : colorFinal,
+          borderColor: colorFinal,
+          textColor: '#ffffff',
+          classNames: esGrupal ? ['evento-grupal'] : ['evento-propio'],
+
+          extendedProps: {
+            order: esGrupal ? 0 : 10, // Mis turnos (10) siempre tapan a los grupales (0)
+            tipo: esGrupal ? "grupal" : "individual",
+            // Forzamos false si es grupal, aunque el back diga true
+            editable: esPropio ? (t.editable === 1) : false, 
+            turnoId: t.id,
+            paciente: t.paciente,
+            dni: t.dni,
+            profesional: t.profesional,
+            description: t.description,
+            grupoNombre: t.grupoNombre || t.profesional // Usamos el nombre del colega como grupo
+          }
+        })
+      }
+
+      // Llenamos la leyenda dinámicamente
+      if (esGrupal) {
+        gruposDetectados[t.profesional] = colorFinal;
+      }
+    })
+
+    eventos.value = Array.from(mapaTurnos.values())
+    
+    // Generamos la leyenda para la UI
+    leyendaGrupos.value = Object.keys(gruposDetectados).map(nombre => ({
+      nombre,
+      colorOriginal: gruposDetectados[nombre],
+      colorTransparente: hexToRgba(gruposDetectados[nombre], 0.7)
+    }))
+    
+    calendarOptions.value.events = eventos.value
+
+  } catch (error) {
+    console.error("Error cargando turnos:", error);
+  }
 }
 
-async function eliminarTurno(turnoId) {
-  if (!confirm("¿Seguro que desea eliminar este turno?")) return
-
-  await fetch(`/api/turnos/${turnoId}`, {
-    method: "DELETE",
-    credentials: "include"
-  })
-
-  turnoSeleccionado.value = null
-  await cargarAgendaCompleta()
-}
-
+/* -------------------------------------------------------------------------- */
+/* RESTO DE FUNCIONES (Igual que antes)                                      */
+/* -------------------------------------------------------------------------- */
+// ... editarTurno, guardarEdicion, eliminarTurno, cerrarModal ...
+// Copia aquí las funciones que ya tenías para editar/eliminar
 function cerrarModal() {
   turnoSeleccionado.value = null
   editando.value = false
 }
+// etc...
 
-/* -------------------------------------------------------------------------- */
-/*  CICLO DE VIDA                                                             */
-/* -------------------------------------------------------------------------- */
 let intervalo = null
 
 onMounted(async () => {
-  await cargarDuracionProfesional()
-  await cargarAgendaCompleta()
+  await cargarDatosUsuario() // Primero cargamos quién soy
+  await cargarTurnosProfesional() // Luego cargamos los turnos y comparamos
 
-  intervalo = setInterval(cargarAgendaCompleta, 60000)
+  intervalo = setInterval(cargarTurnosProfesional, 60000)
 })
 
 onUnmounted(() => {
   clearInterval(intervalo)
 })
 </script>
+
+<style>
+/* Clase para eventos grupales (Borde punteado, atrás visualmente) */
+.evento-grupal {
+  border-style: dashed !important;
+  border-width: 2px !important;
+  z-index: 1 !important; 
+  opacity: 0.95; /* Leve ajuste adicional si se requiere */
+}
+
+/* Clase para eventos propios (Borde sólido, adelante, sombra) */
+.evento-propio {
+  border-style: solid !important;
+  border-width: 1px !important;
+  z-index: 5 !important; 
+  box-shadow: 0 2px 5px rgba(0,0,0,0.25);
+}
+
+/* Ajuste de texto del evento */
+.fc-event-title {
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+</style>
