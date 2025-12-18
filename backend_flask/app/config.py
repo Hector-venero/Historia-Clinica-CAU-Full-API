@@ -26,3 +26,5 @@ class Config:
         "password": os.getenv("DB_PASSWORD", "hc_password"),
         "database": os.getenv("DB_NAME", "hc_bfa"),
     }
+    UPLOAD_FOLDER = os.getenv("UPLOAD_FOLDER", "/app/uploads")
+    MAX_CONTENT_LENGTH = 20 * 1024 * 1024  # Limite de 20MB también en Flask (por seguridad)

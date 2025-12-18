@@ -12,6 +12,7 @@ services:
     #   - "5000:5000"   <-- COMENTADO POR SEGURIDAD (Solo Nginx accede aquí)
     volumes:
       - ./backend_flask/app:/app
+      - uploads_data:/app/uploads # donde Flask guarda archivos subidos
     depends_on:
       db:
         condition: service_healthy
@@ -116,3 +117,4 @@ networks:
 volumes:
   db_data:
   bfa_data:
+  uploads_data:
