@@ -7,13 +7,21 @@ from datetime import datetime
 
 bp_ausencias = Blueprint("ausencias", __name__)
 
-# Crear una ausencia (bloqueo de agenda)
+# ============================================================
+#  Crear una ausencia (bloqueo de agenda)
+# ============================================================
 @bp_ausencias.route("/api/ausencias", methods=["POST"])
 @login_required
-@requiere_rol("director", "profesional", "administrativo")
+@requiere_rol("director", "profesional", "administrativo", "area")
 def crear_ausencia():
     data = request.get_json(silent=True) or {}
-    usuario_id = data.get("usuario_id") or current_user.id
+    
+    # Si es profesional/area, forzamos su ID. Si es director, puede elegir.
+    if current_user.rol in ["profesional", "area"]:
+        usuario_id = current_user.id
+    else:
+        usuario_id = data.get("usuario_id") or current_user.id
+
     fecha_inicio = data.get("fecha_inicio")
     fecha_fin = data.get("fecha_fin")
     motivo = data.get("motivo", "")
@@ -21,8 +29,8 @@ def crear_ausencia():
     if not fecha_inicio or not fecha_fin:
         return jsonify({"error": "Se requieren fecha_inicio y fecha_fin"}), 400
 
-    # Restricción: un médico solo puede crear ausencias para sí mismo
-    if current_user.rol == "profesional" and usuario_id != current_user.id:
+    # Restricción extra de seguridad
+    if current_user.rol in ["profesional", "area"] and usuario_id != current_user.id:
         return jsonify({"error": "No puede bloquear agenda de otros profesionales"}), 403
 
     conn = get_connection()
@@ -39,15 +47,18 @@ def crear_ausencia():
     return jsonify({"message": "Ausencia registrada ✅", "id": ausencia_id}), 201
 
 
-# Listar ausencias (un médico solo ve las suyas, admin/director ven todas)
+# ============================================================
+#  Listar ausencias
+# ============================================================
 @bp_ausencias.route("/api/ausencias", methods=["GET"])
 @login_required
-@requiere_rol("director", "profesional", "administrativo")
+@requiere_rol("director", "profesional", "administrativo", "area")
 def listar_ausencias():
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
 
-    if current_user.rol == "profesional":
+    # 👇 CAMBIO: "area" solo ve lo suyo, igual que profesional
+    if current_user.rol in ["profesional", "area"]:
         cursor.execute("""
             SELECT a.*, u.nombre AS nombre_usuario
             FROM ausencias a
@@ -56,6 +67,7 @@ def listar_ausencias():
             ORDER BY fecha_inicio
         """, (current_user.id,))
     else:
+        # Director / Admin ven todo
         cursor.execute("""
             SELECT a.*, u.nombre AS nombre_usuario
             FROM ausencias a
@@ -69,10 +81,12 @@ def listar_ausencias():
     return jsonify(ausencias)
 
 
-# Eliminar una ausencia (soft delete opcional, acá lo hago hard delete simple)
+# ============================================================
+#  Eliminar una ausencia
+# ============================================================
 @bp_ausencias.route("/api/ausencias/<int:ausencia_id>", methods=["DELETE"])
 @login_required
-@requiere_rol("director", "profesional", "administrativo")
+@requiere_rol("director", "profesional", "administrativo", "area")
 def eliminar_ausencia(ausencia_id):
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
@@ -83,8 +97,9 @@ def eliminar_ausencia(ausencia_id):
         cursor.close(); conn.close()
         return jsonify({"error": "Ausencia no encontrada"}), 404
 
-    # Restricción: un médico solo puede eliminar sus propias ausencias
-    if current_user.rol == "profesional" and ausencia["usuario_id"] != current_user.id:
+    # Restricción: un médico/area solo puede eliminar sus propias ausencias
+    # 👇 CAMBIO: Agregamos "area" a la restricción
+    if current_user.rol in ["profesional", "area"] and ausencia["usuario_id"] != current_user.id:
         cursor.close(); conn.close()
         return jsonify({"error": "No autorizado"}), 403
 

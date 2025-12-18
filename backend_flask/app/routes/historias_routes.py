@@ -67,7 +67,7 @@ def actualizar_historia(paciente_id, usuario_id):
 # =========================================================
 @bp_historias.route('/api/pacientes/<int:paciente_id>/historias', methods=['POST'])
 @login_required
-@requiere_rol('director', 'profesional', 'administrativo')
+@requiere_rol('director', 'profesional', 'administrativo', 'area')
 def api_agregar_historia(paciente_id):
     """
     Recalcula la historia consolidada de un paciente sumando todas sus evoluciones.

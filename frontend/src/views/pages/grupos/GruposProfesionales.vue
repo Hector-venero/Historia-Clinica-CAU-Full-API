@@ -143,7 +143,6 @@ import Dialog from 'primevue/dialog';
 import Skeleton from 'primevue/skeleton';
 import Select from 'primevue/select';
 import Avatar from 'primevue/avatar';
-import { useToast } from 'primevue/usetoast'; // Si tienes Toast configurado
 
 const router = useRouter();
 const grupos = ref([]);
@@ -201,7 +200,10 @@ async function verMiembros(grupo) {
     ]);
     
     miembros.value = resMiembros.data || [];
-    usuarios.value = resUsuarios.data.filter((u) => u.rol === "profesional");
+    
+    // 👇 CORRECCIÓN: Quitamos el filtro para ver a todos
+    usuarios.value = resUsuarios.data || [];
+
   } catch (err) {
     console.error("Error cargando datos:", err);
   } finally {

@@ -19,7 +19,7 @@
           </label>
           <InputText
             v-model.trim="form.nombre"
-            placeholder="Ej: Ana Pérez"
+            placeholder="Ej: Ana Pérez (o Módulo Kinesiología)"
             class="w-full"
             :disabled="loading"
           />
@@ -74,9 +74,9 @@
           <label class="font-semibold text-gray-700 dark:text-gray-200">
             <i class="pi pi-briefcase mr-1 text-primary"></i> Rol
           </label>
-          <Select
+          <Dropdown
             v-model="form.rol"
-            :options="ROLES"
+            :options="roles"
             placeholder="Seleccioná un rol"
             class="w-full"
             :disabled="loading"
@@ -84,7 +84,7 @@
         </div>
 
         <transition name="fade">
-          <div v-if="form.rol === 'profesional'" class="flex flex-col gap-2 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-xl border border-blue-100 dark:border-blue-800">
+          <div v-if="form.rol === 'Profesional'" class="flex flex-col gap-2 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-xl border border-blue-100 dark:border-blue-800">
             <label class="font-semibold text-gray-700 dark:text-gray-200">
               <i class="pi pi-heart mr-1 text-primary"></i> Especialidad
             </label>
@@ -128,7 +128,7 @@ import { validarPasswordFuerte, validarEmail } from '@/utils/validators'
 // Imports de PrimeVue
 import InputText from 'primevue/inputtext'
 import Password from 'primevue/password'
-import Select from 'primevue/select'
+import Dropdown from 'primevue/dropdown' // ✅ Corregido: Usamos Dropdown en vez de Select
 import Button from 'primevue/button'
 
 const form = reactive({
@@ -140,11 +140,12 @@ const form = reactive({
   especialidad: ''
 })
 
-const ROLES = ['director', 'profesional', 'administrativo']
-
 const loading = ref(false)
 const error = ref('')
 const ok = ref('')
+
+// ✅ Lista de roles corregida (incluye Área)
+const roles = ref(['Director', 'Profesional', 'Administrativo', 'Área'])
 
 function validate() {
   if (!form.nombre || !form.username || !form.email || !form.password || !form.rol) {
@@ -158,11 +159,12 @@ function validate() {
   const errPw = validarPasswordFuerte(form.password);
   if (errPw) return errPw;
 
-  if (!ROLES.includes(form.rol)) {
+  if (!roles.value.includes(form.rol)) {
     return 'Rol inválido'
   }
   
-  if (form.rol === 'profesional' && !form.especialidad) {
+  // Validar especialidad solo si es Profesional
+  if (form.rol === 'Profesional' && !form.especialidad) {
     return 'La especialidad es obligatoria para profesionales'
   }
   
@@ -181,10 +183,27 @@ async function onSubmit() {
 
   loading.value = true
   try {
-    const resp = await usuarioService.createUsuario(form)
+    // 1. Clonamos el formulario para no modificar la vista
+    const payload = { ...form }
+
+    // 2. Mapeo de roles para el Backend
+    // El backend espera: 'director', 'profesional', 'administrativo', 'area'
+    if (payload.rol === 'Área') {
+        payload.rol = 'area';
+    } else {
+        payload.rol = payload.rol.toLowerCase();
+    }
+
+    // 3. Limpiamos especialidad si no es profesional
+    if (payload.rol !== 'profesional') {
+        payload.especialidad = null;
+    }
+
+    // 4. Enviamos el payload transformado
+    const resp = await usuarioService.createUsuario(payload)
     ok.value = resp.data?.message || 'Usuario creado correctamente ✅'
     
-    // Limpiar campos sensibles
+    // Limpiar campos
     form.nombre = ''
     form.username = ''
     form.email = ''
@@ -201,7 +220,6 @@ async function onSubmit() {
 </script>
 
 <style scoped>
-/* Animación suave para cuando aparece el campo especialidad */
 .fade-enter-active,
 .fade-leave-active {
   transition: opacity 0.3s ease, transform 0.3s ease;

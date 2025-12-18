@@ -18,24 +18,23 @@ def medico_disponible(usuario_id, fecha_inicio, fecha_fin):
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
 
+    # 1. Primero averiguamos qué ROL tiene este usuario
+    cursor.execute("SELECT rol FROM usuarios WHERE id = %s", (usuario_id,))
+    user_data = cursor.fetchone()
+    es_area = user_data and user_data['rol'] == 'area'
+
     inicio = datetime.fromisoformat(fecha_inicio)
     fin = datetime.fromisoformat(fecha_fin)
 
     hora_ini = inicio.strftime("%H:%M:%S")
     hora_fin = fin.strftime("%H:%M:%S")
 
+    # ... (lógica de dias de semana igual que antes) ...
     dia_semana = inicio.strftime("%A")
-    dias = {
-        "Monday": "Lunes",
-        "Tuesday": "Martes",
-        "Wednesday": "Miércoles",
-        "Thursday": "Jueves",
-        "Friday": "Viernes",
-        "Saturday": "Sábado",
-        "Sunday": "Domingo"
-    }
+    dias = { "Monday": "Lunes", "Tuesday": "Martes", "Wednesday": "Miércoles", "Thursday": "Jueves", "Friday": "Viernes", "Saturday": "Sábado", "Sunday": "Domingo" }
     dia_es = dias.get(dia_semana, "Lunes")
 
+    # 2. Chequeamos si TRABAJA ese día (Disponibilidad) - ESTO SIEMPRE SE CHEQUEA
     cursor.execute("""
         SELECT 1 FROM disponibilidades
         WHERE usuario_id = %s
@@ -44,49 +43,51 @@ def medico_disponible(usuario_id, fecha_inicio, fecha_fin):
         AND %s <= hora_fin
         AND activo = 1
     """, (usuario_id, dia_es, hora_ini, hora_fin))
-
     disponible = cursor.fetchone()
 
+    # 3. Chequeamos AUSENCIAS (Vacaciones) - ESTO SIEMPRE SE CHEQUEA
     cursor.execute("""
         SELECT 1 FROM ausencias
         WHERE usuario_id = %s
         AND (%s BETWEEN fecha_inicio AND fecha_fin
         OR  %s BETWEEN fecha_inicio AND fecha_fin)
     """, (usuario_id, fecha_inicio, fecha_fin))
-
     ausente = cursor.fetchone()
-##
-#    cursor.execute("""
-#       SELECT 1 FROM turnos
-#        WHERE usuario_id = %s
-#        AND (
-#            (fecha_inicio < %s AND fecha_fin > %s)
-#            OR
-#            (fecha_inicio < %s AND fecha_fin > %s)
-#        )
-#    """, (usuario_id, fecha_fin, fecha_inicio, fecha_inicio, fecha_fin))
-#    ocupado = cursor.fetchone()
-#
+
+    # 4. Chequeamos SOLAPAMIENTO (Ocupado)
+    # SI ES AREA -> NO CHEQUEAMOS ESTO (puede tener infinitos turnos)
+    ocupado = None
+    if not es_area:
+        cursor.execute("""
+           SELECT 1 FROM turnos
+            WHERE usuario_id = %s
+            AND (
+                (fecha_inicio < %s AND fecha_fin > %s)
+                OR
+                (fecha_inicio < %s AND fecha_fin > %s)
+            )
+        """, (usuario_id, fecha_fin, fecha_inicio, fecha_inicio, fecha_fin))
+        ocupado = cursor.fetchone()
+    
     cursor.close()
     conn.close()
 
-    return bool(disponible) and not ausente #and not ocupado
-
-
+    # Si es area, 'ocupado' siempre es None (False), así que permite solapamiento
+    return bool(disponible) and not ausente and not ocupado
 
 # ==========================================================
 #  Rutas de Turnos
 # ==========================================================
 @bp_turnos.route('/api/turnos', methods=['GET', 'POST'])
 @login_required
-@requiere_rol('director', 'profesional', 'administrativo')
+@requiere_rol('director', 'profesional', 'administrativo', 'area') 
 def api_turnos():
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
 
     if request.method == 'GET':
-
-        if current_user.rol == 'profesional':
+        
+        if current_user.rol in ['profesional', 'area']:
             cursor.execute("""
                 SELECT t.id, t.fecha_inicio, t.fecha_fin, t.motivo,
                        p.nombre, p.dni, u.nombre AS profesional

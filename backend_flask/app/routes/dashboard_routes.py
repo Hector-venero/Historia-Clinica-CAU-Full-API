@@ -29,14 +29,15 @@ def get_dashboard():
 
     try:
         # ======================================================
-        # 👨‍⚕️ PROFESIONAL
+        # 👨‍⚕️ PROFESIONAL O ÁREA (Mismo comportamiento)
         # ======================================================
-        if rol == "profesional":
+        # 👇 CAMBIO CLAVE: Agregamos "area" para que vea su agenda propia
+        if rol in ["profesional", "area"]:
 
             # Turnos del día (filtrados por fecha_inicio)
             cursor.execute("""
                 SELECT t.id, t.fecha_inicio, t.fecha_fin, t.motivo,
-                       p.id AS paciente_id,  -- 👈 AGREGADO AQUÍ
+                       p.id AS paciente_id,
                        p.nombre AS paciente, p.apellido,
                        u.nombre AS profesional
                 FROM turnos t
@@ -54,7 +55,7 @@ def get_dashboard():
             # Próximo turno (fecha futura)
             cursor.execute("""
                 SELECT t.id, t.fecha_inicio, t.fecha_fin, t.motivo,
-                       p.id AS paciente_id, -- 👈 AGREGADO AQUÍ
+                       p.id AS paciente_id,
                        p.nombre AS paciente, p.apellido
                 FROM turnos t
                 JOIN pacientes p ON p.id = t.paciente_id
@@ -81,7 +82,7 @@ def get_dashboard():
             data["ausencias"] = cursor.fetchall()
 
         # ======================================================
-        # 🧑‍💼 DIRECTOR / ADMIN
+        # 🧑‍💼 DIRECTOR / ADMIN (Ven estadísticas globales)
         # ======================================================
         elif rol in ("director", "administrativo"):
 
@@ -91,7 +92,7 @@ def get_dashboard():
             cursor.execute("SELECT COUNT(*) AS total FROM usuarios")
             data["estadisticas"]["usuarios"] = cursor.fetchone()["total"]
 
-            # Turnos de hoy
+            # Turnos de hoy (Totales)
             cursor.execute("""
                 SELECT COUNT(*) AS total
                 FROM turnos
@@ -102,10 +103,10 @@ def get_dashboard():
             cursor.execute("SELECT COUNT(*) AS total FROM evoluciones")
             data["estadisticas"]["evoluciones"] = cursor.fetchone()["total"]
 
-            # Listado de turnos del día
+            # Listado de turnos del día (Global)
             cursor.execute("""
                 SELECT t.id, t.fecha_inicio, t.fecha_fin, t.motivo,
-                       p.id AS paciente_id, -- 👈 AGREGADO AQUÍ
+                       p.id AS paciente_id,
                        p.nombre AS paciente, p.apellido,
                        u.nombre AS profesional
                 FROM turnos t
@@ -160,7 +161,8 @@ def get_dashboard_semanal():
         # ===========================
         # TURNOS
         # ===========================
-        if rol == "profesional":
+        # 👇 CAMBIO: "area" se comporta como "profesional" (filtra por usuario_id)
+        if rol in ["profesional", "area"]:
             cursor.execute("""
                 SELECT DATE(fecha_inicio) AS dia, COUNT(*) AS total
                 FROM turnos
@@ -183,7 +185,8 @@ def get_dashboard_semanal():
         # ===========================
         # AUSENCIAS
         # ===========================
-        if rol == "profesional":
+        # 👇 CAMBIO: "area" filtra por usuario_id
+        if rol in ["profesional", "area"]:
             cursor.execute("""
                 SELECT DATE(fecha_inicio) AS dia, COUNT(*) AS total
                 FROM ausencias
@@ -204,7 +207,7 @@ def get_dashboard_semanal():
         ausencias = cursor.fetchall()
 
         # ===========================
-        # Normalización de datos
+        # Normalización de datos (Rellenar días vacíos con 0)
         # ===========================
         labels = []
         valores_turnos = []

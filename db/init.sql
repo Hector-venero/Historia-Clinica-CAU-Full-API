@@ -32,7 +32,7 @@ CREATE TABLE usuarios (
     username VARCHAR(50) NOT NULL UNIQUE,
     email VARCHAR(100) NOT NULL UNIQUE,
     password_hash TEXT NOT NULL,
-    rol ENUM('director', 'profesional', 'administrativo') NOT NULL,
+    rol ENUM('director', 'profesional', 'administrativo','area') NOT NULL,
     especialidad VARCHAR(100) NULL,
     duracion_turno INT NOT NULL DEFAULT 20,
     foto VARCHAR(255) DEFAULT NULL,

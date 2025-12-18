@@ -141,9 +141,11 @@ const error = ref("");
 
 onMounted(async () => {
   try {
-    // 1. Cargar Usuarios (Filtrar solo profesionales)
+    // 1. Cargar Usuarios
     const resUsuarios = await api.get("/usuarios", { withCredentials: true });
-    usuariosDisponibles.value = (resUsuarios.data || []).filter(u => u.rol === 'profesional');
+    
+    // 👇 CORRECCIÓN: Quitamos el filtro para mostrar TODOS los usuarios
+    usuariosDisponibles.value = resUsuarios.data || [];
 
     // 2. Cargar Grupo
     const resGrupo = await api.get(`/grupos/${grupoId}`, { withCredentials: true });
@@ -152,10 +154,9 @@ onMounted(async () => {
     // 3. Cargar Miembros actuales
     const resMiembros = await api.get(`/grupos/${grupoId}/miembros`, { withCredentials: true });
     
-    // Extraemos solo los IDs para el MultiSelect
     const ids = resMiembros.data.map(m => m.id);
     miembrosSeleccionadosIds.value = [...ids];
-    miembrosOriginalesIds.value = [...ids]; // Copia de seguridad
+    miembrosOriginalesIds.value = [...ids]; 
 
   } catch (err) {
     console.error("Error cargando datos:", err);

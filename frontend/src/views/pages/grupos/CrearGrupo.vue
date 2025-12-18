@@ -127,10 +127,11 @@ const mensaje = ref("");
 const error = ref("");
 const loading = ref(false);
 
-// ✅ Cargar usuarios disponibles
+// ✅ Cargar usuarios disponibles (SIN FILTROS)
 onMounted(async () => {
   try {
     const res = await api.get("/usuarios", { withCredentials: true });
+    // 👇 CORRECCIÓN: Asignamos directamente todos, sin .filter()
     usuarios.value = res.data || [];
   } catch (err) {
     console.error("Error cargando usuarios:", err);
@@ -148,8 +149,6 @@ async function crearGrupo() {
     const grupoId = resGrupo.data.id;
 
     // 2️⃣ Agregar miembros seleccionados
-    // Nota: Si tu backend soportara recibir un array de IDs de una sola vez sería más eficiente,
-    // pero mantenemos tu lógica actual de bucle para no romper nada.
     if (miembrosSeleccionados.value.length > 0) {
         for (const usuarioId of miembrosSeleccionados.value) {
             await api.post(`/grupos/${grupoId}/miembros`, { usuario_id: usuarioId }, { withCredentials: true });

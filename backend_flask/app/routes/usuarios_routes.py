@@ -11,7 +11,8 @@ from app.utils.validacion import password_valida, validar_email
 
 bp_usuarios = Blueprint("usuarios", __name__)
 
-ROLES_VALIDOS = {"director", "profesional", "administrativo"}
+# ✅ AGREGADO "area"
+ROLES_VALIDOS = {"director", "profesional", "administrativo", "area"}
 
 # ============================================================
 #  CREAR USUARIO
@@ -68,9 +69,9 @@ def api_crear_usuario():
 
 
 # ============================================================
-#  LISTADO DE USUARIOS (CORREGIDO: Ruta /api/usuarios)
+#  LISTADO DE USUARIOS
 # ============================================================
-@bp_usuarios.route('/api/usuarios', methods=['GET'])  # <--- CORREGIDO AQUÍ
+@bp_usuarios.route('/api/usuarios', methods=['GET'])
 @login_required
 @requiere_rol('director')
 def api_usuarios_listado():
@@ -239,6 +240,9 @@ def api_usuarios_activar(usuario_id):
     return jsonify({"message": "Usuario reactivado ✅"})
 
 
+# ============================================================
+#  LISTAR PROFESIONALES (CORREGIDO)
+# ============================================================
 @bp_usuarios.route('/api/profesionales', methods=['GET'])
 @login_required
 def api_listar_profesionales():
@@ -246,11 +250,11 @@ def api_listar_profesionales():
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
 
-    # Nota: Mantenemos el SELECT igual
+    # ✅ INCLUIMOS 'area' EN LA CONSULTA
     base_query = """
         SELECT id, nombre, username, especialidad, duracion_turno, rol 
         FROM usuarios 
-        WHERE rol IN ('profesional', 'director') 
+        WHERE rol IN ('profesional', 'director', 'area') 
         AND activo = 1
     """
 
@@ -263,15 +267,18 @@ def api_listar_profesionales():
     cursor.close()
     conn.close()
 
-    # --- AQUÍ ESTÁ LA MAGIA ---
-    # Recorremos la lista antes de enviarla y "arreglamos" los datos visualmente
+    # ✅ FORMATEO UNIFICADO (Sin duplicados)
     for p in profesionales:
         if p['rol'] == 'director':
-            p['especialidad'] = 'DIRECTOR'  # <--- Forzamos este texto
+            p['especialidad'] = 'Dirección'
+        elif p['rol'] == 'area':
+            p['especialidad'] = 'Área / Módulo'  # Etiqueta para diferenciar
         elif p['especialidad'] is None:
             p['especialidad'] = 'General'
 
     return jsonify(profesionales)
+
+
 @bp_usuarios.route("/api/usuarios/<int:usuario_id>/duracion", methods=["PATCH"])
 @login_required
 def actualizar_duracion_turno(usuario_id):
@@ -294,7 +301,7 @@ def actualizar_duracion_turno(usuario_id):
 
 
 # ============================================================
-#  RUTAS DE PERFIL Y FOTOS (AQUÍ ESTÁ LA SOLUCIÓN)
+#  RUTAS DE PERFIL Y FOTOS
 # ============================================================
 
 # 1. RUTA NUEVA PARA OBTENER MIS DATOS + FOTO
@@ -323,7 +330,7 @@ def obtener_perfil():
         "rol": current_user.rol
     })
 
-# 3. ACTUALIZAR PERFIL (Mantenemos tu lógica original con Pillow)
+# 3. ACTUALIZAR PERFIL
 @bp_usuarios.route('/api/usuario/perfil', methods=['POST'])
 @login_required
 def actualizar_perfil():
@@ -357,7 +364,6 @@ def actualizar_perfil():
             nueva_foto = filename
             path_nuevo = os.path.join(carpeta_fotos, filename)
             
-            # Tu lógica de compresión original
             try:
                 image = Image.open(archivo)
                 if image.mode in ("RGBA", "P", "LA"): image = image.convert("RGB")

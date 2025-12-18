@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 bp_disponibilidades = Blueprint("disponibilidades", __name__)
 
 # ==========================================================
-# CRUD de Disponibilidades de los Médicos
+# 📅 CRUD de Disponibilidades de los Médicos
 # ==========================================================
 
 DIAS_ORDENADOS = [
@@ -38,14 +38,14 @@ def normalizar_dia(dia):
 
 @bp_disponibilidades.route('/api/disponibilidades', methods=['GET'])
 @login_required
-@requiere_rol('director', 'profesional', 'administrativo')
+@requiere_rol('director', 'profesional', 'administrativo', 'area')
 def listar_disponibilidades():
 
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
 
-    # Si es profesional, solo ve las suyas
-    if current_user.rol == 'profesional':
+    # 👇 CAMBIO: 'area' se comporta como 'profesional' (ve solo lo suyo)
+    if current_user.rol in ['profesional', 'area']:
         cursor.execute(f"""
             SELECT id, usuario_id, dia_semana, hora_inicio, hora_fin, activo
             FROM disponibilidades
@@ -79,7 +79,7 @@ def listar_disponibilidades():
     cursor.close()
     conn.close()
 
-    # Normalizar resultados
+    # 🟢 Normalizar resultados
     for d in disponibilidades:
         # Esto asegura que si en la DB quedó alguno viejo sin tilde, se muestre bien
         if d["dia_semana"] in ["Miercoles", "Sabado"]:
@@ -100,16 +100,17 @@ def listar_disponibilidades():
 
 @bp_disponibilidades.route('/api/disponibilidades', methods=['POST'])
 @login_required
-@requiere_rol('director', 'profesional')
+@requiere_rol('director', 'profesional', 'area')
 def crear_disponibilidad():
 
     data = request.get_json()
     if not data:
         return jsonify({"error": "Faltan datos"}), 400
 
+    # Lógica para asignar usuario
     # Si es Director, permitimos que venga "usuario_id" en el JSON
-    # Si es Profesional, forzamos que sea su propio ID
-    if current_user.rol == 'profesional':
+    # Si es Profesional o Area, forzamos que sea su propio ID
+    if current_user.rol in ['profesional', 'area']:
         usuario_id = current_user.id
     else:
         usuario_id = data.get("usuario_id") or current_user.id
@@ -122,9 +123,6 @@ def crear_disponibilidad():
     if not dia_semana:
         return jsonify({"error": "Día inválido"}), 400
     
-    # Validar que no se superpongan horarios (Opcional pero recomendado)
-    # Aquí simplemente insertamos
-
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
 
@@ -153,7 +151,7 @@ def crear_disponibilidad():
 
 @bp_disponibilidades.route('/api/disponibilidades/<int:id>', methods=['PUT'])
 @login_required
-@requiere_rol('director', 'profesional')
+@requiere_rol('director', 'profesional', 'area')
 def editar_disponibilidad(id):
 
     data = request.get_json()
@@ -169,9 +167,9 @@ def editar_disponibilidad(id):
         cursor.close(); conn.close()
         return jsonify({"error": "Disponibilidad no encontrada"}), 404
 
-    # Si es profesional, solo puede editar lo suyo. 
+    # Si es profesional/area, solo puede editar lo suyo. 
     # Si es director, puede editar lo de cualquiera.
-    if current_user.rol == 'profesional' and disp["usuario_id"] != current_user.id:
+    if current_user.rol in ['profesional', 'area'] and disp["usuario_id"] != current_user.id:
         cursor.close(); conn.close()
         return jsonify({"error": "No autorizado"}), 403
 
@@ -198,7 +196,7 @@ def editar_disponibilidad(id):
 
 @bp_disponibilidades.route('/api/disponibilidades/<int:id>', methods=['DELETE'])
 @login_required
-@requiere_rol('director', 'profesional')
+@requiere_rol('director', 'profesional', 'area')
 def eliminar_disponibilidad(id):
 
     conn = get_connection()
@@ -212,7 +210,7 @@ def eliminar_disponibilidad(id):
         return jsonify({"error": "Disponibilidad no encontrada"}), 404
 
     # Validación de permiso
-    if current_user.rol == 'profesional' and disp["usuario_id"] != current_user.id:
+    if current_user.rol in ['profesional', 'area'] and disp["usuario_id"] != current_user.id:
         cursor.close(); conn.close()
         return jsonify({"error": "No autorizado"}), 403
 
