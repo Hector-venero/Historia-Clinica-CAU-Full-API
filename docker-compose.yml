@@ -8,11 +8,10 @@ services:
     build: ./backend_flask/app
     container_name: historia_web
     restart: always
-    ports:
-      - "5000:5000"   # en producción podés comentar este puerto si no querés acceso directo
+    # ports:
+    #   - "5000:5000"   <-- COMENTADO POR SEGURIDAD (Solo Nginx accede aquí)
     volumes:
       - ./backend_flask/app:/app
-     # - ./backend_flask/app/static:/app/static
     depends_on:
       db:
         condition: service_healthy
@@ -60,6 +59,8 @@ services:
     container_name: bfa-node
     restart: always
     entrypoint: ["geth"]
+    # NOTA PARA INFRA: Actualmente en modo --dev para despliegue inicial.
+    # Para conectar a Mainnet, se debe cambiar este comando y montar el genesis.json.
     command: >
       --dev
       --http --http.addr 0.0.0.0 --http.vhosts="*" --http.corsdomain="*"
@@ -68,15 +69,15 @@ services:
       --rpc.allow-unprotected-txs
       --verbosity 3
     ports:
-      - "8545:8545"
-      - "30303:30303"
+      - "8545:8545"   # RPC Interno (usado por backend)
+      - "30303:30303" # P2P (BFA Discovery)
     volumes:
       - ./bfa-node/nucleo:/nucleo
       - bfa_data:/nucleo/test2network/geth
     networks:
       - historia_net
 
-# ============================
+  # ============================
   # 💻 FRONTEND (React / Vite)
   # ============================
   frontend:
@@ -84,14 +85,11 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       args:
-        VITE_API_URL: /api
+        VITE_API_URL: ${VITE_API_URL} 
     container_name: historia_frontend
     restart: always
     env_file:
       - .env
-    # Quitamos el environment VITE_API_URL aquí, porque Vite lo necesita
-    # AL MOMENTO DEL BUILD (npm run build), no al momento de correr el contenedor.
-    # Ver nota abajo sobre ARG.
     networks:
       - historia_net
 
@@ -109,14 +107,9 @@ services:
       - "80:80"
     volumes:
       - ./nginx/default.conf:/etc/nginx/conf.d/default.conf
-      # BORRA LA LÍNEA DE ABAJO:
-      # - ./frontend/dist:/usr/share/nginx/html  <-- ESTO CAUSABA EL ERROR DE REDIRECCION
     networks:
       - historia_net
 
-# ============================
-# 🌐 REDES Y VOLÚMENES
-# ============================
 networks:
   historia_net:
 
