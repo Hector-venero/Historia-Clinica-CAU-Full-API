@@ -4,28 +4,41 @@ import FloatingConfigurator from '@/components/FloatingConfigurator.vue'
 import api from "@/api/axios";
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
+// 👇 Importamos el store
+import { useUserStore } from "@/stores/user"; 
 
 const usuario = ref('')
 const password = ref('')
 const checked = ref(false)
 const router = useRouter()
+const userStore = useUserStore() // Instanciamos el store
 
 const login = async () => {
   try {
-    const res = await api.post('/login', {
+    // 1. Autenticación básica (Cookie HttpOnly)
+    await api.post('/login', {
       username: usuario.value,
       password: password.value
     }, { withCredentials: true })
 
+    // 2. 👇 IMPORTANTE: Obtenemos los datos del usuario (rol, nombre, id)
+    // Esto disparará 'setUser' en el store, que a su vez guardará el JSON en localStorage
+    await userStore.fetchUser()
+
+    // 3. Marca de logueado simple
     localStorage.setItem('loggedIn', 'true')
+    
+    // 4. Redirigir
     router.push('/')
+
   } catch (error) {
     console.error('Error al iniciar sesión:', error)
-    alert('Credenciales incorrectas o error de red')
+    // Manejo de error más amigable si el backend devuelve mensaje
+    const msg = error.response?.data?.error || 'Credenciales incorrectas o error de red';
+    alert(msg)
   }
 }
 
-// 🔹 Redirigir al formulario de recuperación
 const irARecuperar = () => {
   router.push('/recuperar')
 }
@@ -50,7 +63,7 @@ const irARecuperar = () => {
             <InputText id="usuario1" type="text" placeholder="Usuario" class="w-full md:w-[30rem] mb-8" v-model="usuario" />
 
             <label for="password1" class="block text-surface-900 dark:text-surface-0 font-medium text-xl mb-2">Contraseña</label>
-            <Password id="password1" v-model="password" placeholder="Contraseña" :toggleMask="true" class="mb-4" fluid :feedback="false"></Password>
+            <Password id="password1" v-model="password" placeholder="Contraseña" :toggleMask="true" class="mb-4" fluid :feedback="false" @keyup.enter="login"></Password>
 
             <div class="flex items-center justify-between mt-2 mb-8 gap-8">
               <div class="flex items-center">
@@ -73,12 +86,7 @@ const irARecuperar = () => {
 </template>
 
 <style scoped>
-.pi-eye {
-  transform: scale(1.6);
-  margin-right: 1rem;
-}
-
-.pi-eye-slash {
+.pi-eye, .pi-eye-slash {
   transform: scale(1.6);
   margin-right: 1rem;
 }

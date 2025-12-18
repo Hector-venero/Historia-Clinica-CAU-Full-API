@@ -58,7 +58,7 @@ const model = computed(() => {
           label: 'Configuración de Turnos', 
           icon: 'pi pi-clock', 
           to: '/turnos/configuracion',
-          visible: userStore.rol === 'profesional' 
+          visible: ['profesional', 'director', 'area'].includes(userStore.rol)
         }
       ]
     },

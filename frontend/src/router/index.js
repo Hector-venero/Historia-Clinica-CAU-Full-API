@@ -83,30 +83,38 @@ const router = createRouter({
           path: 'turnos/configuracion',
           name: 'configuracionTurnos',
           component: () => import('@/views/pages/turnos/ConfiguracionTurnos.vue'),
-          meta: { soloProfesional: true }
+          // Permitimos a todos los que gestionan agenda
+          meta: { roles: ['profesional', 'director', 'area'] }
         },
-        // 📌 Usuarios
+        
+        // 📌 Usuarios (🔒 SECCIÓN BLINDADA - SOLO DIRECTOR)
         {
           path: 'usuarios',
           name: 'usuarios',
-          component: () => import('@/views/pages/usuarios/Usuarios.vue')
+          component: () => import('@/views/pages/usuarios/Usuarios.vue'),
+          meta: { roles: ['director'] } 
         },
         {
           path: 'usuarios/crear',
           name: 'crearUsuario',
-          component: () => import('@/views/pages/usuarios/CrearUsuario.vue')
+          component: () => import('@/views/pages/usuarios/CrearUsuario.vue'),
+          meta: { roles: ['director'] } 
         },
         {
           path: 'usuarios/inactivos',
           name: 'usuariosInactivos',
-          component: () => import('@/views/pages/usuarios/UsuariosInactivos.vue')
+          component: () => import('@/views/pages/usuarios/UsuariosInactivos.vue'),
+          meta: { roles: ['director'] } 
         },
         {
           path: 'usuarios/:id/editar',
           name: 'editarUsuario',
           component: () => import('@/views/pages/usuarios/EditarUsuario.vue'),
-          props: true
+          props: true,
+          meta: { roles: ['director'] }
         },
+        
+        // 📌 Perfil (Para todos)
         {
           path: 'mi-perfil',
           name: 'miPerfil',
@@ -119,18 +127,20 @@ const router = createRouter({
           component: () => import('@/views/pages/usuarios/CambiarPassword.vue'),
           meta: { requiresAuth: true }
         },
+        
         // 📌 Disponibilidades
         {
           path: 'disponibilidad',
           name: 'disponibilidadProfesional',
           component: () => import('@/views/pages/disponibilidades/DisponibilidadProfesional.vue')
         },
+        
         // 📌 Grupos
         {
           path: 'grupos',
           name: 'GruposProfesionales',
           component: () => import('../views/pages/grupos/GruposProfesionales.vue'),
-          meta: { requiresAuth: true }
+          meta: { requiresAuth: true } // Listado visible para todos
         },
         {
           path: 'calendario-grupo/:grupoId',
@@ -142,15 +152,16 @@ const router = createRouter({
           path: 'grupos/crear',
           name: 'CrearGrupo',
           component: () => import('../views/pages/grupos/CrearGrupo.vue'),
-          meta: { requiresAuth: true }
+          meta: { roles: ['director'] } 
         },
         {
           path: 'grupos/editar/:id',
           name: 'EditarGrupo',
           component: () => import('../views/pages/grupos/EditarGrupo.vue'),
-          meta: { requiresAuth: true },
-          props: true
+          props: true,
+          meta: { roles: ['director'] } 
         },
+        
         // 📌 Blockchain
         {
           path: 'blockchain/verificar',
@@ -171,16 +182,31 @@ const router = createRouter({
 
 // 🛡️ Guard global para proteger rutas
 router.beforeEach((to, from, next) => {
-  const publicPages = ['/auth/login', '/recuperar']
-  const isResetRoute = to.path.startsWith('/reset/')
-  const authRequired = !publicPages.includes(to.path) && !isResetRoute
-  const loggedIn = localStorage.getItem('loggedIn')
+  const publicPages = ['/auth/login', '/recuperar', '/logout'];
+  const isResetRoute = to.path.startsWith('/reset/');
+  const authRequired = !publicPages.includes(to.path) && !isResetRoute;
+  const loggedIn = localStorage.getItem('loggedIn');
 
+  // 1. Si requiere auth y no está logueado -> Login
   if (authRequired && !loggedIn) {
-    return next('/auth/login')
+    return next('/auth/login');
   }
-  next()
-})
 
+  // 2. Validación de ROLES
+  if (loggedIn && to.meta.roles) {
+    // Obtenemos el rol del localStorage (guardado por userStore)
+    const userData = JSON.parse(localStorage.getItem('user') || '{}');
+    const userRole = userData.rol || ''; 
+    
+    // Si el rol del usuario NO está en la lista permitida de la ruta
+    if (!to.meta.roles.includes(userRole)) {
+      // Redirigir al inicio o mostrar alerta (opcional)
+      console.warn(`⛔ Acceso denegado a ${to.path}. Rol actual: ${userRole}`);
+      return next('/'); 
+    }
+  }
+
+  next();
+});
 
 export default router
