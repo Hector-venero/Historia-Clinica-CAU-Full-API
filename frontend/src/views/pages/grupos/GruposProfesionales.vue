@@ -199,10 +199,18 @@ async function verMiembros(grupo) {
         api.get("/usuarios", { withCredentials: true })
     ]);
     
-    miembros.value = resMiembros.data || [];
+    // Lista de miembros actuales
+    const miembrosActuales = resMiembros.data || [];
+    miembros.value = miembrosActuales;
     
-    // 👇 CORRECCIÓN: Quitamos el filtro para ver a todos
-    usuarios.value = resUsuarios.data || [];
+    // 🔓 CORRECCIÓN: Quitamos el filtro de 'profesional' o 'area'
+    // Ahora solo ocultamos a los que YA son miembros del grupo
+    const todosUsuarios = resUsuarios.data || [];
+    
+    usuarios.value = todosUsuarios.filter(u => {
+        const yaEsMiembro = miembrosActuales.some(m => m.id === u.id);
+        return !yaEsMiembro; // Si NO es miembro, lo mostramos para agregar
+    });
 
   } catch (err) {
     console.error("Error cargando datos:", err);
@@ -221,11 +229,21 @@ async function agregarMiembro() {
       { withCredentials: true }
     );
 
-    const user = usuarios.value.find((u) => u.id === nuevoMiembro.value);
-    if (user) miembros.value.push(user);
+    // Buscamos el usuario agregado en la lista 'usuarios' para pasarlo a 'miembros'
+    const userIndex = usuarios.value.findIndex((u) => u.id === nuevoMiembro.value);
+    
+    if (userIndex !== -1) {
+        // Lo agregamos a la lista visual de miembros
+        miembros.value.push(usuarios.value[userIndex]);
+        // Lo quitamos del desplegable para que no se pueda volver a agregar
+        usuarios.value.splice(userIndex, 1);
+    }
+    
     nuevoMiembro.value = "";
   } catch (err) {
     console.error("Error agregando miembro:", err);
+    // Sería bueno agregar un Toast aquí si tuvieras useToast importado
+    alert("Error al agregar miembro: Verifique que sea Profesional o Área.");
   }
 }
 
@@ -237,7 +255,16 @@ async function quitarMiembro(m) {
       `/grupos/${grupoActual.value.id}/miembros/${m.id}`,
       { withCredentials: true }
     );
+    // Quitar de la lista visual de miembros
     miembros.value = miembros.value.filter((x) => x.id !== m.id);
+    
+    // (Opcional) Devolverlo a la lista de "disponibles" si cumple el rol
+    if (['profesional', 'area'].includes(m.rol)) {
+        usuarios.value.push(m);
+        // Ordenar alfabéticamente para mantener orden
+        usuarios.value.sort((a, b) => a.nombre.localeCompare(b.nombre));
+    }
+    
   } catch (err) {
     console.error("Error quitando miembro:", err);
   }
