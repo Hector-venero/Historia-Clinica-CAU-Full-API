@@ -8,8 +8,8 @@ services:
     build: ./backend_flask/app
     container_name: historia_web
     restart: always
-    # ports:
-    #   - "5000:5000"   <-- COMENTADO POR SEGURIDAD (Solo Nginx accede aquí)
+    ports:
+      - "5000:5000" # Puerto para desarrollo local
     volumes:
       - ./backend_flask/app:/app
       - uploads_data:/app/uploads # donde Flask guarda archivos subidos

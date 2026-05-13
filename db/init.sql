@@ -29,6 +29,7 @@ DROP TABLE IF EXISTS grupo_miembros;
 CREATE TABLE usuarios (
     id INT AUTO_INCREMENT PRIMARY KEY,
     nombre VARCHAR(100) NOT NULL,
+    apellido VARCHAR(100) DEFAULT NULL,
     username VARCHAR(50) NOT NULL UNIQUE,
     email VARCHAR(100) NOT NULL UNIQUE,
     password_hash TEXT NOT NULL,
@@ -36,7 +37,13 @@ CREATE TABLE usuarios (
     especialidad VARCHAR(100) NULL,
     duracion_turno INT NOT NULL DEFAULT 20,
     foto VARCHAR(255) DEFAULT NULL,
-    activo TINYINT(1) NOT NULL DEFAULT 1 
+    activo TINYINT(1) NOT NULL DEFAULT 1,
+    dni VARCHAR(20) DEFAULT NULL,
+    sexo ENUM('M', 'F', 'X', 'O') DEFAULT NULL,
+    profesion VARCHAR(100) DEFAULT NULL,
+    matricula_tipo ENUM('MN', 'MP') DEFAULT NULL,
+    matricula_numero VARCHAR(50) DEFAULT NULL,
+    matricula_provincia VARCHAR(100) DEFAULT NULL
 ) ENGINE=InnoDB
   DEFAULT CHARSET=utf8mb4
   COLLATE=utf8mb4_unicode_ci;
@@ -226,10 +233,10 @@ CREATE INDEX idx_pacientes_apellido ON pacientes (apellido);
 -- ==============================================
 -- USUARIO ADMINISTRADOR INICIAL
 -- ==============================================
-INSERT INTO usuarios (nombre, username, email, password_hash, rol)
-SELECT 'Admin', 'admin', 'admin@ejemplo.com',
+INSERT INTO usuarios (nombre, apellido, username, email, password_hash, rol, dni, sexo, profesion, matricula_tipo, matricula_numero, matricula_provincia)
+SELECT 'Admin', 'Castro', 'admin', 'admin@ejemplo.com',
 'scrypt:32768:8:1$bdt4huruWlbjvNqs$4a236ac9509c5ee61ab5ce7103a686d272d512c2cf5f11d30b5afcb91f98832cba6ba1118114c6c4df2e4e9387f452514b05c6f9b6fc7d35a3a2e042f07fc0af',
-'director'
+'director', '67887891', 'M', 'Médico', 'MN', '43243', 'Nacional'
 WHERE NOT EXISTS (
     SELECT 1 FROM usuarios WHERE username = 'admin'
 );

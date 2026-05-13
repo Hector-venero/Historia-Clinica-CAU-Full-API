@@ -7,3 +7,4 @@ eth-tester
 Flask-Mail
 flask-cors
 Flask-Talisman
+requests

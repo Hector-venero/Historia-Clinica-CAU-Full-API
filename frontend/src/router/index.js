@@ -167,6 +167,13 @@ const router = createRouter({
           path: 'blockchain/verificar',
           name: 'blockchainVerificar',
           component: () => import('@/views/pages/historias/BlockchainVerificar.vue')
+        },
+
+        // 📌 Recetas
+        {
+          path: 'recetas',
+          name: 'generadorRecetas',
+          component: () => import('@/views/pages/GeneradorRecetas.vue')
         }
       ]
     },

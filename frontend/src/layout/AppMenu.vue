@@ -48,6 +48,12 @@ const model = computed(() => {
       ]
     },
     {
+      label: 'Recetas y Prácticas',
+      items: [
+        { label: 'Generar Receta', icon: 'pi pi-file-edit', to: '/recetas' }
+      ]
+    },
+    {
       label: 'Turnos',
       items: [
         { label: 'Agenda', icon: 'pi pi-fw pi-calendar', to: '/turnos' },

@@ -68,9 +68,15 @@ def load_user(user_id):
             email=data["email"],
             password_hash=data["password_hash"],
             rol=data["rol"],
-            duracion_turno = data.get("duracion_turno"),
-            foto=data.get("foto")
-
+            duracion_turno=data.get("duracion_turno"),
+            foto=data.get("foto"),
+            apellido=data.get("apellido"),
+            dni=data.get("dni"),
+            sexo=data.get("sexo"),
+            profesion=data.get("profesion"),
+            matricula_tipo=data.get("matricula_tipo"),
+            matricula_numero=data.get("matricula_numero"),
+            matricula_provincia=data.get("matricula_provincia"),
         )
     return None
 
@@ -97,6 +103,7 @@ from app.routes.dashboard_routes import bp_dashboard
 from app.routes.disponibilidades_routes import bp_disponibilidades
 from app.routes.grupos_routes import bp_grupos
 from app.routes.health_routes import bp_health
+from app.routes.recetas import bp_recetas
 
 app.register_blueprint(bp_auth)
 app.register_blueprint(bp_usuarios)
@@ -109,6 +116,7 @@ app.register_blueprint(bp_disponibilidades)
 app.register_blueprint(bp_grupos)
 app.register_blueprint(bp_blockchain)
 app.register_blueprint(bp_health)
+app.register_blueprint(bp_recetas)
 
 # -------------------------
 # Servir fotos de usuario
