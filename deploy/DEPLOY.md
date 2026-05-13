@@ -26,7 +26,6 @@ Historia-Clinica-CAU/
 ├── frontend/              # React + Vite
 ├── nginx/                 # Configuración Nginx
 ├── db/                    # Archivos SQL iniciales
-├── bfa-node/              # Nodo Blockchain BFA (Geth en modo dev)
 ├── docker-compose.yml
 └── .env                   # Variables de entorno (local del servidor)
 ```

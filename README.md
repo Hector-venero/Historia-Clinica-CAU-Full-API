@@ -48,7 +48,7 @@ graph TD
   Client[Frontend React/Vite] -->|HTTP| Nginx[Nginx Reverse Proxy]
   Nginx -->|/api| Flask[Backend Flask API]
   Flask --> DB[(MySQL)]
-  Flask -->|Opcional| BFA[BFA / Geth]
+  Flask -->|Opcional| TSA[BFA TSA API]
   Flask -->|Opcional| SMTP[SMTP (recuperación contraseña)]
 ```
 

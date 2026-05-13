@@ -44,8 +44,9 @@ const registrarEnBfa = async () => {
       accion: 'registrar',
       mensaje: data.mensaje || 'Hash publicado correctamente',
       hash_local: data.hash,
-      hash_bfa: null,
-      tx_hash: data.tx_hash,
+      recibo_tsa: data.recibo_tsa || data.tx_hash,
+      bloque: null,
+      attestation_time: null,
       valido: null
     }
   } catch (e) {
@@ -68,8 +69,9 @@ const verificar = async () => {
       accion: 'verificar',
       mensaje: data.mensaje,
       hash_local: data.hash_local,
-      hash_bfa: data.hash_bfa,
-      tx_hash: data.tx_hash,
+      recibo_tsa: data.recibo_tsa || data.tx_hash,
+      bloque: data.bloque,
+      attestation_time: data.attestation_time,
       valido: !!data.valido
     }
     // refrescamos auditorías para que aparezca la última verificación
@@ -177,21 +179,28 @@ onMounted(() => {
       </template>
       <template #content>
         <div class="grid md:grid-cols-2 gap-4 text-sm">
-          <div class="space-y-1">
-            <div class="font-medium">Mensaje</div>
-            <div class="font-mono break-all">{{ resultado.mensaje }}</div>
-          </div>
-          <div class="space-y-1">
-            <div class="font-medium">Tx Hash</div>
-            <div class="font-mono break-all">{{ resultado.tx_hash || '—' }}</div>
-          </div>
           <div class="space-y-1 md:col-span-2">
-            <div class="font-medium">Hash local (recalculado / registrado)</div>
+            <div class="font-medium">Mensaje</div>
+            <div class="break-all">{{ resultado.mensaje }}</div>
+          </div>
+
+          <div class="space-y-1" v-if="resultado.bloque">
+            <div class="font-medium">Bloque BFA</div>
+            <div class="font-mono">#{{ resultado.bloque }}</div>
+          </div>
+          <div class="space-y-1" v-if="resultado.attestation_time">
+            <div class="font-medium">Fecha y hora del sellado</div>
+            <div class="font-mono">{{ resultado.attestation_time }}</div>
+          </div>
+
+          <div class="space-y-1 md:col-span-2">
+            <div class="font-medium">Hash local (SHA-256 del contenido)</div>
             <div class="font-mono break-all">{{ resultado.hash_local || '—' }}</div>
           </div>
-          <div class="space-y-1 md:col-span-2" v-if="resultado.hash_bfa !== null">
-            <div class="font-medium">Hash en BFA (tx.input)</div>
-            <div class="font-mono break-all">{{ resultado.hash_bfa || '—' }}</div>
+
+          <div class="space-y-1 md:col-span-2">
+            <div class="font-medium">Recibo TSA</div>
+            <div class="font-mono break-all text-xs">{{ resultado.recibo_tsa || '—' }}</div>
           </div>
         </div>
       </template>
@@ -240,7 +249,7 @@ onMounted(() => {
                 <span class="font-mono break-all block max-w-[380px] truncate" :title="data.hash_local">{{ data.hash_local }}</span>
               </template>
             </Column>
-            <Column field="hash_bfa" header="Hash BFA">
+            <Column field="hash_bfa" header="Recibo TSA">
               <template #body="{ data }">
                 <span class="font-mono break-all block max-w-[380px] truncate" :title="data.hash_bfa">{{ data.hash_bfa }}</span>
               </template>

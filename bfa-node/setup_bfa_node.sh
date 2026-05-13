@@ -36,30 +36,30 @@ if [ ! -f "/usr/local/bin/geth" ]; then
 fi
 
 # 4️⃣ Verificar existencia de genesis.json
-if [ ! -f "/nucleo/test2network/genesis.json" ]; then
-  echo -e "${RED}❌ ERROR: No se encontró /nucleo/test2network/genesis.json${NC}"
+if [ ! -f "/nucleo/network/genesis.json" ]; then
+  echo -e "${RED}❌ ERROR: No se encontró /nucleo/network/genesis.json${NC}"
   echo -e "${RED}👉 Asegurate de montarlo correctamente desde el host.${NC}"
   exit 1
 fi
 
 # 5️⃣ Inicializar la red (solo si no existe)
-if [ ! -d "/nucleo/test2network/geth" ]; then
+if [ ! -d "/nucleo/network/geth" ]; then
   echo -e "${GREEN}🧱 Inicializando red con genesis.json...${NC}"
-  geth --datadir /nucleo/test2network init /nucleo/test2network/genesis.json
+  geth --datadir /nucleo/network init /nucleo/network/genesis.json
 fi
 
 # 6️⃣ Verificar keystore
-if [ ! -d "/nucleo/test2network/keystore" ]; then
-  echo -e "${RED}⚠️ No se encontró el directorio keystore en /nucleo/test2network${NC}"
+if [ ! -d "/nucleo/network/keystore" ]; then
+  echo -e "${RED}⚠️ No se encontró el directorio keystore en /nucleo/network${NC}"
   echo -e "${YELLOW}📁 Crealo y copiá tu archivo UTC--...--9597A10a33Cf9a30A46Eb01E63Ab1488B25505A3${NC}"
-  mkdir -p /nucleo/test2network/keystore
+  mkdir -p /nucleo/network/keystore
 fi
 
 # 7️⃣ Desbloquear cuenta y lanzar nodo
 echo -e "${GREEN}🔓 Desbloqueando cuenta 0x9597A10a33Cf9a30A46Eb01E63Ab1488B25505A3...${NC}"
 
-exec geth --datadir /nucleo/test2network \
-  --networkid 99118822 \
+exec geth --datadir /nucleo/network \
+  --networkid 47525974938 \
   --http --http.addr 0.0.0.0 --http.port 8545 \
   --http.api eth,net,web3,txpool \
   --http.corsdomain="*" --http.vhosts="*" \

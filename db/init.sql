@@ -98,7 +98,7 @@ CREATE TABLE historias (
     fecha DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     resumen LONGTEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
     hash_local CHAR(64) DEFAULT NULL,        -- Hash SHA-256 del contenido
-    tx_hash VARCHAR(100) DEFAULT NULL,       -- Hash de la transacción en BFA
+    tx_hash VARCHAR(512) DEFAULT NULL,       -- Recibo TSA de BFA (rd base64)
     FOREIGN KEY (paciente_id) REFERENCES pacientes(id) ON DELETE CASCADE,
     FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE
 ) ENGINE=InnoDB
@@ -214,7 +214,7 @@ CREATE TABLE auditorias_blockchain (
     id INT AUTO_INCREMENT PRIMARY KEY,
     historia_id INT NOT NULL,
     hash_local VARCHAR(200) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
-    hash_bfa   VARCHAR(200) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+    hash_bfa   VARCHAR(512) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
     valido TINYINT(1) NOT NULL,
     usuario VARCHAR(100) NOT NULL,
     fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

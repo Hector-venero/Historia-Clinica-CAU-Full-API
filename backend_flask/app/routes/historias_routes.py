@@ -3,10 +3,7 @@ from flask import Blueprint, request, jsonify
 from flask_login import login_required, current_user
 from datetime import datetime
 from app.database import get_connection
-from app.utils.hashing import generar_hash
-from app.utils.bfa_client import registrar_hash_en_bfa, verificar_hash_en_bfa
 from app.utils.permisos import requiere_rol
-from web3 import Web3
 import hashlib, json
 
 bp_historias = Blueprint("historias", __name__)

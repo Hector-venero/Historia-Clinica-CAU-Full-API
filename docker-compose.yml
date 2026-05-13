@@ -16,8 +16,6 @@ services:
     depends_on:
       db:
         condition: service_healthy
-      bfa-node:
-        condition: service_started
     env_file:
       - .env
     environment:
@@ -51,32 +49,6 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
-
-  # ============================
-  # ⛓️ NODO BLOCKCHAIN (BFA / Geth)
-  # ============================
-  bfa-node:
-    image: ethereum/client-go:stable
-    container_name: bfa-node
-    restart: always
-    entrypoint: ["geth"]
-    # NOTA PARA INFRA: Actualmente en modo --dev para despliegue inicial.
-    # Para conectar a Mainnet, se debe cambiar este comando y montar el genesis.json.
-    command: >
-      --dev
-      --http --http.addr 0.0.0.0 --http.vhosts="*" --http.corsdomain="*"
-      --http.api admin,eth,net,web3,miner,personal,txpool
-      --datadir /nucleo/test2network
-      --rpc.allow-unprotected-txs
-      --verbosity 3
-    ports:
-      - "8545:8545"   # RPC Interno (usado por backend)
-      - "30303:30303" # P2P (BFA Discovery)
-    volumes:
-      - ./bfa-node/nucleo:/nucleo
-      - bfa_data:/nucleo/test2network/geth
-    networks:
-      - historia_net
 
   # ============================
   # 💻 FRONTEND (React / Vite)
@@ -117,5 +89,4 @@ networks:
 
 volumes:
   db_data:
-  bfa_data:
   uploads_data:
