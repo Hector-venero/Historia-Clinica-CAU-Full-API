@@ -108,7 +108,6 @@ Esto crea y levanta los siguientes servicios:
 | `historia_frontend` | Construcción del frontend |
 | `historia_nginx` | Servidor web + reverse proxy |
 | `historia_db` | Base MySQL |
-| `bfa-node` | Nodo blockchain BFA |
 
 ---
 

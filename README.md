@@ -108,9 +108,7 @@ MAIL_PASSWORD=tu_app_password
 MAIL_DEFAULT_SENDER=tu_email@gmail.com
 
 # Blockchain (opcional)
-PRIVATE_KEY_BFA=0x...
-ADDRESS_BFA=0x...
-BFA_RPC_URL=http://bfa-node:8545
+BFA_TSA_URL=https://tsaapi.bfa.ar/api/tsa
 ```
 
 ### 3) Build + up
@@ -135,14 +133,23 @@ docker compose --env-file .env up -d --build
 
 ---
 
-## ⛓️ Integridad y Blockchain (BFA)
+## ⛓️ Integridad y Blockchain (BFA TSA API)
 
-Flujo típico:
+**🛠️ Refactorización Arquitectónica (Rama `refactor/bfa-tsa-api`):**  
+En esta rama se realizó una migración completa para dejar de depender de un nodo Geth local y utilizar la API oficial de Timestamp Authority (TSA) de la BFA.
 
-1. Generar **hash SHA-256** del contenido clínico (o del registro consolidado).
-2. Guardar el hash localmente.
-3. (Opcional) Publicar el hash en BFA como transacción.
-4. Verificar integridad comparando **hash BD ↔ hash blockchain**.
+**Resumen de los cambios y bugs solucionados:**
+- **Infraestructura:** Se eliminó el contenedor `bfa-node` del `docker-compose.yml` y la librería `web3` de Python, aligerando drásticamente el consumo de RAM/CPU de la aplicación.
+- **Backend:** Se reescribió `bfa_client.py` usando `requests` contra `tsaapi.bfa.ar`. Se agregó lógica de reintentos (backoff) para tolerar la asincronía de la TSA y solucionar el bug de "falsos inválidos" al verificar justo después de registrar.
+- **Corrección de Hash:** Se arregló un bug donde el hash sellado difería del guardado en BD debido a un `.strip()`. Ahora se sella de forma exacta el `hash_local` de la BD.
+- **Base de Datos:** Se ejecutó un `ALTER TABLE` para ampliar las columnas `tx_hash` y `hash_bfa` a `VARCHAR(512)`, soportando así los recibos extensos en formato Base64 que devuelve la TSA.
+- **Frontend:** Se mejoró la tarjeta de auditoría clínica. El recibo TSA (`permanent_rd`) ahora se decodifica en el backend para mostrarle al usuario el **número de bloque exacto** y la **fecha/hora de sellado real** en la red.
+
+**Flujo de Auditoría Actualizado:**
+
+1. El sistema genera un **hash SHA-256** del contenido clínico consolidado y lo guarda localmente.
+2. El hash se envía mediante la API a la TSA de BFA (`tsaapi.bfa.ar/api/tsa/stamp/`), obteniendo un recibo temporal (`rd`) que se guarda en la base de datos (`tx_hash`).
+3. Para verificar, el sistema consulta la TSA con el recibo. Si la historia no fue alterada, BFA confirma la inclusión del hash en la blockchain validando su inmutabilidad.
 
 ---
 
