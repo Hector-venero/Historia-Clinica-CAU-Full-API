@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "cau-docker-stack",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": ["/c", "echo Docker stack already running via docker compose"],
+      "port": 80
+    }
+  ]
+}

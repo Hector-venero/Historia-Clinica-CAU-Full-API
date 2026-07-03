@@ -294,8 +294,8 @@ def _store_receta(paciente_id, request_payload, qbitos_response, *, tipo="receta
             request_payload.get("paciente", {}).get("cobertura", {}).get("numero"),
             json.dumps(request_payload, ensure_ascii=False),
             json.dumps(qbitos_response, ensure_ascii=False),
-            datetime.utcnow(),
-            datetime.utcnow(),
+            datetime.now(),
+            datetime.now(),
         ),
     )
     conn.commit()

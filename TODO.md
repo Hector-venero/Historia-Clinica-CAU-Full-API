@@ -193,16 +193,86 @@ Fecha de auditoria: 2026-04-13
 
 ## Checklist de validacion final
 
-- [ ] Login/logout y persistencia de sesion funcionando en entorno actual.
-- [ ] Usuarios inactivos bloqueados.
-- [ ] RBAC consistente en rutas sensibles.
-- [ ] CRUD de disponibilidades sin errores por dias.
-- [ ] Alta/edicion/baja de turnos respeta reglas de disponibilidad y solapes.
-- [ ] Frontend funciona sin URLs hardcodeadas a localhost.
+- [x] Login/logout y persistencia de sesion funcionando en entorno actual.
+  - Verificado en vivo (docker local): login -> reload de pagina -> `/api/usuarios/me` sigue autenticado (200) -> logout -> `/api/usuarios/me` devuelve 401. De paso se arreglo `tests/test_auth_routes.py::test_login_success`, que fallaba porque el `StubAuthUser` de prueba no tenia los campos (`especialidad`, `dni`, matricula, lugar de atencion, etc.) que `auth_routes.py` ya serializa en el login desde hace tiempo.
+- [x] Usuarios inactivos bloqueados.
+  - Verificado en vivo: usuario de prueba creado, dado de baja logica (`DELETE /api/usuarios/<id>` -> `activo=0`), intento de login con sus credenciales -> 401 "Credenciales incorrectas". Confirma que `auth.py` (`WHERE activo = 1`) sigue funcionando en la version actual.
+- [x] RBAC consistente en rutas sensibles.
+  - Decision de negocio: los 4 roles (`director`, `profesional`, `administrativo`, `area`) tienen acceso a CRUD de pacientes. Se agrego `@requiere_rol('director', 'profesional', 'administrativo', 'area')` explicito a los 11 endpoints de `pacientes_routes.py` (crear, editar, listar, obtener, eliminar, buscar, proximo-nro-hc, evolucion, evoluciones, adjuntos, PDFs), igualando el patron ya usado en `historias_routes.py`. No cambia el comportamiento actual (los 4 roles ya tenian acceso), pero ahora es explicito y future-proof: un rol nuevo que se agregue no tendria acceso automatico. Con TDD: tests nuevos en `test_pacientes_routes.py` (`test_crear_paciente_permite_los_4_roles`, `test_crear_paciente_deniega_rol_no_reconocido` con un rol ficticio "invitado", rojo antes del fix -> 200, verde despues -> 403). Verificado en vivo (docker): Director sigue listando pacientes normalmente tras el cambio. Suite completa: 35 passed.
+- [x] CRUD de disponibilidades sin errores por dias.
+  - `pytest tests/test_disponibilidades_routes.py` OK (normalizacion de dia y rol `area` verificada).
+- [x] Alta/edicion/baja de turnos respeta reglas de disponibilidad y solapes.
+  - `pytest tests/test_turnos_routes.py` OK: 7 tests cubriendo rechazo por no disponibilidad (alta y edicion), solape permitido para rol `area`, solape general con ausencias, y validacion de tandas.
+- [x] Frontend funciona sin URLs hardcodeadas a localhost.
+  - `grep -r "localhost" frontend/src` sin resultados.
+- [x] Hora del programa en horario Argentina (OS, MySQL, backend) en todo el sistema.
+  - Verificado: OS del contenedor `web`, sesion de MySQL (`db`) y todos los usos de `datetime.now()`/`TIMESTAMP DEFAULT CURRENT_TIMESTAMP` en -03. Unico punto corregido: `recetas_routes.py` usaba `datetime.utcnow()` para `creado_en`/`actualizado_en` de recetas electronicas (ver item "Hora del programa" en Post-MVP).
 - [x] `npm run build` OK y `npm run lint` OK.
 - [x] Tests backend minimos ejecutando en CI/local.
+  - `pytest tests/ -q` -> 33 passed, 0 failed (se corrigio el ultimo test roto, `test_login_success`).
 
 ## Changes
+
+### Post-MVP
+
+- [x] Hora del programa, debe ser GMT+3.00 (Argentina)
+  - Estado: verificado que `TZ=America/Argentina/Buenos_Aires` ya estaba correctamente configurado a nivel OS (Dockerfile/docker-compose, contenedor `web`) y a nivel MySQL (`--default-time-zone`, contenedor `db`) — confirmado en vivo (`date`, `NOW()`, `datetime.now()` en el contenedor: todo en -03, consistente). El bug real estaba en `recetas_routes.py::_store_receta`: guardaba `creado_en`/`actualizado_en` de recetas electronicas con `datetime.utcnow()` (UTC), 3 horas adelantado respecto al resto de la app (que usa hora local Argentina via `TIMESTAMP DEFAULT CURRENT_TIMESTAMP` o `datetime.now()`). Fix con TDD: test `test_store_receta_guarda_hora_local_argentina_no_utc` (rojo con utcnow, verde tras cambiar a `datetime.now()`). Suite completa: 32 passed, 1 fail preexistente no relacionado (`test_login_success`).
+  - Nota: no se pudo verificar end-to-end en navegador porque `/api/recetas` depende de la API externa Qbitos (sin credenciales de prueba); la verificacion quedo a nivel test (mockeado, determinista) en vez de click-through real.
+
+- [ ] No funciona el Subir Foto de Perfil
+
+- [ ] Poder hacer en un mismo día de Disponibilidad cortes, es decir Disponible de 10 a 12 y de 14 a 16
+
+- [ ] Re-ver Mobile Version
+
+- [x] Anotaciones en modo Oscuro
+  - Estado: agregadas variantes `dark:` a tarjetas de evolucion, formulario de nueva evolucion y tarjeta de datos del paciente en `HistoriaPaciente.vue`, siguiendo la convencion ya usada en `Comunicados.vue`/`PosteosGrupo.vue`. Verificado con datos reales: tarjetas de evolucion confirman fondo oscuro + texto claro correctos. Nota: se detecto un problema pre-existente y no relacionado (fuera de este cambio) donde algunos elementos no recalculan su estilo dark hasta que ocurre otra interaccion en la pagina; no afecta legibilidad (el texto sigue siendo oscuro sobre blanco en ese caso), pero vale la pena investigarlo aparte.
+
+- [ ] No se debe poder desbloquear agendas de dias anteriores (por seguridad interna).
+
+- [ ] Permititr ediciones de Historia auditadas (se registra que fue una anotacion editada, se puede ver la anterior)
+
+- [x] Sugerir numero de Historia Last (actualmente en 2567) - se puede registrar numero custom o 'proxima disponible'
+  - Estado: nuevo endpoint `GET /api/pacientes/proximo-nro-hc` en `pacientes_routes.py` (MAX numerico + 1, con fallback a 1 si no hay pacientes). Cubierto con tests TDD en `tests/test_pacientes_routes.py`. Frontend pendiente de conectar el formulario de alta al endpoint.
+
+- [ ] Poder marcar turnos como ausente
+
+- [ ] Informar sobre turnos del dia proximo a profesionales
+
+- [x] Médico --> Profesional en HC evolucion
+  - Estado: renombrado en los dos PDFs de evolucion (`pacientes_routes.py`, exportar historia completa y exportar evolucion individual). El frontend ya mostraba "nombre — especialidad" sin la palabra "Médico".
+
+- [x] Conexiones a MySQL colgadas (encontradas en prod via `SHOW FULL PROCESSLIST` / `SHOW ENGINE INNODB STATUS`)
+  - Hallazgo (incidente real en el VPS): `DELETE /api/pacientes/<id>` no tenia try/except. `evoluciones`, `recetas_electronicas`, `turnos` y `turnos_grupales` referencian `pacientes(id)` **sin `ON DELETE CASCADE`** (solo `historias` lo tiene) -> borrar un paciente con evoluciones/turnos/recetas asociadas choca con la FK -> `IntegrityError` sin capturar -> 500, pero ademas **la conexion nunca se cerraba ni se hacia rollback** (no habia `finally`). `database.py` no usa pool, cada request abre una conexion TCP nueva a MySQL (`mysql.connector.connect`) -> la transaccion quedaba abierta, sosteniendo un row lock, indefinidamente (hasta `wait_timeout` de MySQL, 8hs por defecto, o hasta un `KILL` manual como hizo Gero en prod).
+  - Fix: `api_eliminar_paciente` ahora envuelve todo en `try/finally` (garantiza `cursor.close()`/`conn.close()` siempre) con un `except IntegrityError` interno que hace `rollback()` y devuelve 400 con mensaje claro en vez de 500 + conexion colgada. Con TDD: se extendio `FakeCursor` en `conftest.py` para poder simular una excepcion en un `execute()` especifico (`execute_side_effects`); test `test_eliminar_paciente_con_evoluciones_devuelve_400_no_500_y_hace_rollback` (rojo -> excepcion sin capturar, conexion nunca cerrada; verde -> 400, `rollback()` llamado, conexion cerrada). Verificado en vivo (docker): paciente con evolucion asociada -> DELETE devuelve 400 claro, y `SHOW FULL PROCESSLIST` en MySQL despues confirma que no queda ninguna conexion colgada.
+  - Auditoria del resto de endpoints DELETE del sistema: `disponibilidades`, `usuarios` (baja logica, no DELETE real), `grupos`/`turnos_grupales`/`grupo_posteos` (FKs con `ON DELETE CASCADE`, sin este riesgo), `comunicados`, `ausencias`, `turnos` — no se encontro el mismo patron de FK sin cascada + sin try/except en los demas; `pacientes` era el unico caso con hijos no-cascade sin manejo de excepcion.
+  - Referencia: `backend_flask/app/routes/pacientes_routes.py`, `backend_flask/tests/conftest.py`.
+  - Defensa en profundidad (a pedido de Gero, ademas del fix de codigo): timeouts de MySQL bajados y persistidos en `docker-compose.yml` (`command:` del servicio `db`, mismo lugar donde ya vive `--default-time-zone`, para que sobrevivan a un restart del contenedor -- un `SET GLOBAL` a mano se pierde en el proximo restart): `wait_timeout=300`, `interactive_timeout=300` (una conexion viva-pero-idle por un bug futuro se mata sola a los 5 min en vez de 8hs), `innodb_lock_wait_timeout=10` (si una transaccion viva bloquea una fila, otras queries fallan rapido con error claro en vez de colgarse en cola). Antes de aplicar se verifico que ninguna operacion legitima del sistema mantiene una conexion abierta cerca de ese umbral: el codigo que sella/verifica en la TSA de BFA (`blockchain_routes.py`) sostiene la conexion durante la llamada HTTP externa, pero esa llamada tiene `timeout=30` (`bfa_client.py`) y es una unica request sin backoff bloqueante -- 300s da margen de sobra. Verificado en vivo: `SHOW VARIABLES LIKE '%timeout%'` en el contenedor `db` recien recreado confirma los 3 valores activos, y la app sigue funcionando normalmente (login, listar pacientes) tras el restart de la DB.
+  - Nota: esto es una red de seguridad a nivel MySQL, no un reemplazo del fix de codigo -- si aparece el mismo patron (excepcion sin capturar que deja una conexion sin cerrar) en algun endpoint no auditado, ahora se autolimita a 5 minutos en vez de 8 horas, pero la causa raiz sigue siendo el codigo sin `try/finally`.
+
+- [x] Ver Error 400
+  - Causa real (peor de lo que parecia): `api_crear_paciente` solo validaba DNI duplicado. `nro_hc` es `UNIQUE NOT NULL` en la DB pero no se validaba, y el `INSERT` no tenia try/except -> al repetir un `nro_hc` (ej. cambiar el DNI pero olvidar cambiar el N° HC) explotaba con `IntegrityError` sin capturar -> **500** silencioso, no un 400 informativo.
+  - Fix: se agrego validacion explicita de `nro_hc` duplicado (400 con mensaje claro) antes del INSERT, y se envolvio el INSERT en try/except `IntegrityError` como defensa ante condicion de carrera (400 en vez de 500). Con TDD: `test_crear_paciente_nro_hc_duplicado_devuelve_400_no_500` (rojo -> 200 con datos que antes rompian en runtime real; verde -> 400). Verificado en vivo (docker): crear con `nro_hc` repetido devuelve 400 "Ya existe un paciente con N° HC X", ya no 500.
+  - Referencia: `backend_flask/app/routes/pacientes_routes.py`.
+
+- [x] 500 al cargar un paciente "de 0" (causa distinta a la del punto anterior)
+  - Hallazgo: reportado como "tambien pasa al cargar de 0" — se verifico que NO era el mismo bug que el DNI/nro_hc duplicado (un alta genuinamente nueva con datos unicos tambien rompia). Causa real: `cert_discapacidad` es `ENUM('Sí','No') DEFAULT NULL` en la DB. El `<select>` del form manda `""` cuando queda en "Seleccionar" (caso normal: paciente sin certificado). El backend hacia `if cert_discapacidad:` — con `""` (falsy) NUNCA entraba a normalizar, y el `""` crudo se insertaba en el ENUM -> MySQL strict mode: `1265 Data truncated for column 'cert_discapacidad'` -> 500 sin capturar. Reproducido en vivo con el payload exacto del form antes de tocar el codigo.
+  - Fix directo (sin TDD, a pedido): normalizacion explicita en `api_crear_paciente` y `api_modificar_paciente` — cualquier valor que no sea literalmente "si"/"sí"/"no" (incluyendo `""`) ahora resuelve a `None`, nunca a un string vacio. Verificado en vivo (docker): el mismo payload que daba 500 ahora devuelve 200. Suite completa: 38 passed.
+  - Referencia: `backend_flask/app/routes/pacientes_routes.py`.
+
+- [x] Administrativo no podia configurar su disponibilidad horaria (403)
+  - Hallazgo: `disponibilidades_routes.py` tenia `@requiere_rol` inconsistente entre metodos — el GET incluia `administrativo`, pero POST/PUT/DELETE no. La pantalla "Disponibilidad Horaria" (`DisponibilidadProfesional.vue`) cargaba bien (GET) pero al guardar cualquier dia, el POST/PUT devolvia 403 para ese rol.
+  - Fix: se agrego `administrativo` a `@requiere_rol` en POST, PUT y DELETE de `disponibilidades_routes.py`, igualando al GET. Con TDD: `test_administrativo_puede_crear_su_disponibilidad` y `test_administrativo_puede_editar_disponibilidad` (rojo -> 403; verde -> 201/200). Verificado en vivo (docker): usuario `administrativo` de prueba crea su disponibilidad -> 201.
+  - Referencia: `backend_flask/app/routes/disponibilidades_routes.py`.
+
+- [ ] Agregar forms de faltas
+
+- [ ] Tandas no semanales (cada 2 semanas, cada 3, cada 4, etc)
+
+- [x] Diferentes colores para Turnos en Rehab / Grupos
+  - Estado: cada grupo (`grupos_profesionales.color`) ya tenia color propio configurable en `CrearGrupo.vue`/`EditarGrupo.vue`, y el backend (`turnos_profesional_completo`, `turnos_por_grupo`, `listar_turnos_grupales`) ya lo devolvia. El bug real estaba en `ModuloRehabilitacion.vue`: `mapEvento()` ignoraba `t.color` y forzaba el mismo verde para todos los grupos, y ademas `calendar-medical.css` fuerza `.evento-rehab` con `!important`, pisando cualquier color inline de FullCalendar. Fix: se usa `t.color` (con fallback) para armar el evento, y se agrego `eventDidMount` que aplica el color por grupo via `style.setProperty(..., 'important')` para ganarle al `!important` del CSS global. Verificado en navegador con 2 grupos de colores distintos (rojo/azul): cada uno se ve con su propio color en la agenda de Rehabilitacion. Nota: los turnos individuales (no grupales) siguen con color fijo hardcodeado (`#1976D2`/`#007AFF`), eso no formaba parte de este pedido.
+
+- [ ] Sección de Informes Particulares en Area - 
 
 ### Funcionalidad General
 

@@ -1,7 +1,17 @@
-from datetime import date
+from datetime import date, datetime
 
 from app.routes import recetas_routes
 from conftest import FakeConnection, FakeCursor, MockUser, login_as
+
+
+class _FixedDateTime(datetime):
+    """datetime subclass usada para congelar 'ahora' en los tests sin tocar utcnow()."""
+
+    FIXED = datetime(2026, 7, 1, 10, 30, 0)
+
+    @classmethod
+    def now(cls, tz=None):
+        return cls.FIXED
 
 
 PACIENTE = {
@@ -173,3 +183,22 @@ def test_diagnostico_default_z769(client, monkeypatch):
     payload = calls[0]["json"]
     assert payload["codigoDiagnostico"] == "Z769"
     assert payload["observaciones"] == "Tratamiento prolongado"
+
+
+def test_store_receta_guarda_hora_local_argentina_no_utc(client, monkeypatch):
+    _setup_config(client)
+    cursors = _patch_connections(monkeypatch)
+    _patch_qbitos(monkeypatch)
+    monkeypatch.setattr(recetas_routes, "datetime", _FixedDateTime)
+    login_as(client, MockUser(3, "profesional"))
+
+    response = client.post("/api/recetas", json={
+        "paciente_id": 7,
+        "medicamentos": [{"nombreProducto": "Ibuprofeno", "cantidad": 1}],
+    })
+
+    assert response.status_code == 200
+    insert_query, insert_params = cursors[-1].executed[0]
+    assert "creado_en" in insert_query
+    assert insert_params[-2] == _FixedDateTime.FIXED
+    assert insert_params[-1] == _FixedDateTime.FIXED

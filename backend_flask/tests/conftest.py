@@ -22,15 +22,22 @@ class MockUser(UserMixin):
 
 
 class FakeCursor:
-    def __init__(self, fetchone_results=None, fetchall_results=None, lastrowid=1):
+    def __init__(self, fetchone_results=None, fetchall_results=None, lastrowid=1, execute_side_effects=None):
         self._fetchone_results = list(fetchone_results or [])
         self._fetchall_results = list(fetchall_results or [])
         self.lastrowid = lastrowid
         self.executed = []
         self.closed = False
+        # Lista opcional de excepciones a levantar en llamadas sucesivas a execute()
+        # (por posicion). None en una posicion = ese execute() se comporta normal.
+        self._execute_side_effects = list(execute_side_effects or [])
 
     def execute(self, query, params=None):
         self.executed.append((query, params))
+        if self._execute_side_effects:
+            effect = self._execute_side_effects.pop(0)
+            if effect is not None:
+                raise effect
 
     def fetchone(self):
         if self._fetchone_results:
@@ -47,11 +54,12 @@ class FakeCursor:
 
 
 class FakeConnection:
-    def __init__(self, cursor):
+    def __init__(self, cursor, connection_id=1234):
         self._cursor = cursor
         self.committed = False
         self.rolled_back = False
         self.closed = False
+        self.connection_id = connection_id
 
     def cursor(self, dictionary=False):
         return self._cursor

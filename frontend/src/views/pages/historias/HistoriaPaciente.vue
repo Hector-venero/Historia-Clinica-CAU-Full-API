@@ -302,7 +302,7 @@ onMounted(fetchHistoria);
     <div class="p-4 md:p-8 min-h-screen bg-surface-50 dark:bg-surface-950 transition-colors">
         <Toast />
 
-        <h1 class="text-3xl font-bold mb-4 text-gray-800 flex items-center">
+        <h1 class="text-3xl font-bold mb-4 text-gray-800 dark:text-gray-100 flex items-center">
             <i class="pi pi-user mr-3 text-blue-600"></i>
             Historia Clínica de {{ paciente?.apellido?.toUpperCase() }} {{ paciente?.nombre?.toUpperCase() }}
         </h1>
@@ -311,8 +311,8 @@ onMounted(fetchHistoria);
         <p v-if="error" class="text-red-500">{{ error }}</p>
 
         <!-- 📋 Datos del paciente -->
-        <div v-if="paciente && !loading" class="mb-6 border p-4 rounded-2xl bg-white shadow-sm">
-            <div class="grid md:grid-cols-2 gap-2 text-gray-700 text-sm">
+        <div v-if="paciente && !loading" class="mb-6 border dark:border-slate-700 p-4 rounded-2xl bg-white dark:bg-slate-900 shadow-sm">
+            <div class="grid md:grid-cols-2 gap-2 text-gray-700 dark:text-gray-200 text-sm">
                 <p><strong>DNI:</strong> {{ paciente.dni }}</p>
                 <p><strong>Cobertura:</strong> {{ paciente?.cobertura || '-' }}</p>
                 <p><strong>Nº HC:</strong> {{ paciente.nro_hc }}</p>
@@ -323,7 +323,7 @@ onMounted(fetchHistoria);
         <!-- 🧠 EVOLUCIONES -->
         <div v-if="!loading">
             <div class="flex flex-wrap justify-between items-center mt-6 mb-3 gap-2">
-                <h2 class="text-xl font-semibold text-gray-800 flex items-center"><i class="pi pi-book mr-2 text-blue-500"></i> Evoluciones</h2>
+                <h2 class="text-xl font-semibold text-gray-800 dark:text-gray-100 flex items-center"><i class="pi pi-book mr-2 text-blue-500"></i> Evoluciones</h2>
 
                 <div class="flex flex-wrap justify-end gap-2">
                     <button @click="descargarHistoriaPDF" class="flex items-center bg-blue-600 text-white px-4 py-2 rounded-lg shadow-sm hover:bg-blue-700 transition text-sm"><i class="pi pi-file-pdf mr-2"></i> Exportar Historia Completa</button>
@@ -352,19 +352,19 @@ onMounted(fetchHistoria);
 
                 <!-- CONTENIDO DEL AÑO -->
                 <div v-show="accordionAbierto[año]" class="mt-3">
-                    <div v-for="evo in items" :key="evo.id" class="border rounded-2xl mb-4 p-5 shadow-sm bg-white hover:shadow-md transition">
-                        <div class="flex justify-between text-sm text-gray-600 mb-2">
+                    <div v-for="evo in items" :key="evo.id" class="border dark:border-slate-700 rounded-2xl mb-4 p-5 shadow-sm bg-white dark:bg-slate-900 hover:shadow-md transition">
+                        <div class="flex justify-between text-sm text-gray-600 dark:text-gray-400 mb-2">
                             <span class="font-medium">{{ fechaBonitaClinica(evo.fecha) }}</span>
 
-                            <div class="flex flex-col items-end text-right">
+                            <div class="flex flex-col items-end text-right text-gray-700 dark:text-gray-300">
                                 <span>{{ evo.nombre_usuario }} — {{ evo.especialidad_usuario || 'Director' }}</span>
-                                <span class="text-xs text-gray-400"> Registrado: {{ fechaBonitaCompleta(evo.creado_en) }} </span>
+                                <span class="text-xs text-gray-400 dark:text-gray-500"> Registrado: {{ fechaBonitaCompleta(evo.creado_en) }} </span>
                             </div>
                         </div>
 
-                        <p class="text-gray-800 text-sm mb-4 line-clamp-3">{{ evo.contenido }}</p>
+                        <p class="text-gray-800 dark:text-gray-100 text-sm mb-4 line-clamp-3">{{ evo.contenido }}</p>
 
-                        <p v-if="evo.indicaciones" class="text-gray-700 text-sm mb-2"><strong>Indicaciones:</strong> {{ evo.indicaciones }}</p>
+                        <p v-if="evo.indicaciones" class="text-gray-700 dark:text-gray-200 text-sm mb-2"><strong>Indicaciones:</strong> {{ evo.indicaciones }}</p>
 
                         <div class="flex justify-end gap-3">
                             <button @click="$router.push({ name: 'evolucionDetalle', params: { id: pacienteId, evoId: evo.id } })" class="text-blue-600 hover:text-blue-800 text-sm flex items-center"><i class="pi pi-eye mr-1"></i> Ver Detalle</button>
@@ -381,20 +381,20 @@ onMounted(fetchHistoria);
         </div>
 
         <!-- 📝 FORMULARIO NUEVA EVOLUCIÓN -->
-        <div v-if="showForm" ref="formRef" class="mt-6 border p-4 rounded-2xl bg-white shadow-sm animate-fade-in">
-            <h3 class="text-lg font-semibold text-gray-700 mb-4">Registrar nueva evolución</h3>
+        <div v-if="showForm" ref="formRef" class="mt-6 border dark:border-slate-700 p-4 rounded-2xl bg-white dark:bg-slate-900 shadow-sm animate-fade-in">
+            <h3 class="text-lg font-semibold text-gray-700 dark:text-gray-200 mb-4">Registrar nueva evolución</h3>
 
-            <label for="fecha" class="block font-medium mb-2 text-gray-700">Fecha</label>
+            <label for="fecha" class="block font-medium mb-2 text-gray-700 dark:text-gray-200">Fecha</label>
 
             <DatePicker v-model="fecha" dateFormat="dd/mm/yy" :showIcon="true" class="p-inputtext p-component w-full h-12 mb-4" />
 
-            <label for="contenido" class="block font-medium mb-2 text-gray-700">Evolución</label>
-            <textarea v-model="contenido" rows="5" class="p-2 border rounded w-full mb-4" placeholder="Escribí la evolución clínica..."></textarea>
+            <label for="contenido" class="block font-medium mb-2 text-gray-700 dark:text-gray-200">Evolución</label>
+            <textarea v-model="contenido" rows="5" class="p-2 border dark:border-slate-600 rounded w-full mb-4 bg-white dark:bg-slate-800 text-gray-800 dark:text-gray-100" placeholder="Escribí la evolución clínica..."></textarea>
 
-            <label for="indicaciones" class="block font-medium mb-2 text-gray-700">Indicaciones</label>
-            <textarea v-model="indicaciones" rows="3" class="p-2 border rounded w-full mb-4" placeholder="Escribí las indicaciones médicas (opcional)..."></textarea>
+            <label for="indicaciones" class="block font-medium mb-2 text-gray-700 dark:text-gray-200">Indicaciones</label>
+            <textarea v-model="indicaciones" rows="3" class="p-2 border dark:border-slate-600 rounded w-full mb-4 bg-white dark:bg-slate-800 text-gray-800 dark:text-gray-100" placeholder="Escribí las indicaciones médicas (opcional)..."></textarea>
 
-            <label class="block font-medium mb-2 text-gray-700">Archivos adjuntos</label>
+            <label class="block font-medium mb-2 text-gray-700 dark:text-gray-200">Archivos adjuntos</label>
 
             <FileUpload
                 ref="fileUploader"
@@ -411,11 +411,11 @@ onMounted(fetchHistoria);
                 :previewWidth="0"
                 :showPreview="false"
             />
-            <p class="text-xs text-gray-500 mt-1">Tipos permitidos: <strong>PDF, JPG, PNG</strong> — Máximo <strong>5 MB</strong> por archivo.</p>
+            <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Tipos permitidos: <strong>PDF, JPG, PNG</strong> — Máximo <strong>5 MB</strong> por archivo.</p>
 
             <!-- Lista de archivos seleccionados -->
             <ul v-if="archivos.length" class="mt-3 space-y-2">
-                <li v-for="a in archivos" :key="a.name" class="flex items-center gap-3 p-2 border rounded-lg bg-gray-50">
+                <li v-for="a in archivos" :key="a.name" class="flex items-center gap-3 p-2 border dark:border-slate-700 rounded-lg bg-gray-50 dark:bg-slate-800">
                     <!-- Imagen preview -->
                     <img v-if="a.type.startsWith('image/')" :src="a.previewUrl" class="w-12 h-12 rounded object-cover" />
 
@@ -426,8 +426,8 @@ onMounted(fetchHistoria);
 
                     <!-- Info del archivo -->
                     <div class="flex flex-col">
-                        <span class="font-medium text-gray-800">{{ a.name }}</span>
-                        <span class="text-xs text-gray-500">{{ (a.size / 1024).toFixed(1) }} KB</span>
+                        <span class="font-medium text-gray-800 dark:text-gray-100">{{ a.name }}</span>
+                        <span class="text-xs text-gray-500 dark:text-gray-400">{{ (a.size / 1024).toFixed(1) }} KB</span>
                     </div>
 
                     <span class="ml-auto text-green-600 font-medium">Listo</span>

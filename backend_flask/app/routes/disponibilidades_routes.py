@@ -101,7 +101,7 @@ def listar_disponibilidades():
 
 @bp_disponibilidades.route('/api/disponibilidades', methods=['POST'])
 @login_required
-@requiere_rol('director', 'profesional', 'area')
+@requiere_rol('director', 'profesional', 'administrativo', 'area')
 def crear_disponibilidad():
 
     data = request.get_json(silent=True) or {}
@@ -152,7 +152,7 @@ def crear_disponibilidad():
 
 @bp_disponibilidades.route('/api/disponibilidades/<int:id>', methods=['PUT'])
 @login_required
-@requiere_rol('director', 'profesional', 'area')
+@requiere_rol('director', 'profesional', 'administrativo', 'area')
 def editar_disponibilidad(id):
 
     data = request.get_json(silent=True) or {}
@@ -197,7 +197,7 @@ def editar_disponibilidad(id):
 
 @bp_disponibilidades.route('/api/disponibilidades/<int:id>', methods=['DELETE'])
 @login_required
-@requiere_rol('director', 'profesional', 'area')
+@requiere_rol('director', 'profesional', 'administrativo', 'area')
 def eliminar_disponibilidad(id):
 
     conn = get_connection()

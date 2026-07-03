@@ -41,7 +41,16 @@ services:
       MYSQL_USER: ${DB_USER}
       MYSQL_PASSWORD: ${DB_PASSWORD}
       TZ: America/Argentina/Buenos_Aires
-    command: --default-time-zone='America/Argentina/Buenos_Aires'
+    # wait_timeout/interactive_timeout bajos: si una conexion queda "colgada" (Sleep)
+    # por un bug de la app que no cierra la conexion, MySQL la mata sola a los 5 min
+    # en vez de sostenerla 8hs (default) sosteniendo locks indefinidamente.
+    # innodb_lock_wait_timeout bajo: si una transaccion viva bloquea una fila, otras
+    # queries fallan rapido (10s) con error claro en vez de colgarse en cola.
+    command: >
+      --default-time-zone='America/Argentina/Buenos_Aires'
+      --wait_timeout=300
+      --interactive_timeout=300
+      --innodb-lock-wait-timeout=10
     volumes:
       - db_data:/var/lib/mysql
       - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql

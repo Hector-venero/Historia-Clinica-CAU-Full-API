@@ -10,6 +10,17 @@ class StubAuthUser(UserMixin):
         self.username = "alice"
         self.email = "alice@example.com"
         self.rol = "director"
+        self.especialidad = None
+        self.dni = None
+        self.sexo = None
+        self.telefono = None
+        self.matricula_tipo = None
+        self.matricula_numero = None
+        self.matricula_provincia = None
+        self.lugar_atencion_nombre = None
+        self.lugar_atencion_direccion = None
+        self.lugar_atencion_contacto = None
+        self.lugar_atencion_email = None
 
     def verificar_password(self, raw_password):
         return raw_password == "secret123"

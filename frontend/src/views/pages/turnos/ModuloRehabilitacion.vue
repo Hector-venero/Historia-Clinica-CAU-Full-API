@@ -143,23 +143,45 @@ const calendarOptions = reactive({
             end: info.event.end
         };
         detalleVisible.value = true;
+    },
+    eventDidMount(info) {
+        // calendar-medical.css fuerza el color de .evento-rehab con !important;
+        // se pisa con !important inline para respetar el color propio de cada grupo.
+        const color = info.event.extendedProps.color;
+        if (!color) return;
+        info.el.style.setProperty('background-color', hexToRgba(color, 0.12), 'important');
+        info.el.style.setProperty('border-color', color, 'important');
+        info.el.style.setProperty('color', color, 'important');
     }
 });
 
+const REHAB_COLOR_DEFAULT = '#059669';
+
+function hexToRgba(hex, alpha) {
+    const clean = (hex || '').replace('#', '');
+    if (!/^[0-9a-f]{6}$/i.test(clean)) return null;
+    const r = parseInt(clean.slice(0, 2), 16);
+    const g = parseInt(clean.slice(2, 4), 16);
+    const b = parseInt(clean.slice(4, 6), 16);
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
 function mapEvento(t) {
+    const color = t.color || REHAB_COLOR_DEFAULT;
     return {
         id: `rehab-${t.id}`,
         title: `${t.grupo_nombre}: ${t.paciente}`,
         start: t.start,
         end: t.end,
-        backgroundColor: 'rgba(16, 185, 129, 0.12)',
-        borderColor: '#059669',
-        textColor: '#064E3B',
+        backgroundColor: hexToRgba(color, 0.12) || hexToRgba(REHAB_COLOR_DEFAULT, 0.12),
+        borderColor: color,
+        textColor: color,
         classNames: ['evento-rehab'],
         extendedProps: {
             turnoId: t.id,
             grupo_id: t.grupo_id,
             grupo_nombre: t.grupo_nombre,
+            color,
             paciente: t.paciente,
             dni: t.dni,
             description: t.description,
