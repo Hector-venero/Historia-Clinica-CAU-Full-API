@@ -1,3 +1,5 @@
+import pytest
+
 from conftest import FakeConnection, FakeCursor, MockUser, login_as
 
 from app.routes import turnos_routes
@@ -408,3 +410,57 @@ def test_conteo_ausencias_paciente_deniega_rol_no_reconocido(client):
     response = client.get("/api/pacientes/10/ausencias")
 
     assert response.status_code == 403
+
+
+def test_editar_turno_error_en_update_hace_rollback_cierra_y_retorna_500(client, monkeypatch):
+    login_as(client, MockUser(user_id=7, rol="profesional"))
+
+    fake_cursor = FakeCursor(
+        fetchone_results=[{"usuario_id": 7}],
+        execute_side_effects=[None, RuntimeError("update turno failed")],
+    )
+    fake_connection = FakeConnection(fake_cursor)
+    monkeypatch.setattr(turnos_routes, "get_connection", lambda: fake_connection)
+    monkeypatch.setattr(turnos_routes, "medico_disponible", lambda *args, **kwargs: True)
+    monkeypatch.setitem(client.application.config, "PROPAGATE_EXCEPTIONS", False)
+
+    response = client.put(
+        "/api/turnos/15",
+        json={
+            "fecha_inicio": "2026-03-20T10:00:00",
+            "fecha_fin": "2026-03-20T10:30:00",
+            "motivo": "Control",
+        },
+    )
+
+    assert response.status_code == 500
+    assert fake_connection.rolled_back is True, "debe hacer rollback si falla el UPDATE"
+    assert fake_cursor.closed is True
+    assert fake_connection.closed is True, "la conexion debe cerrarse siempre, incluso con error"
+
+
+def test_editar_turno_error_en_update_propaga_y_cierra_conexion(client, monkeypatch):
+    login_as(client, MockUser(user_id=7, rol="profesional"))
+
+    fake_cursor = FakeCursor(
+        fetchone_results=[{"usuario_id": 7}],
+        execute_side_effects=[None, RuntimeError("update turno failed")],
+    )
+    fake_connection = FakeConnection(fake_cursor)
+    monkeypatch.setattr(turnos_routes, "get_connection", lambda: fake_connection)
+    monkeypatch.setattr(turnos_routes, "medico_disponible", lambda *args, **kwargs: True)
+    monkeypatch.setitem(client.application.config, "PROPAGATE_EXCEPTIONS", True)
+
+    with pytest.raises(RuntimeError, match="update turno failed"):
+        client.put(
+            "/api/turnos/15",
+            json={
+                "fecha_inicio": "2026-03-20T10:00:00",
+                "fecha_fin": "2026-03-20T10:30:00",
+                "motivo": "Control",
+            },
+        )
+
+    assert fake_connection.rolled_back is True
+    assert fake_cursor.closed is True
+    assert fake_connection.closed is True, "la conexion debe cerrarse siempre, incluso con error"

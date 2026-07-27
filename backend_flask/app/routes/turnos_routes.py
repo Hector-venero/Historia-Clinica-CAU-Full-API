@@ -575,61 +575,58 @@ def editar_turno(id):
 
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
-    cursor.execute("SELECT usuario_id, fecha_inicio, fecha_fin, motivo, observaciones FROM turnos WHERE id=%s", (id,))
-    turno = cursor.fetchone()
+    try:
+        cursor.execute("SELECT usuario_id, fecha_inicio, fecha_fin, motivo, observaciones FROM turnos WHERE id=%s", (id,))
+        turno = cursor.fetchone()
 
-    if not turno:
+        if not turno:
+            return jsonify({"error": "Turno no encontrado"}), 404
+
+        if current_user.rol == "profesional" and turno["usuario_id"] != current_user.id:
+            return jsonify({"error": "No autorizado"}), 403
+
+        fecha_inicio_raw = data.get("fecha_inicio") or data.get("fecha")
+        if not fecha_inicio_raw:
+            fecha_inicio_raw = turno["fecha_inicio"].strftime("%Y-%m-%dT%H:%M:%S")
+
+        inicio_dt, fin_dt, ajuste, err = _alinear_turno_individual(turno["usuario_id"], fecha_inicio_raw)
+        if err:
+            return jsonify({"error": err}), 400
+
+        fecha_inicio = _to_db_iso(inicio_dt)
+        fecha_fin = _to_db_iso(fin_dt)
+        motivo = data.get("motivo", turno.get("motivo"))
+        observaciones = data.get("observaciones", turno.get("observaciones"))
+
+        if not medico_disponible(
+            turno["usuario_id"],
+            fecha_inicio,
+            fecha_fin,
+            turno_excluir_id=id,
+            permitir_solape=current_user.rol in ["administrativo", "area"],
+        ):
+            return jsonify({"error": "El profesional no esta disponible en esa fecha u horario"}), 400
+
+        cursor.execute(
+            """
+            UPDATE turnos
+            SET fecha_inicio=%s, fecha_fin=%s, motivo=%s, observaciones=%s
+            WHERE id=%s
+        """,
+            (fecha_inicio, fecha_fin, motivo, observaciones, id),
+        )
+        conn.commit()
+
+        payload = {"message": "Turno actualizado correctamente."}
+        if ajuste:
+            payload["ajuste_horario"] = ajuste
+        return jsonify(payload)
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
         cursor.close()
         conn.close()
-        return jsonify({"error": "Turno no encontrado"}), 404
-
-    if current_user.rol == "profesional" and turno["usuario_id"] != current_user.id:
-        cursor.close()
-        conn.close()
-        return jsonify({"error": "No autorizado"}), 403
-
-    fecha_inicio_raw = data.get("fecha_inicio") or data.get("fecha")
-    if not fecha_inicio_raw:
-        fecha_inicio_raw = turno["fecha_inicio"].strftime("%Y-%m-%dT%H:%M:%S")
-
-    inicio_dt, fin_dt, ajuste, err = _alinear_turno_individual(turno["usuario_id"], fecha_inicio_raw)
-    if err:
-        cursor.close()
-        conn.close()
-        return jsonify({"error": err}), 400
-
-    fecha_inicio = _to_db_iso(inicio_dt)
-    fecha_fin = _to_db_iso(fin_dt)
-    motivo = data.get("motivo", turno.get("motivo"))
-    observaciones = data.get("observaciones", turno.get("observaciones"))
-
-    if not medico_disponible(
-        turno["usuario_id"],
-        fecha_inicio,
-        fecha_fin,
-        turno_excluir_id=id,
-        permitir_solape=current_user.rol in ["administrativo", "area"],
-    ):
-        cursor.close()
-        conn.close()
-        return jsonify({"error": "El profesional no esta disponible en esa fecha u horario"}), 400
-
-    cursor.execute(
-        """
-        UPDATE turnos
-        SET fecha_inicio=%s, fecha_fin=%s, motivo=%s, observaciones=%s
-        WHERE id=%s
-    """,
-        (fecha_inicio, fecha_fin, motivo, observaciones, id),
-    )
-    conn.commit()
-    cursor.close()
-    conn.close()
-
-    payload = {"message": "Turno actualizado correctamente."}
-    if ajuste:
-        payload["ajuste_horario"] = ajuste
-    return jsonify(payload)
 
 
 @bp_turnos.route("/api/turnos/tanda", methods=["POST"])
