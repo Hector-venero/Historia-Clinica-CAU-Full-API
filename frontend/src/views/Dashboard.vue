@@ -10,6 +10,7 @@ import Column from 'primevue/column';
 import Button from 'primevue/button';
 import Tag from 'primevue/tag';
 import Avatar from 'primevue/avatar';
+import Dialog from 'primevue/dialog';
 
 const router = useRouter();
 const user = useUserStore();
@@ -17,6 +18,7 @@ const user = useUserStore();
 const loading = ref(true);
 const error = ref(null);
 const dashboard = ref(null);
+const showTodayAlert = ref(false);
 
 const esAdmin = computed(() => ['director', 'administrativo'].includes(user.rol?.toLowerCase().trim()));
 
@@ -85,7 +87,25 @@ const horaAgenda = (fecha) => {
     return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 };
 
-onMounted(fetchDashboard);
+onMounted(async () => {
+    await fetchDashboard();
+
+    // Solo mostramos alerta a profesionales si tienen turnos programados hoy
+    if (turnosHoy.value && turnosHoy.value.length > 0) {
+        const hoyStr = new Date().toISOString().slice(0, 10);
+        const ultimaAlertaVista = localStorage.getItem('ultima_alerta_turnos_vista');
+
+        if (ultimaAlertaVista !== hoyStr) {
+            showTodayAlert.value = true;
+        }
+    }
+});
+
+const cerrarAlertaHoy = () => {
+    const hoyStr = new Date().toISOString().slice(0, 10);
+    localStorage.setItem('ultima_alerta_turnos_vista', hoyStr);
+    showTodayAlert.value = false;
+};
 </script>
 
 <template>
@@ -308,6 +328,44 @@ onMounted(fetchDashboard);
             </template>
         </div>
     </div>
+
+    <!-- Alerta de Turnos de Hoy -->
+    <Dialog v-model:visible="showTodayAlert" header="📅 Tus turnos de hoy" :modal="true" :closable="true" :breakpoints="{ '960px': '75vw', '640px': '90vw' }" :style="{ width: '500px' }" @hide="cerrarAlertaHoy">
+        <div class="py-2">
+            <p class="text-gray-600 dark:text-gray-300 text-sm mb-4">
+                Hola <b>{{ user.nombre?.split(' ')[0] }}</b
+                >, tenés <b>{{ turnosHoy.length }}</b> turno(s) programado(s) para hoy:
+            </p>
+            <div class="max-h-[300px] overflow-y-auto pr-1 custom-scrollbar space-y-3">
+                <div v-for="t in turnosHoy" :key="t.id" class="p-3 bg-surface-50 dark:bg-surface-800 border border-surface-200 dark:border-surface-700 rounded-lg flex items-center justify-between gap-4">
+                    <div class="min-w-0">
+                        <p class="font-bold text-gray-700 dark:text-gray-200 text-sm">{{ horaAgenda(t.fecha_inicio) }} - {{ t.paciente }} {{ t.apellido || '' }}</p>
+                        <p class="text-xs text-gray-500 dark:text-gray-400 truncate mt-1">Motivo: {{ t.motivo || 'Control' }}</p>
+                    </div>
+                    <Button
+                        icon="pi pi-folder-open"
+                        rounded
+                        outlined
+                        size="small"
+                        severity="info"
+                        v-tooltip.top="'Ver historia'"
+                        :disabled="!t.paciente_id"
+                        @click="
+                            () => {
+                                showTodayAlert = false;
+                                verHistoria(t);
+                            }
+                        "
+                    />
+                </div>
+            </div>
+        </div>
+        <template #footer>
+            <div class="flex justify-end pt-2">
+                <Button label="Entendido" icon="pi pi-check" rounded @click="cerrarAlertaHoy" class="p-button-sm font-semibold" />
+            </div>
+        </template>
+    </Dialog>
 </template>
 
 <style scoped>
