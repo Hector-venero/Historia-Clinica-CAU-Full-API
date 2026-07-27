@@ -1,0 +1,77 @@
+#!/bin/bash
+#
+# Envia a cada profesional el resumen de su agenda del dia siguiente.
+# Ejecuta el comando CLI `flask enviar-alertas` dentro del contenedor del backend.
+#
+# Instalado por: deploy/templates/install_alertas_system.sh
+# Programado por cron (ver crontab de root).
+
+set -uo pipefail
+
+# ============ CONFIG (autocompletado por el instalador) ============
+CONTAINER_NAME="{{CONTAINER_NAME}}"
+
+# Overridables solo para pruebas; en produccion se usan los defaults.
+LOG_DIR="${LOG_DIR:-/var/log/historia_cau}"
+LOG_FILE="$LOG_DIR/alertas_turnos.log"
+LOCK_FILE="${LOCK_FILE:-/var/lock/historia_cau_alertas.lock}"
+
+mkdir -p "$LOG_DIR"
+
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S %Z')] $*" >> "$LOG_FILE"
+}
+
+# ============ Lock: evita ejecuciones superpuestas ============
+# Si una corrida anterior sigue viva (mail server lento, muchos profesionales),
+# esta se saltea en vez de mandar los mails dos veces.
+#
+# Si flock no existe se sigue igual SIN lock: quedarse sin enviar las alertas y
+# reportar exito es peor que el riesgo (remoto) de superposicion, porque nadie
+# se enteraria de que los profesionales dejaron de recibir su agenda.
+if command -v flock > /dev/null 2>&1; then
+    exec 9>"$LOCK_FILE"
+    if ! flock -n 9; then
+        log "OMITIDO: ya hay una ejecucion en curso (lock $LOCK_FILE)."
+        exit 0
+    fi
+else
+    log "AVISO: 'flock' no disponible; se continua sin proteccion de superposicion."
+fi
+
+# ============ Verificar que el backend este arriba ============
+if ! docker ps --format '{{.Names}}' | grep -qx "$CONTAINER_NAME"; then
+    log "ERROR: el contenedor '$CONTAINER_NAME' no esta corriendo. No se enviaron alertas."
+    exit 1
+fi
+
+# ============ Ejecutar ============
+log "Iniciando envio de alertas de agenda."
+
+SALIDA="$(docker exec "$CONTAINER_NAME" flask enviar-alertas 2>&1)"
+CODIGO=$?
+
+# Registrar la salida completa del comando, indentada.
+echo "$SALIDA" | sed 's/^/    /' >> "$LOG_FILE"
+
+# El comando Python captura sus propios errores de DB y termina con exit 0 igual,
+# asi que el codigo de salida solo no alcanza: se valida tambien el marcador final
+# que imprime procesar_y_enviar_alertas() al terminar bien.
+if [ $CODIGO -ne 0 ]; then
+    log "ERROR: 'flask enviar-alertas' termino con codigo $CODIGO."
+    exit 1
+fi
+
+if ! echo "$SALIDA" | grep -q "Proceso finalizado"; then
+    log "ERROR: el proceso no llego al final (probable fallo de conexion a la DB)."
+    exit 1
+fi
+
+# Si hubo errores de envio individuales, el resumen los reporta: dejarlo visible.
+if echo "$SALIDA" | grep -q "Errores: [1-9]"; then
+    log "ATENCION: hubo errores de envio. Revisar el detalle de arriba."
+    exit 1
+fi
+
+log "OK: envio de alertas completado."
+exit 0

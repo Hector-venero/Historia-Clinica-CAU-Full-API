@@ -254,7 +254,10 @@ Fecha de auditoria: 2026-04-13
 - [x] Poder marcar turnos como ausente
   - Estado: implementado. Añadido campo `ausencia` (con_aviso / sin_aviso) a tablas `turnos` y `turnos_grupales` en base de datos. Implementados endpoints backend `PATCH` para ausencias de turnos individuales/grupales, y `GET` para contador de ausencias por paciente. En el frontend, se implementaron indicadores visuales en las tres vistas de agenda (`Turnos.vue`, `CalendarioGrupo.vue`, `ModuloRehabilitacion.vue`) pintando los turnos de rojo ladrillo (sin aviso) o naranja (con aviso). Se agregaron controles de asistencia en el modal de detalle de turnos y alertas informativas al dar un nuevo turno si el paciente cuenta con 3+ ausencias sin aviso.
 
-- [ ] Informar sobre turnos del dia proximo a profesionales
+- [x] Informar sobre turnos del dia proximo a profesionales
+  - Estado: implementado. `backend_flask/app/utils/alertas.py` arma y envia por mail el resumen de la agenda del dia siguiente, expuesto como comando CLI `flask enviar-alertas` (registrado en `app/__init__.py`). Reciben el mail los profesionales activos con disponibilidad horaria cargada y activa para el dia de la semana de mañana — es decir, solo los dias que asisten. Si ese dia no tienen turnos, igual reciben el mail avisando que la agenda esta vacia (decision de negocio confirmada).
+  - Programacion: el envio NO es automatico hasta correr el instalador. `sudo bash deploy/templates/install_alertas_system.sh` instala el script en `/usr/local/bin/`, crea `/var/log/historia_cau/` con logrotate mensual y agenda el cron diario a las 20:00 hora Argentina. Ver seccion 7 de `deploy/DEPLOY.md`.
+  - Detalle: el cron corre en el host, no en el contenedor, asi que el instalador agrega `CRON_TZ=America/Argentina/Buenos_Aires` DESPUES de las tareas ya existentes (el backup de las 03:00 no cambia de horario). El script valida ademas el marcador "Proceso finalizado" en la salida, porque `procesar_y_enviar_alertas()` captura sus errores de DB y termina con exit 0 igual.
 
 - [x] Médico --> Profesional en HC evolucion
   - Estado: renombrado en los dos PDFs de evolucion (`pacientes_routes.py`, exportar historia completa y exportar evolucion individual). El frontend ya mostraba "nombre — especialidad" sin la palabra "Médico".

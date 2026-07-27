@@ -152,3 +152,13 @@ def fotos_usuarios(filename):
     print(f"📂 En carpeta: {carpeta}")
     
     return send_from_directory(carpeta, filename)
+
+# -------------------------
+# Comandos CLI
+# -------------------------
+@app.cli.command("enviar-alertas")
+def enviar_alertas_command():
+    """Comando CLI para enviar el mail de alertas diarias a los profesionales."""
+    from app.utils.alertas import procesar_y_enviar_alertas
+    procesar_y_enviar_alertas()
+
