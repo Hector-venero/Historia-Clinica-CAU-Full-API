@@ -221,3 +221,97 @@ def eliminar_disponibilidad(id):
     cursor.close()
     conn.close()
     return jsonify({"message": "Disponibilidad eliminada correctamente"})
+
+
+@bp_disponibilidades.route('/api/disponibilidades/validar', methods=['POST'])
+@login_required
+@requiere_rol('director', 'profesional', 'administrativo', 'area')
+def validar_disponibilidad():
+    data = request.get_json(silent=True) or {}
+    
+    if current_user.rol in ['profesional', 'area']:
+        usuario_id = current_user.id
+    else:
+        usuario_id = data.get("usuario_id") or current_user.id
+        
+    propuestas = data.get("disponibilidades", [])
+    
+    # Filter active proposed disponibilidades
+    activas = []
+    for d in propuestas:
+        if d.get("activo"):
+            dia = normalizar_dia(d.get("dia_semana", ""))
+            ini = d.get("hora_inicio")
+            fin = d.get("hora_fin")
+            if dia and ini and fin:
+                # Normalize time strings to HH:MM:SS
+                if len(ini) == 5:
+                    ini += ":00"
+                if len(fin) == 5:
+                    fin += ":00"
+                activas.append({
+                    "dia": dia,
+                    "inicio": ini,
+                    "fin": fin
+                })
+                
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    
+    try:
+        cursor.execute("""
+            SELECT t.id, t.fecha_inicio, t.fecha_fin, t.motivo, p.nombre AS paciente
+            FROM turnos t
+            JOIN pacientes p ON t.paciente_id = p.id
+            WHERE t.usuario_id = %s
+            AND t.fecha_inicio >= NOW()
+            ORDER BY t.fecha_inicio ASC
+        """, (usuario_id,))
+        
+        turnos_futuros = cursor.fetchall()
+    except Exception as e:
+        print("Error al validar disponibilidad contra turnos:", e)
+        return jsonify({"error": "Error interno al validar disponibilidad"}), 500
+    finally:
+        cursor.close()
+        conn.close()
+        
+    dias_traduccion = {
+        "Monday": "Lunes",
+        "Tuesday": "Martes",
+        "Wednesday": "Miercoles",
+        "Thursday": "Jueves",
+        "Friday": "Viernes",
+        "Saturday": "Sabado",
+        "Sunday": "Domingo",
+    }
+    
+    fuera_de_rango = []
+    
+    for t in turnos_futuros:
+        f_inicio = t["fecha_inicio"]
+        f_fin = t["fecha_fin"]
+        
+        dia_semana_en = f_inicio.strftime("%A")
+        dia_es = dias_traduccion.get(dia_semana_en)
+        
+        t_start = f_inicio.time().strftime("%H:%M:%S")
+        t_end = f_fin.time().strftime("%H:%M:%S")
+        
+        # Check if covered by any active proposed availability
+        cubierto = False
+        for act in activas:
+            if act["dia"] == dia_es:
+                if t_start >= act["inicio"] and t_end <= act["fin"]:
+                    cubierto = True
+                    break
+        
+        if not cubierto:
+            fuera_de_rango.append({
+                "id": t["id"],
+                "paciente": t["paciente"],
+                "fecha": f_inicio.strftime("%d/%m/%Y %H:%M"),
+                "motivo": t["motivo"]
+            })
+            
+    return jsonify(fuera_de_rango)

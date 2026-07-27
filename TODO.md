@@ -221,7 +221,8 @@ Fecha de auditoria: 2026-04-13
 
 - [ ] No funciona el Subir Foto de Perfil
 
-- [ ] Poder hacer en un mismo día de Disponibilidad cortes, es decir Disponible de 10 a 12 y de 14 a 16
+- [x] Poder hacer en un mismo día de Disponibilidad cortes, es decir Disponible de 10 a 12 y de 14 a 16
+  - Estado: implementado. Rediseñado el frontend (`DisponibilidadProfesional.vue`) para permitir agregar múltiples franjas horarias por día de la semana y gestionarlas con botones de añadir y borrar individuales. Implementada validación en frontend para evitar solapamientos y creado el endpoint backend `/api/disponibilidades/validar` para detectar turnos futuros huérfanos antes de confirmar los cambios de horario, alertando al profesional.
 
 - [ ] Re-ver Mobile Version
 
