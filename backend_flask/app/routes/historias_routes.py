@@ -23,7 +23,7 @@ def actualizar_historia(paciente_id, usuario_id):
     cursor.execute("""
         SELECT id, fecha, contenido, indicaciones, usuario_id
         FROM evoluciones
-        WHERE paciente_id = %s
+        WHERE paciente_id = %s AND activo = 1
         ORDER BY fecha ASC
     """, (paciente_id,))
     evoluciones = cursor.fetchall()

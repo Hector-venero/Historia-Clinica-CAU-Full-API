@@ -129,8 +129,13 @@ CREATE TABLE evoluciones (
     tx_hash VARCHAR(512) DEFAULT NULL,
     fecha_anclaje_bfa DATETIME DEFAULT NULL,
     estado_bfa VARCHAR(20) NOT NULL DEFAULT 'pendiente',
+    padre_id INT NULL,
+    version INT NOT NULL DEFAULT 1,
+    activo TINYINT(1) NOT NULL DEFAULT 1,
     FOREIGN KEY (paciente_id) REFERENCES pacientes(id),
-    FOREIGN KEY (usuario_id) REFERENCES usuarios(id)
+    FOREIGN KEY (usuario_id) REFERENCES usuarios(id),
+    FOREIGN KEY (padre_id) REFERENCES evoluciones(id) ON DELETE CASCADE,
+    INDEX idx_evoluciones_padre_activo (padre_id, activo)
 ) ENGINE=InnoDB
   DEFAULT CHARSET=utf8mb4
   COLLATE=utf8mb4_unicode_ci;

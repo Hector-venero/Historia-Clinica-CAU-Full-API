@@ -11,11 +11,15 @@ import DatePicker from 'primevue/datepicker';
 import { fechaBonitaClinica, fechaBonitaCompleta } from '@/utils/formatDate.js';
 import { nextTick } from 'vue';
 import { computed } from 'vue';
+import Tag from 'primevue/tag';
+import Dialog from 'primevue/dialog';
+import { useUserStore } from '@/stores/user';
 
 const route = useRoute();
 const pacienteId = route.params.id;
 const router = useRouter();
 const apiBase = (import.meta.env.VITE_API_URL || '/api').replace(/\/$/, '');
+const userStore = useUserStore();
 
 const toast = useToast();
 
@@ -31,6 +35,16 @@ const contenido = ref('');
 const indicaciones = ref('');
 const archivos = ref([]);
 const fileUploader = ref(null);
+
+// Variables para edicion
+const isEditing = ref(false);
+const editingEvoId = ref(null);
+
+// Variables para dialogo de historial
+const showHistorialDialog = ref(false);
+const historialEvo = ref([]);
+const historialEvoCargando = ref(false);
+const selectedEvoParaHistorial = ref(null);
 
 // Control de qué año está abierto
 const accordionAbierto = ref({});
@@ -112,23 +126,37 @@ const guardarEvolucion = async () => {
             formData.append('archivos', a.file);
         });
 
-        await api.post(`/pacientes/${pacienteId}/evolucion`, formData, {
-            headers: { 'Content-Type': 'multipart/form-data' },
-            withCredentials: true
-        });
-
-        toast.add({
-            severity: 'success',
-            summary: 'Éxito',
-            detail: 'Evolución guardada correctamente',
-            life: 3000
-        });
+        if (isEditing.value) {
+            await api.put(`/pacientes/${pacienteId}/evolucion/${editingEvoId.value}`, formData, {
+                headers: { 'Content-Type': 'multipart/form-data' },
+                withCredentials: true
+            });
+            toast.add({
+                severity: 'success',
+                summary: 'Éxito',
+                detail: 'Evolución modificada correctamente',
+                life: 3000
+            });
+        } else {
+            await api.post(`/pacientes/${pacienteId}/evolucion`, formData, {
+                headers: { 'Content-Type': 'multipart/form-data' },
+                withCredentials: true
+            });
+            toast.add({
+                severity: 'success',
+                summary: 'Éxito',
+                detail: 'Evolución guardada correctamente',
+                life: 3000
+            });
+        }
 
         showForm.value = false;
         contenido.value = '';
         indicaciones.value = '';
         archivos.value = [];
         fileUploader.value?.clear();
+        isEditing.value = false;
+        editingEvoId.value = null;
 
         await fetchHistoria();
     } catch (err) {
@@ -136,9 +164,58 @@ const guardarEvolucion = async () => {
         toast.add({
             severity: 'error',
             summary: 'Error',
-            detail: 'Error al guardar evolución',
+            detail: err?.response?.data?.error || 'Error al guardar evolución',
             life: 3000
         });
+    }
+};
+
+const iniciarEdicion = async (evo) => {
+    isEditing.value = true;
+    editingEvoId.value = evo.id;
+    fecha.value = new Date(evo.fecha);
+    contenido.value = evo.contenido;
+    indicaciones.value = evo.indicaciones || '';
+    archivos.value = [];
+    showForm.value = true;
+
+    await nextTick();
+    if (formRef.value) {
+        formRef.value.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+};
+
+const cancelarFormEvolucion = () => {
+    showForm.value = false;
+    contenido.value = '';
+    indicaciones.value = '';
+    archivos.value = [];
+    fileUploader.value?.clear();
+    isEditing.value = false;
+    editingEvoId.value = null;
+};
+
+const verHistorialEvo = async (evo) => {
+    try {
+        selectedEvoParaHistorial.value = evo;
+        showHistorialDialog.value = true;
+        historialEvoCargando.value = true;
+        historialEvo.value = [];
+
+        const res = await api.get(`/pacientes/${pacienteId}/evolucion/${evo.id}/historial`, {
+            withCredentials: true
+        });
+        historialEvo.value = res.data;
+    } catch (err) {
+        console.error('Error al cargar historial de evolución:', err);
+        toast.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: 'No se pudo cargar el historial de cambios.',
+            life: 4000
+        });
+    } finally {
+        historialEvoCargando.value = false;
     }
 };
 
@@ -354,7 +431,10 @@ onMounted(fetchHistoria);
                 <div v-show="accordionAbierto[año]" class="mt-3">
                     <div v-for="evo in items" :key="evo.id" class="border dark:border-slate-700 rounded-2xl mb-4 p-5 shadow-sm bg-white dark:bg-slate-900 hover:shadow-md transition">
                         <div class="flex justify-between text-sm text-gray-600 dark:text-gray-400 mb-2">
-                            <span class="font-medium">{{ fechaBonitaClinica(evo.fecha) }}</span>
+                            <div class="flex items-center gap-2">
+                                <span class="font-medium">{{ fechaBonitaClinica(evo.fecha) }}</span>
+                                <Tag v-if="evo.version > 1" value="Editado" severity="warn" rounded class="cursor-pointer text-xs" @click="verHistorialEvo(evo)" />
+                            </div>
 
                             <div class="flex flex-col items-end text-right text-gray-700 dark:text-gray-300">
                                 <span>{{ evo.nombre_usuario }} — {{ evo.especialidad_usuario || 'Director' }}</span>
@@ -371,6 +451,10 @@ onMounted(fetchHistoria);
 
                             <button @click="descargarEvolucionPDF(evo.id)" class="text-red-600 hover:text-red-800 text-sm flex items-center"><i class="pi pi-file-pdf mr-1"></i> Exportar PDF</button>
 
+                            <button v-if="userStore.rol === 'director' || evo.usuario_id === userStore.id" @click="iniciarEdicion(evo)" class="text-green-600 hover:text-green-800 text-sm flex items-center">
+                                <i class="pi pi-pencil mr-1"></i> Editar
+                            </button>
+
                             <button v-if="!evo.tx_hash" @click="registrarEvolucionBfa(evo.id)" class="text-purple-600 hover:text-purple-800 text-sm flex items-center"><i class="pi pi-link mr-1"></i> Anclar BFA</button>
 
                             <button @click="verificarEvolucion(evo.id)" class="text-purple-600 hover:text-blue-800 text-sm flex items-center"><i class="pi pi-shield mr-1"></i> Verificar Integridad</button>
@@ -382,7 +466,7 @@ onMounted(fetchHistoria);
 
         <!-- 📝 FORMULARIO NUEVA EVOLUCIÓN -->
         <div v-if="showForm" ref="formRef" class="mt-6 border dark:border-slate-700 p-4 rounded-2xl bg-white dark:bg-slate-900 shadow-sm animate-fade-in">
-            <h3 class="text-lg font-semibold text-gray-700 dark:text-gray-200 mb-4">Registrar nueva evolución</h3>
+            <h3 class="text-lg font-semibold text-gray-700 dark:text-gray-200 mb-4">{{ isEditing ? 'Editar evolución clínica' : 'Registrar nueva evolución' }}</h3>
 
             <label for="fecha" class="block font-medium mb-2 text-gray-700 dark:text-gray-200">Fecha</label>
 
@@ -394,7 +478,7 @@ onMounted(fetchHistoria);
             <label for="indicaciones" class="block font-medium mb-2 text-gray-700 dark:text-gray-200">Indicaciones</label>
             <textarea v-model="indicaciones" rows="3" class="p-2 border dark:border-slate-600 rounded w-full mb-4 bg-white dark:bg-slate-800 text-gray-800 dark:text-gray-100" placeholder="Escribí las indicaciones médicas (opcional)..."></textarea>
 
-            <label class="block font-medium mb-2 text-gray-700 dark:text-gray-200">Archivos adjuntos</label>
+            <label class="block font-medium mb-2 text-gray-700 dark:text-gray-200">Archivos adjuntos (nuevos)</label>
 
             <FileUpload
                 ref="fileUploader"
@@ -433,10 +517,57 @@ onMounted(fetchHistoria);
                     <span class="ml-auto text-green-600 font-medium">Listo</span>
                 </li>
             </ul>
-            <div class="mt-4">
-                <Button label="Guardar Evolución" icon="pi pi-save" @click="guardarEvolucion" />
+            <div class="mt-4 flex gap-2">
+                <Button :label="isEditing ? 'Guardar Cambios' : 'Guardar Evolución'" icon="pi pi-save" @click="guardarEvolucion" />
+                <Button label="Cancelar" icon="pi pi-times" severity="secondary" @click="cancelarFormEvolucion" />
             </div>
         </div>
+
+        <!-- 📜 DIALOG: HISTORIAL DE EDICIONES -->
+        <Dialog v-model:visible="showHistorialDialog" header="Historial de Cambios" :modal="true" :breakpoints="{ '960px': '75vw', '640px': '90vw' }" :style="{ width: '50vw' }">
+            <div v-if="historialEvoCargando" class="flex flex-col items-center justify-center py-6">
+                <i class="pi pi-spin pi-spinner text-3xl text-blue-500 mb-2"></i>
+                <span>Cargando historial...</span>
+            </div>
+            <div v-else-if="historialEvo.length === 0" class="py-4 text-center text-gray-500">No se encontraron cambios registrados para esta evolución.</div>
+            <div v-else class="space-y-6">
+                <p class="text-sm text-gray-500 dark:text-gray-400 mb-4">Se muestran todas las versiones de esta evolución clínica en orden cronológico. Los registros históricos son inmutables.</p>
+
+                <div class="relative border-l-2 border-blue-500 dark:border-blue-700 ml-3 space-y-6">
+                    <div v-for="v in historialEvo" :key="v.id" class="relative pl-6">
+                        <!-- Dot de la linea de tiempo -->
+                        <div class="absolute -left-[9px] top-1 w-4 h-4 rounded-full border-2 bg-white dark:bg-slate-900" :class="v.activo ? 'border-green-500 bg-green-500' : 'border-blue-500'"></div>
+
+                        <div class="p-4 rounded-xl border dark:border-slate-700 bg-slate-50 dark:bg-slate-800 shadow-xs">
+                            <div class="flex justify-between items-center mb-2 flex-wrap gap-1">
+                                <span class="font-bold text-sm text-gray-800 dark:text-gray-200"> Versión {{ v.version }} <Tag v-if="v.activo" value="Activa (Vigente)" severity="success" class="text-[10px] py-0 px-1 ml-1" /> </span>
+                                <span class="text-xs text-gray-500 dark:text-gray-400">
+                                    {{ fechaBonitaCompleta(v.creado_en) }}
+                                </span>
+                            </div>
+
+                            <p class="text-xs text-gray-400 dark:text-gray-500 mb-2 font-medium">Por: {{ v.nombre_usuario }} ({{ v.especialidad_usuario }})</p>
+
+                            <p class="text-gray-700 dark:text-gray-300 text-sm whitespace-pre-wrap mb-2 bg-white dark:bg-slate-900 p-2 rounded border dark:border-slate-800">{{ v.contenido }}</p>
+
+                            <div v-if="v.indicaciones" class="text-xs text-gray-600 dark:text-gray-400 mt-2">
+                                <strong>Indicaciones:</strong>
+                                <p class="whitespace-pre-wrap bg-white dark:bg-slate-900 p-2 rounded border dark:border-slate-800 mt-1">{{ v.indicaciones }}</p>
+                            </div>
+
+                            <div v-if="v.archivos && v.archivos.length" class="mt-2 text-xs">
+                                <strong>Archivos adjuntos:</strong>
+                                <ul class="mt-1 space-y-1">
+                                    <li v-for="file in v.archivos" :key="file.nombre">
+                                        <a :href="file.url" target="_blank" class="text-blue-500 hover:underline flex items-center gap-1"> <i class="pi pi-file"></i> {{ file.nombre }} </a>
+                                    </li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </Dialog>
     </div>
 </template>
 

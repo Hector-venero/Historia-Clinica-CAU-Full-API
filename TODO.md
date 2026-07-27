@@ -230,7 +230,9 @@ Fecha de auditoria: 2026-04-13
 
 - [ ] No se debe poder desbloquear agendas de dias anteriores (por seguridad interna).
 
-- [ ] Permititr ediciones de Historia auditadas (se registra que fue una anotacion editada, se puede ver la anterior)
+- [x] Permititr ediciones de Historia auditadas (se registra que fue una anotacion editada, se puede ver la anterior)
+  - Estado: implementado. Modelo append-only en `evoluciones` (`padre_id`, `version`, `activo` + FK autoreferencial e indice `idx_evoluciones_padre_activo`): editar no pisa el registro, inserta una version nueva y desactiva las anteriores del mismo arbol. Backend: `PUT /api/pacientes/<id>/evolucion/<evo_id>` (solo el autor original o director) y `GET .../historial` para ver todas las versiones. Los listados y ambos PDFs filtran `activo = 1` y marcan "(Editado)" cuando `version > 1`. Frontend: `HistoriaPaciente.vue` con formulario de edicion y dialogo de historial de cambios. Migracion `20260727_ausencias_observaciones_evoluciones_auditadas.sql`.
+  - Nota operativa: cada edicion deja la evolucion nueva y la historia consolidada del paciente en `estado_bfa = 'pendiente'`. El sellado en la TSA de BFA es manual, asi que hay que re-sellar despues de editar.
 
 - [x] Sugerir numero de Historia Last (actualmente en 2567) - se puede registrar numero custom o 'proxima disponible'
   - Estado: nuevo endpoint `GET /api/pacientes/proximo-nro-hc` en `pacientes_routes.py` (MAX numerico + 1, con fallback a 1 si no hay pacientes). Cubierto con tests TDD en `tests/test_pacientes_routes.py`. Frontend pendiente de conectar el formulario de alta al endpoint.

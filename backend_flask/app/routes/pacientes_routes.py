@@ -479,7 +479,7 @@ def get_evoluciones(id):
                 END AS especialidad_usuario
             FROM evoluciones e
             JOIN usuarios u ON e.usuario_id = u.id
-            WHERE e.paciente_id = %s
+            WHERE e.paciente_id = %s AND e.activo = 1
             ORDER BY e.fecha DESC
         """, (id,))
 
@@ -516,6 +516,177 @@ def uploaded_file(evo_id, filename):
     folder = os.path.join(os.getcwd(), 'uploads', 'evoluciones', str(evo_id))
     return send_from_directory(folder, filename)
 
+
+@bp_pacientes.route('/api/pacientes/<int:paciente_id>/evolucion/<int:evo_id>', methods=['PUT'])
+@login_required
+@requiere_rol('director', 'profesional', 'administrativo', 'area')
+def api_editar_evolucion(paciente_id, evo_id):
+    """
+    Registra una edición de evolución agregando un nuevo registro Append-Only.
+    Solo el creador original o el rol director pueden realizar la edición.
+    """
+    fecha = request.form.get('fecha')
+    contenido = request.form.get('contenido')
+    indicaciones = request.form.get('indicaciones')
+    archivos = request.files.getlist('archivos')
+
+    if not fecha or not contenido:
+        return jsonify({'error': 'Faltan campos obligatorios'}), 400
+
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+
+    try:
+        # 1. Obtener la evolucion a editar
+        cursor.execute("SELECT * FROM evoluciones WHERE id = %s AND paciente_id = %s", (evo_id, paciente_id))
+        evolucion_actual = cursor.fetchone()
+        
+        if not evolucion_actual:
+            return jsonify({'error': 'Evolución no encontrada'}), 404
+
+        # 2. Control de accesos (Solo el creador original o director)
+        is_owner = (evolucion_actual['usuario_id'] == current_user.id)
+        is_director = (current_user.rol == 'director')
+        if not is_owner and not is_director:
+            return jsonify({'error': 'No tenés permisos para editar esta evolución'}), 403
+
+        # 3. Determinar padre_id (si la actual ya tiene padre, heredamos el mismo padre)
+        padre_id = evolucion_actual['padre_id'] if evolucion_actual['padre_id'] is not None else evolucion_actual['id']
+
+        # 4. Obtener la version mas alta actual para el arbol
+        cursor.execute("SELECT MAX(version) AS max_v FROM evoluciones WHERE id = %s OR padre_id = %s", (padre_id, padre_id))
+        res_v = cursor.fetchone()
+        max_version = res_v['max_v'] if res_v and res_v['max_v'] is not None else 1
+        nueva_version = max_version + 1
+
+        # 5. Insertar la nueva evolucion de edicion
+        cursor.execute("""
+            INSERT INTO evoluciones (paciente_id, fecha, contenido, indicaciones, usuario_id, padre_id, version, activo)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, 1)
+        """, (paciente_id, fecha, contenido, indicaciones, current_user.id, padre_id, nueva_version))
+        
+        nueva_evo_id = cursor.lastrowid
+
+        # 6. Desactivar las versiones anteriores del mismo arbol
+        cursor.execute("""
+            UPDATE evoluciones 
+            SET activo = 0 
+            WHERE (id = %s OR padre_id = %s) AND id <> %s
+        """, (padre_id, padre_id, nueva_evo_id))
+
+        # 7. Manejo de archivos adjuntos (se copian los del padre y se agregan los nuevos)
+        cursor.execute("SELECT filename FROM evolucion_archivos WHERE evolucion_id = %s", (evo_id,))
+        adjuntos_viejos = cursor.fetchall()
+        
+        upload_dir = os.path.join(os.getcwd(), 'uploads', 'evoluciones', str(nueva_evo_id))
+        os.makedirs(upload_dir, exist_ok=True)
+        
+        for adj in adjuntos_viejos:
+            filename = adj['filename']
+            cursor.execute("""
+                INSERT INTO evolucion_archivos (evolucion_id, filename)
+                VALUES (%s, %s)
+            """, (nueva_evo_id, filename))
+            
+            ruta_origen = os.path.join(os.getcwd(), 'uploads', 'evoluciones', str(evo_id), filename)
+            ruta_destino = os.path.join(upload_dir, filename)
+            if os.path.exists(ruta_origen):
+                import shutil
+                shutil.copy2(ruta_origen, ruta_destino)
+
+        for archivo in archivos:
+            if archivo.filename:
+                filename = secure_filename(archivo.filename)
+                archivo.save(os.path.join(upload_dir, filename))
+                cursor.execute("""
+                    INSERT INTO evolucion_archivos (evolucion_id, filename)
+                    VALUES (%s, %s)
+                """, (nueva_evo_id, filename))
+
+        conn.commit()
+
+    except Exception:
+        conn.rollback()
+        _log_db_error("Patient evolution edit database error", conn)
+        raise
+    finally:
+        cursor.close()
+        conn.close()
+
+    # 8. Recalcular hash de la nueva evolucion y consolidar historia clinica
+    hash_evolucion = None
+    try:
+        hash_evolucion = actualizar_hash_evolucion(nueva_evo_id)
+    except Exception as e:
+        print(f"Error calculando hash de evolucion editada: {e}")
+
+    try:
+        hash_local = actualizar_historia(paciente_id, current_user.id)
+        partes = []
+        if hash_evolucion:
+            partes.append(f"evolucion hash {hash_evolucion[:10]}...")
+        if hash_local:
+            partes.append(f"historia hash {hash_local[:10]}...")
+        msg_extra = f" ({', '.join(partes)})" if partes else ""
+    except Exception as e:
+        print(f"⚠️ Error actualizando historia consolidada tras edicion: {e}")
+        msg_extra = " (⚠️ No se pudo actualizar historia)"
+
+    return jsonify({'message': f'Evolución editada y guardada como versión {nueva_version} ✅{msg_extra}', 'id': nueva_evo_id})
+
+
+@bp_pacientes.route('/api/pacientes/<int:paciente_id>/evolucion/<int:evo_id>/historial', methods=['GET'])
+@login_required
+@requiere_rol('director', 'profesional', 'administrativo', 'area')
+def api_get_historial_evolucion(paciente_id, evo_id):
+    """
+    Retorna la lista de todas las versiones (historial de cambios) de una evolucion.
+    """
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+
+    try:
+        cursor.execute("SELECT id, padre_id FROM evoluciones WHERE id = %s AND paciente_id = %s", (evo_id, paciente_id))
+        evolucion = cursor.fetchone()
+        
+        if not evolucion:
+            return jsonify({'error': 'Evolución no encontrada'}), 404
+
+        padre_id = evolucion['padre_id'] if evolucion['padre_id'] is not None else evolucion['id']
+
+        cursor.execute("""
+            SELECT e.id, e.fecha, e.contenido, e.indicaciones, e.creado_en, e.version, e.activo,
+                   u.nombre AS nombre_usuario,
+                   CASE
+                       WHEN u.rol = 'director' THEN 'Director'
+                       ELSE COALESCE(u.especialidad, 'Sin especificar')
+                   END AS especialidad_usuario
+            FROM evoluciones e
+            JOIN usuarios u ON e.usuario_id = u.id
+            WHERE (e.id = %s OR e.padre_id = %s)
+            ORDER BY e.version ASC
+        """, (padre_id, padre_id))
+        
+        historial = cursor.fetchall()
+        
+        for item in historial:
+            cursor.execute("SELECT filename FROM evolucion_archivos WHERE evolucion_id = %s", (item['id'],))
+            archivos = cursor.fetchall()
+            item['archivos'] = [{
+                'nombre': a['filename'],
+                'url': f"/api/uploads/evoluciones/{item['id']}/{a['filename']}"
+            } for a in archivos]
+
+        return jsonify(historial)
+
+    except Exception:
+        _log_db_error("Patient evolution history read database error", conn)
+        raise
+    finally:
+        cursor.close()
+        conn.close()
+
+
 # ==========================================================
 # 📄 Exportar Historia Clínica en PDF (versión institucional)
 # ==========================================================
@@ -545,6 +716,7 @@ def exportar_historia_pdf(id):
             e.contenido,
             e.indicaciones,
             e.creado_en,
+            e.version,
             u.nombre AS medico,
             CASE 
                 WHEN u.rol = 'director' THEN 'Director'
@@ -552,7 +724,7 @@ def exportar_historia_pdf(id):
             END AS especialidad
         FROM evoluciones e
         JOIN usuarios u ON e.usuario_id = u.id
-        WHERE e.paciente_id = %s
+        WHERE e.paciente_id = %s AND e.activo = 1
         ORDER BY e.fecha DESC
     """, (id,))
 
@@ -637,11 +809,12 @@ def exportar_historia_pdf(id):
             especialidad = "Director" if evo["especialidad"] == "director" else evo["especialidad"].capitalize()
 
             fecha_registro = evo["creado_en"].strftime("%d/%m/%Y %H:%M")
+            editado_str = " (Editado)" if evo.get("version", 1) > 1 else ""
 
             fila_superior = Table([
                 [
                     Paragraph(f"<b>Fecha:</b> {fecha_str}", styles["Normal"]),
-                    Paragraph(f"<font size='9' color='gray'>Registrado: {fecha_registro}</font>", styles["Right"])
+                    Paragraph(f"<font size='9' color='gray'>Registrado: {fecha_registro}{editado_str}</font>", styles["Right"])
                 ]
             ], colWidths=[8*cm, 8*cm])
 
@@ -796,7 +969,7 @@ def exportar_evolucion_pdf(paciente_id, evo_id):
     #  2) DATOS DE LA EVOLUCIÓN
     # ==========================================================
     cursor.execute("""
-        SELECT e.id, e.fecha, e.contenido, e.indicaciones, e.creado_en,
+        SELECT e.id, e.fecha, e.contenido, e.indicaciones, e.creado_en, e.version,
                u.nombre AS medico, 
                CASE WHEN u.rol = 'director' THEN 'Director'
                     ELSE COALESCE(u.especialidad, 'Sin especificar')
@@ -888,7 +1061,8 @@ def exportar_evolucion_pdf(paciente_id, evo_id):
     elements.append(Paragraph(f"<b>Profesional:</b> {evolucion['medico']} ({evolucion['especialidad']})", styles["Normal"]))
     elements.append(Spacer(1, 0.1*cm))
     fecha_creacion = evolucion["creado_en"].strftime("%d/%m/%Y %H:%M")
-    elements.append(Paragraph(f"<b>Registrado en el sistema:</b> {fecha_creacion}", styles["Normal"]))
+    editado_str = " (Editado)" if evolucion.get("version", 1) > 1 else ""
+    elements.append(Paragraph(f"<b>Registrado en el sistema:</b> {fecha_creacion}{editado_str}", styles["Normal"]))
     elements.append(Spacer(1, 0.25*cm))
 
     # --- CONTENIDO DE LA EVOLUCIÓN ---
