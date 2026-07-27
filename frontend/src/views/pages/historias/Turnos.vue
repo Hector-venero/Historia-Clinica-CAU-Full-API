@@ -14,6 +14,7 @@ import Button from 'primevue/button';
 import InputText from 'primevue/inputtext';
 import Select from 'primevue/select';
 import Checkbox from 'primevue/checkbox';
+import Textarea from 'primevue/textarea';
 import Tag from 'primevue/tag';
 import Toast from 'primevue/toast';
 import { useToast } from 'primevue/usetoast';
@@ -42,6 +43,53 @@ const eventos = ref([]);
 const turnoSeleccionado = ref(null);
 const modalVisible = ref(false);
 const editando = ref(false);
+
+const ausenciasConteoNuevoTurno = ref(null);
+const ausenciasConteoDetalle = ref(null);
+const guardandoAusencia = ref(false);
+
+async function fetchAusenciasConteo(pacienteId) {
+    ausenciasConteoNuevoTurno.value = null;
+    try {
+        const res = await api.get(`/pacientes/${pacienteId}/ausencias`, { withCredentials: true });
+        ausenciasConteoNuevoTurno.value = res.data;
+        if (res.data && res.data.sin_aviso >= 3) {
+            toast.add({
+                severity: 'warn',
+                summary: 'Alerta de Ausencias',
+                detail: `El paciente seleccionado tiene ${res.data.sin_aviso} ausencias sin aviso.`,
+                life: 6000
+            });
+        }
+    } catch (e) {
+        console.error(e);
+    }
+}
+
+async function guardarAusenciaTurno(ausencia) {
+    if (!turnoSeleccionado.value) return;
+    guardandoAusencia.value = true;
+    try {
+        const url = `/turnos/${turnoSeleccionado.value.turnoId}/ausencia`;
+        await api.patch(url, { ausencia }, { withCredentials: true });
+        turnoSeleccionado.value.ausencia = ausencia;
+
+        // Recargar agenda para refrescar color
+        await cargarAgenda();
+
+        // Volver a buscar conteo para actualizar el detalle
+        if (turnoSeleccionado.value.paciente_id) {
+            const res = await api.get(`/pacientes/${turnoSeleccionado.value.paciente_id}/ausencias`, { withCredentials: true });
+            ausenciasConteoDetalle.value = res.data;
+        }
+        toast.add({ severity: 'success', summary: 'Estado de asistencia', detail: 'Se actualizó el estado de ausencia correctamente.', life: 3000 });
+    } catch (e) {
+        console.error(e);
+        toast.add({ severity: 'error', summary: 'Error', detail: 'No se pudo actualizar el estado de ausencia.', life: 3500 });
+    } finally {
+        guardandoAusencia.value = false;
+    }
+}
 const fechaEdit = ref('');
 const horaEdit = ref('');
 const duracionTurno = ref(20);
@@ -71,6 +119,7 @@ const pacientes = ref([]);
 const pacienteSeleccionado = ref(null);
 const nuevoTurnoTipoEvento = ref('Turno');
 const nuevoTurnoMotivo = ref('');
+const nuevoTurnoObservaciones = ref('');
 const nuevoTurnoFecha = ref('');
 const nuevoTurnoGuardando = ref(false);
 
@@ -274,6 +323,9 @@ const calendarOptions = reactive({
             dni: e.extendedProps.dni,
             profesional: e.extendedProps.profesional,
             description: e.extendedProps.description,
+            observaciones: e.extendedProps.observaciones,
+            ausencia: e.extendedProps.ausencia,
+            paciente_id: e.extendedProps.paciente_id,
             tipoEvento: e.extendedProps.tipoEvento || 'Bloqueo',
             ausenciaId: e.extendedProps.ausenciaId,
             usuarioId: e.extendedProps.usuarioId,
@@ -281,6 +333,17 @@ const calendarOptions = reactive({
             start: e.start,
             end: e.end
         };
+
+        // Fetch absence counts for the detail view
+        ausenciasConteoDetalle.value = null;
+        if (e.extendedProps.paciente_id) {
+            api.get(`/pacientes/${e.extendedProps.paciente_id}/ausencias`, { withCredentials: true })
+                .then((res) => {
+                    ausenciasConteoDetalle.value = res.data;
+                })
+                .catch((err) => console.error(err));
+        }
+
         editando.value = false;
         modalVisible.value = true;
     },
@@ -299,11 +362,26 @@ const calendarOptions = reactive({
             return;
         }
 
+        const ausencia = info.event.extendedProps.ausencia;
+        if (ausencia === 'sin_aviso') {
+            info.el.style.setProperty('background-color', '#C0392B', 'important');
+            info.el.style.setProperty('border-color', '#C0392B', 'important');
+            info.el.style.setProperty('color', '#ffffff', 'important');
+        } else if (ausencia === 'con_aviso') {
+            info.el.style.setProperty('background-color', '#E67E22', 'important');
+            info.el.style.setProperty('border-color', '#E67E22', 'important');
+            info.el.style.setProperty('color', '#ffffff', 'important');
+        }
+
         const pacNombre = info.event.extendedProps.paciente || '';
         const profNombre = info.event.extendedProps.profesional || '';
         const motivo = info.event.extendedProps.description || '';
+        let prefix = '';
+        if (ausencia === 'sin_aviso') prefix = '[Falta Sin Aviso] ';
+        else if (ausencia === 'con_aviso') prefix = '[Falta Con Aviso] ';
+
         tippy(info.el, {
-            content: `<strong>${pacNombre}</strong><br>${profNombre}${motivo ? '<br><span style="opacity:0.7">' + motivo + '</span>' : ''}`,
+            content: `<strong>${prefix}${pacNombre}</strong><br>${profNombre}${motivo ? '<br><span style="opacity:0.7">' + motivo + '</span>' : ''}`,
             allowHTML: true,
             placement: 'top',
             theme: 'medical'
@@ -395,9 +473,15 @@ function crearEventosAusencia(ausencia) {
 function adaptarEventoTurno(t) {
     const tipo = t.tipo || 'individual';
     const esGrupal = tipo === 'grupal';
+    let title = esGrupal ? `${t.grupo_nombre || t.profesional} (${t.paciente})` : t.paciente;
+    if (t.ausencia === 'sin_aviso') {
+        title = `[Falta Sin Aviso] ${title}`;
+    } else if (t.ausencia === 'con_aviso') {
+        title = `[Falta Con Aviso] ${title}`;
+    }
     return {
         id: t.id,
-        title: esGrupal ? `${t.grupo_nombre || t.profesional} (${t.paciente})` : t.paciente,
+        title,
         start: t.start,
         end: t.end,
         backgroundColor: esGrupal ? 'rgba(8,145,178,0.1)' : '#0891B2',
@@ -411,6 +495,9 @@ function adaptarEventoTurno(t) {
             dni: t.dni,
             profesional: t.profesional,
             description: t.description,
+            observaciones: t.observaciones,
+            ausencia: t.ausencia,
+            paciente_id: t.paciente_id,
             editable: Boolean(t.editable) && !esGrupal,
             grupoId: t.grupo_id
         }
@@ -491,6 +578,7 @@ function abrirModalNuevoTurno(date) {
     nuevoTurnoTipoEvento.value = 'Turno';
     limpiarPacienteSeleccionado();
     nuevoTurnoMotivo.value = '';
+    nuevoTurnoObservaciones.value = '';
     nuevoTurnoModalVisible.value = true;
 }
 
@@ -507,6 +595,7 @@ function seleccionarPaciente(p) {
     pacienteSeleccionado.value = p;
     pacienteBusqueda.value = `${p.apellido} ${p.nombre} (DNI: ${p.dni})`;
     pacientes.value = [];
+    fetchAusenciasConteo(p.id);
 }
 
 async function guardarNuevoTurno() {
@@ -519,7 +608,11 @@ async function guardarNuevoTurno() {
                 toast.add({ severity: 'warn', summary: 'Paciente requerido', detail: 'Selecciona un paciente para crear un turno.', life: 3500 });
                 return;
             }
-            const resp = await api.post('/turnos', { paciente_id: pacienteSeleccionado.value.id, usuario_id: Number(sujetoSeleccionadoId.value), fecha_inicio: nuevoTurnoFecha.value, motivo: nuevoTurnoMotivo.value }, { withCredentials: true });
+            const resp = await api.post(
+                '/turnos',
+                { paciente_id: pacienteSeleccionado.value.id, usuario_id: Number(sujetoSeleccionadoId.value), fecha_inicio: nuevoTurnoFecha.value, motivo: nuevoTurnoMotivo.value, observaciones: nuevoTurnoObservaciones.value },
+                { withCredentials: true }
+            );
             if (resp.data?.ajuste_horario?.aplicado) {
                 toast.add({ severity: 'info', summary: 'Horario ajustado', detail: `Inicio ajustado a ${resp.data.ajuste_horario.inicio_ajustado}`, life: 4500 });
             }
@@ -565,7 +658,11 @@ function iniciarEdicion() {
 }
 
 async function guardarEdicion() {
-    const resp = await api.put(`/turnos/${turnoSeleccionado.value.turnoId}`, { fecha_inicio: `${fechaEdit.value}T${horaEdit.value}:00`, motivo: turnoSeleccionado.value.description }, { withCredentials: true });
+    const resp = await api.put(
+        `/turnos/${turnoSeleccionado.value.turnoId}`,
+        { fecha_inicio: `${fechaEdit.value}T${horaEdit.value}:00`, motivo: turnoSeleccionado.value.description, observaciones: turnoSeleccionado.value.observaciones },
+        { withCredentials: true }
+    );
     if (resp.data?.ajuste_horario?.aplicado) {
         toast.add({ severity: 'info', summary: 'Horario ajustado', detail: `Inicio ajustado a ${resp.data.ajuste_horario.inicio_ajustado}`, life: 4500 });
     }
@@ -679,10 +776,28 @@ onUnmounted(() => {
                         <i class="pi pi-check-circle"></i>
                         {{ pacienteSeleccionado.apellido }} {{ pacienteSeleccionado.nombre }}
                     </div>
+                    <div v-if="pacienteSeleccionado && ausenciasConteoNuevoTurno" class="flex flex-col gap-1.5 mt-2">
+                        <div
+                            v-if="ausenciasConteoNuevoTurno.sin_aviso >= 3"
+                            class="flex items-center gap-2 px-3 py-2 rounded-lg bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-300 text-xs font-semibold border border-red-200 dark:border-red-900"
+                        >
+                            <i class="pi pi-exclamation-triangle text-sm"></i>
+                            <span>¡Alerta! El paciente tiene {{ ausenciasConteoNuevoTurno.sin_aviso }} ausencias sin aviso.</span>
+                        </div>
+                        <div class="text-[11px] text-slate-500 px-1">
+                            Historial de ausencias: <strong class="text-slate-700 dark:text-slate-300">{{ ausenciasConteoNuevoTurno.total }}</strong> total (<span class="text-orange-600 font-semibold"
+                                >{{ ausenciasConteoNuevoTurno.con_aviso }} con aviso</span
+                            >, <span class="text-red-600 font-semibold">{{ ausenciasConteoNuevoTurno.sin_aviso }} sin aviso</span>)
+                        </div>
+                    </div>
                 </div>
                 <div>
                     <label class="font-heading font-semibold text-sm block mb-1.5 text-[#134E4A] dark:text-slate-200"> <i class="pi pi-comment mr-1.5 text-[#0891B2]"></i>{{ nuevoTurnoTipoEvento === 'Turno' ? 'Motivo' : 'Detalle' }} </label>
                     <InputText v-model="nuevoTurnoMotivo" class="w-full" :placeholder="nuevoTurnoTipoEvento === 'Turno' ? 'Motivo de la consulta' : 'Detalle opcional del evento'" />
+                </div>
+                <div v-if="nuevoTurnoTipoEvento === 'Turno'">
+                    <label class="font-heading font-semibold text-sm block mb-1.5 text-[#134E4A] dark:text-slate-200"> <i class="pi pi-align-left mr-1.5 text-[#0891B2]"></i>Observaciones </label>
+                    <Textarea v-model="nuevoTurnoObservaciones" rows="3" autoResize class="w-full" placeholder="Observaciones adicionales" />
                 </div>
             </div>
             <template #footer>
@@ -714,6 +829,20 @@ onUnmounted(() => {
                     <div v-if="pacienteSeleccionado" class="flex items-center gap-2 mt-2 px-3 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300 text-xs font-medium">
                         <i class="pi pi-check-circle"></i>
                         {{ pacienteSeleccionado.apellido }} {{ pacienteSeleccionado.nombre }}
+                    </div>
+                    <div v-if="pacienteSeleccionado && ausenciasConteoNuevoTurno" class="flex flex-col gap-1.5 mt-2">
+                        <div
+                            v-if="ausenciasConteoNuevoTurno.sin_aviso >= 3"
+                            class="flex items-center gap-2 px-3 py-2 rounded-lg bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-300 text-xs font-semibold border border-red-200 dark:border-red-900"
+                        >
+                            <i class="pi pi-exclamation-triangle text-sm"></i>
+                            <span>¡Alerta! El paciente tiene {{ ausenciasConteoNuevoTurno.sin_aviso }} ausencias sin aviso.</span>
+                        </div>
+                        <div class="text-[11px] text-slate-500 px-1">
+                            Historial de ausencias: <strong class="text-slate-700 dark:text-slate-300">{{ ausenciasConteoNuevoTurno.total }}</strong> total (<span class="text-orange-600 font-semibold"
+                                >{{ ausenciasConteoNuevoTurno.con_aviso }} con aviso</span
+                            >, <span class="text-red-600 font-semibold">{{ ausenciasConteoNuevoTurno.sin_aviso }} sin aviso</span>)
+                        </div>
                     </div>
                 </div>
                 <div>
@@ -782,6 +911,10 @@ onUnmounted(() => {
                         <label class="font-heading font-semibold text-sm block mb-1.5 text-[#134E4A] dark:text-slate-200">Motivo</label>
                         <InputText v-model="turnoSeleccionado.description" class="w-full" />
                     </div>
+                    <div>
+                        <label class="font-heading font-semibold text-sm block mb-1.5 text-[#134E4A] dark:text-slate-200">Observaciones</label>
+                        <Textarea v-model="turnoSeleccionado.observaciones" rows="3" autoResize class="w-full" placeholder="Observaciones adicionales" />
+                    </div>
                     <div class="flex justify-end gap-2 mt-5">
                         <Button label="Cancelar" text severity="secondary" class="!rounded-lg" @click="editando = false" />
                         <Button label="Guardar cambios" icon="pi pi-check" class="!rounded-lg !bg-[#0891B2] !border-[#0891B2]" @click="guardarEdicion" />
@@ -808,6 +941,48 @@ onUnmounted(() => {
                         <p class="flex items-center gap-2">
                             <i class="pi pi-comment text-[#0891B2]"></i> <span class="text-slate-600 dark:text-slate-300">{{ turnoSeleccionado.description || 'Sin motivo' }}</span>
                         </p>
+                        <div v-if="turnoSeleccionado.observaciones" class="mt-3 p-3 rounded-lg bg-slate-50 dark:bg-slate-800/40 text-xs border border-slate-100 dark:border-slate-700">
+                            <span class="font-semibold text-slate-500 block mb-1"><i class="pi pi-align-left mr-1 text-[#0891B2]"></i>Observaciones:</span>
+                            <p class="text-slate-600 dark:text-slate-300 whitespace-pre-wrap">{{ turnoSeleccionado.observaciones }}</p>
+                        </div>
+                        <div class="mt-3 p-3 rounded-lg bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-700 space-y-2">
+                            <span class="font-semibold text-slate-500 text-xs block"><i class="pi pi-check-square mr-1 text-[#0891B2]"></i>Asistencia del Paciente:</span>
+                            <div class="flex flex-wrap gap-2 pt-1">
+                                <Button
+                                    label="Presente"
+                                    icon="pi pi-check"
+                                    :severity="!turnoSeleccionado.ausencia ? 'success' : 'secondary'"
+                                    :outlined="!!turnoSeleccionado.ausencia"
+                                    size="small"
+                                    class="!text-xs !py-1 !px-2.5 !rounded-lg"
+                                    :loading="guardandoAusencia"
+                                    @click="guardarAusenciaTurno(null)"
+                                />
+                                <Button
+                                    label="Faltó con aviso"
+                                    icon="pi pi-envelope"
+                                    :severity="turnoSeleccionado.ausencia === 'con_aviso' ? 'warning' : 'secondary'"
+                                    :outlined="turnoSeleccionado.ausencia !== 'con_aviso'"
+                                    size="small"
+                                    class="!text-xs !py-1 !px-2.5 !rounded-lg"
+                                    :loading="guardandoAusencia"
+                                    @click="guardarAusenciaTurno('con_aviso')"
+                                />
+                                <Button
+                                    label="Faltó sin aviso"
+                                    icon="pi pi-times"
+                                    :severity="turnoSeleccionado.ausencia === 'sin_aviso' ? 'danger' : 'secondary'"
+                                    :outlined="turnoSeleccionado.ausencia !== 'sin_aviso'"
+                                    size="small"
+                                    class="!text-xs !py-1 !px-2.5 !rounded-lg"
+                                    :loading="guardandoAusencia"
+                                    @click="guardarAusenciaTurno('sin_aviso')"
+                                />
+                            </div>
+                            <div v-if="ausenciasConteoDetalle" class="text-[11px] text-slate-400 pt-1">
+                                Historial: {{ ausenciasConteoDetalle.total }} ausencias ({{ ausenciasConteoDetalle.con_aviso }} con aviso, {{ ausenciasConteoDetalle.sin_aviso }} sin aviso)
+                            </div>
+                        </div>
                     </div>
                     <div class="flex justify-between pt-4 border-t border-[#E0F2FE] dark:border-slate-700 mt-4">
                         <div class="flex gap-2">

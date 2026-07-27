@@ -15,5 +15,8 @@ export default {
     },
     deletePaciente(id) {
         return api.delete(`/pacientes/${id}`, { withCredentials: true });
+    },
+    getAusencias(id) {
+        return api.get(`/pacientes/${id}/ausencias`, { withCredentials: true });
     }
 };

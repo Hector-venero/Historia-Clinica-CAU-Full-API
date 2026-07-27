@@ -15,6 +15,8 @@ import Button from 'primevue/button';
 import InputText from 'primevue/inputtext';
 import Toast from 'primevue/toast';
 import { useToast } from 'primevue/usetoast';
+import Dropdown from 'primevue/dropdown';
+import Textarea from 'primevue/textarea';
 
 const toast = useToast();
 const route = useRoute();
@@ -25,6 +27,55 @@ const eventos = ref([]);
 const turnoSeleccionado = ref(null);
 const mostrarModal = ref(false);
 const rolUsuario = ref('');
+
+const ausenciasConteoNuevoTurno = ref(null);
+const ausenciasConteoDetalle = ref(null);
+const guardandoAusencia = ref(false);
+
+async function fetchAusenciasConteo(pacienteId) {
+    ausenciasConteoNuevoTurno.value = null;
+    try {
+        const res = await api.get(`/pacientes/${pacienteId}/ausencias`, { withCredentials: true });
+        ausenciasConteoNuevoTurno.value = res.data;
+        if (res.data && res.data.sin_aviso >= 3) {
+            toast.add({
+                severity: 'warn',
+                summary: 'Alerta de Ausencias',
+                detail: `El paciente seleccionado tiene ${res.data.sin_aviso} ausencias sin aviso.`,
+                life: 6000
+            });
+        }
+    } catch (e) {
+        console.error(e);
+    }
+}
+
+async function guardarAusenciaTurno(ausencia) {
+    if (!turnoSeleccionado.value) return;
+    guardandoAusencia.value = true;
+    try {
+        const esGrupal = turnoSeleccionado.value.tipo === 'turno_grupal';
+        const url = esGrupal ? `/turnos/grupales/${turnoSeleccionado.value.turnoId}/ausencia` : `/turnos/${turnoSeleccionado.value.turnoId}/ausencia`;
+
+        await api.patch(url, { ausencia }, { withCredentials: true });
+        turnoSeleccionado.value.ausencia = ausencia;
+
+        // Recargar agenda para refrescar color
+        await cargarTurnosGrupo();
+
+        // Volver a buscar conteo para actualizar el detalle
+        if (turnoSeleccionado.value.paciente_id) {
+            const res = await api.get(`/pacientes/${turnoSeleccionado.value.paciente_id}/ausencias`, { withCredentials: true });
+            ausenciasConteoDetalle.value = res.data;
+        }
+        toast.add({ severity: 'success', summary: 'Estado de asistencia', detail: 'Se actualizó el estado de ausencia correctamente.', life: 3000 });
+    } catch (e) {
+        console.error(e);
+        toast.add({ severity: 'error', summary: 'Error', detail: 'No se pudo actualizar el estado de ausencia.', life: 3500 });
+    } finally {
+        guardandoAusencia.value = false;
+    }
+}
 
 const modalNuevoVisible = ref(false);
 const DURACION_GRUPAL_DEFAULT = 20;
@@ -37,6 +88,12 @@ const DIAS_TANDA = [
     { value: 5, label: 'Sab' },
     { value: 6, label: 'Dom' }
 ];
+const opcionesFrecuencia = [
+    { label: 'Semanal (Cada 1 semana)', value: 1 },
+    { label: 'Quincenal (Cada 2 semanas)', value: 2 },
+    { label: 'Cada 3 semanas', value: 3 },
+    { label: 'Mensual (Cada 4 semanas)', value: 4 }
+];
 const nuevoTurno = reactive({
     modo_creacion: 'simple',
     fecha: '',
@@ -44,9 +101,11 @@ const nuevoTurno = reactive({
     hora_tanda: '',
     dias_tanda: [],
     cantidad_tanda: 4,
+    frecuencia_semanas: 1,
     pacienteBusqueda: '',
     paciente: null,
     motivo: '',
+    observaciones: '',
     duracion_minutos: DURACION_GRUPAL_DEFAULT
 });
 const pacientes = ref([]);
@@ -55,8 +114,9 @@ const guardandoNuevo = ref(false);
 const modalEditarVisible = ref(false);
 const editForm = reactive({
     fecha: '',
+    duracion_minutos: DURACION_GRUPAL_DEFAULT,
     motivo: '',
-    duracion_minutos: DURACION_GRUPAL_DEFAULT
+    observaciones: ''
 });
 const guardandoEdicion = ref(false);
 const eliminando = ref(false);
@@ -132,6 +192,7 @@ const calendarOptions = reactive({
         nuevoTurno.pacienteBusqueda = '';
         nuevoTurno.paciente = null;
         nuevoTurno.motivo = '';
+        nuevoTurno.observaciones = '';
         nuevoTurno.duracion_minutos = DURACION_GRUPAL_DEFAULT;
         pacientes.value = [];
         modalNuevoVisible.value = true;
@@ -142,15 +203,29 @@ const calendarOptions = reactive({
 
         turnoSeleccionado.value = {
             id: info.event.extendedProps.turnoId || info.event.id,
+            turnoId: info.event.extendedProps.turnoId,
             tipo,
             paciente: info.event.extendedProps.paciente,
             dni: info.event.extendedProps.dni,
             profesional: info.event.extendedProps.profesional,
             description: info.event.extendedProps.description,
+            observaciones: info.event.extendedProps.observaciones,
+            ausencia: info.event.extendedProps.ausencia,
+            paciente_id: info.event.extendedProps.paciente_id,
             start: info.event.start,
             end: info.event.end,
             editable: Boolean(info.event.extendedProps.editable)
         };
+
+        ausenciasConteoDetalle.value = null;
+        if (info.event.extendedProps.paciente_id) {
+            api.get(`/pacientes/${info.event.extendedProps.paciente_id}/ausencias`, { withCredentials: true })
+                .then((res) => {
+                    ausenciasConteoDetalle.value = res.data;
+                })
+                .catch((err) => console.error(err));
+        }
+
         mostrarModal.value = true;
     },
     eventDidMount(info) {
@@ -166,11 +241,26 @@ const calendarOptions = reactive({
             return;
         }
 
+        const ausencia = info.event.extendedProps.ausencia;
+        if (ausencia === 'sin_aviso') {
+            info.el.style.setProperty('background-color', '#C0392B', 'important');
+            info.el.style.setProperty('border-color', '#C0392B', 'important');
+            info.el.style.setProperty('color', '#ffffff', 'important');
+        } else if (ausencia === 'con_aviso') {
+            info.el.style.setProperty('background-color', '#E67E22', 'important');
+            info.el.style.setProperty('border-color', '#E67E22', 'important');
+            info.el.style.setProperty('color', '#ffffff', 'important');
+        }
+
         const pacNombre = info.event.extendedProps.paciente || '';
         const profNombre = info.event.extendedProps.profesional || '';
         const desc = info.event.extendedProps.description || '';
+        let prefix = '';
+        if (ausencia === 'sin_aviso') prefix = '[Falta Sin Aviso] ';
+        else if (ausencia === 'con_aviso') prefix = '[Falta Con Aviso] ';
+
         tippy(info.el, {
-            content: `<strong>${pacNombre}</strong><br>${profNombre}${desc ? '<br><span style="opacity:0.7">' + desc + '</span>' : ''}`,
+            content: `<strong>${prefix}${pacNombre}</strong><br>${profNombre}${desc ? '<br><span style="opacity:0.7">' + desc + '</span>' : ''}`,
             allowHTML: true,
             placement: 'top',
             theme: 'medical'
@@ -184,9 +274,15 @@ async function cargarContextoUsuario() {
 }
 
 function crearEventoIndividual(t) {
+    let title = t.paciente;
+    if (t.ausencia === 'sin_aviso') {
+        title = `[Falta Sin Aviso] ${title}`;
+    } else if (t.ausencia === 'con_aviso') {
+        title = `[Falta Con Aviso] ${title}`;
+    }
     return {
         id: `ind-${t.id}`,
-        title: t.paciente,
+        title,
         start: t.start,
         end: t.end,
         backgroundColor: t.color || grupo.value?.color || '#0891B2',
@@ -200,15 +296,24 @@ function crearEventoIndividual(t) {
             dni: t.dni,
             profesional: t.profesional,
             description: t.description || '',
+            observaciones: t.observaciones,
+            ausencia: t.ausencia,
+            paciente_id: t.paciente_id,
             editable: false
         }
     };
 }
 
 function crearEventoGrupal(t) {
+    let title = t.paciente;
+    if (t.ausencia === 'sin_aviso') {
+        title = `[Falta Sin Aviso] ${title}`;
+    } else if (t.ausencia === 'con_aviso') {
+        title = `[Falta Con Aviso] ${title}`;
+    }
     return {
         id: `grp-${t.id}`,
-        title: t.paciente,
+        title,
         start: t.start,
         end: t.end,
         backgroundColor: 'rgba(8, 145, 178, 0.1)',
@@ -222,6 +327,9 @@ function crearEventoGrupal(t) {
             dni: t.dni,
             profesional: `Grupo: ${t.grupo_nombre || grupo.value?.nombre || ''}`,
             description: t.description || '',
+            observaciones: t.observaciones,
+            ausencia: t.ausencia,
+            paciente_id: t.paciente_id,
             editable: Boolean(t.editable)
         }
     };
@@ -305,6 +413,7 @@ function seleccionarPaciente(p) {
     nuevoTurno.paciente = p;
     nuevoTurno.pacienteBusqueda = `${p.apellido} ${p.nombre} (DNI: ${p.dni})`;
     pacientes.value = [];
+    fetchAusenciasConteo(p.id);
 }
 
 function toggleDiaTanda(day) {
@@ -345,10 +454,12 @@ async function crearTurnoGrupal() {
                 fecha_inicio: fechaInicioRef,
                 fecha_fin: fechaFin,
                 motivo: nuevoTurno.motivo,
+                observaciones: nuevoTurno.observaciones,
                 modo: esTanda ? 'tanda' : 'simple',
                 dias_semana: esTanda ? nuevoTurno.dias_tanda : undefined,
                 cantidad: esTanda ? Number(nuevoTurno.cantidad_tanda) : undefined,
-                hora: esTanda ? nuevoTurno.hora_tanda : undefined
+                hora: esTanda ? nuevoTurno.hora_tanda : undefined,
+                frecuencia_semanas: esTanda ? Number(nuevoTurno.frecuencia_semanas) : undefined
             },
             { withCredentials: true }
         );
@@ -374,6 +485,7 @@ function abrirEdicionGrupal() {
     const d = new Date(turnoSeleccionado.value.start);
     editForm.fecha = toLocalDateTimeString(d);
     editForm.motivo = turnoSeleccionado.value.description || '';
+    editForm.observaciones = turnoSeleccionado.value.observaciones || '';
     editForm.duracion_minutos = minutosEntreFechas(turnoSeleccionado.value.start, turnoSeleccionado.value.end);
     modalEditarVisible.value = true;
 }
@@ -387,7 +499,7 @@ async function guardarEdicionGrupal() {
     }
     guardandoEdicion.value = true;
     try {
-        const resp = await api.put(`/turnos/grupales/${turnoSeleccionado.value.id}`, { fecha_inicio: editForm.fecha, fecha_fin: fechaFin, motivo: editForm.motivo }, { withCredentials: true });
+        const resp = await api.put(`/turnos/grupales/${turnoSeleccionado.value.id}`, { fecha_inicio: editForm.fecha, fecha_fin: fechaFin, motivo: editForm.motivo, observaciones: editForm.observaciones }, { withCredentials: true });
         if (resp.data?.ajuste_horario?.aplicado) {
             toast.add({ severity: 'info', summary: 'Horario ajustado', detail: `Inicio ajustado a ${resp.data.ajuste_horario.inicio_ajustado}`, life: 4500 });
         }
@@ -508,9 +620,15 @@ onMounted(async () => {
                             </button>
                         </div>
                     </div>
-                    <div>
-                        <label class="font-heading font-semibold text-sm block mb-1.5 text-[#134E4A] dark:text-slate-200">Cantidad de semanas</label>
-                        <InputText type="number" min="1" step="1" v-model.number="nuevoTurno.cantidad_tanda" class="w-full" />
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="font-heading font-semibold text-sm block mb-1.5 text-[#134E4A] dark:text-slate-200">Frecuencia</label>
+                            <Dropdown v-model="nuevoTurno.frecuencia_semanas" :options="opcionesFrecuencia" optionLabel="label" optionValue="value" class="w-full" />
+                        </div>
+                        <div>
+                            <label class="font-heading font-semibold text-sm block mb-1.5 text-[#134E4A] dark:text-slate-200">Cantidad total de turnos</label>
+                            <InputText type="number" min="1" step="1" v-model.number="nuevoTurno.cantidad_tanda" class="w-full" />
+                        </div>
                     </div>
                 </div>
                 <!-- Paciente -->
@@ -530,6 +648,20 @@ onMounted(async () => {
                     <div v-if="nuevoTurno.paciente" class="flex items-center gap-2 mt-2 px-3 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300 text-xs font-medium">
                         <i class="pi pi-check-circle"></i> {{ nuevoTurno.paciente.apellido }} {{ nuevoTurno.paciente.nombre }}
                     </div>
+                    <div v-if="nuevoTurno.paciente && ausenciasConteoNuevoTurno" class="flex flex-col gap-1.5 mt-2">
+                        <div
+                            v-if="ausenciasConteoNuevoTurno.sin_aviso >= 3"
+                            class="flex items-center gap-2 px-3 py-2 rounded-lg bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-300 text-xs font-semibold border border-red-200 dark:border-red-900"
+                        >
+                            <i class="pi pi-exclamation-triangle text-sm"></i>
+                            <span>¡Alerta! El paciente tiene {{ ausenciasConteoNuevoTurno.sin_aviso }} ausencias sin aviso.</span>
+                        </div>
+                        <div class="text-[11px] text-slate-500 px-1">
+                            Historial de ausencias: <strong class="text-slate-700 dark:text-slate-300">{{ ausenciasConteoNuevoTurno.total }}</strong> total (<span class="text-orange-600 font-semibold"
+                                >{{ ausenciasConteoNuevoTurno.con_aviso }} con aviso</span
+                            >, <span class="text-red-600 font-semibold">{{ ausenciasConteoNuevoTurno.sin_aviso }} sin aviso</span>)
+                        </div>
+                    </div>
                 </div>
                 <div class="grid grid-cols-2 gap-3">
                     <div>
@@ -540,6 +672,10 @@ onMounted(async () => {
                         <label class="font-heading font-semibold text-sm block mb-1.5 text-[#134E4A] dark:text-slate-200"><i class="pi pi-clock mr-1.5 text-[#0891B2]"></i>Duracion (min)</label>
                         <InputText type="number" min="5" step="5" v-model.number="nuevoTurno.duracion_minutos" class="w-full" />
                     </div>
+                </div>
+                <div>
+                    <label class="font-heading font-semibold text-sm block mb-1.5 text-[#134E4A] dark:text-slate-200"><i class="pi pi-align-left mr-1.5 text-[#0891B2]"></i>Observaciones</label>
+                    <Textarea v-model="nuevoTurno.observaciones" rows="3" autoResize class="w-full" placeholder="Observaciones adicionales" />
                 </div>
             </div>
             <template #footer>
@@ -567,6 +703,48 @@ onMounted(async () => {
                     <p class="flex items-center gap-2">
                         <i class="pi pi-comment text-[#0891B2]"></i> <span class="text-slate-600 dark:text-slate-300">{{ turnoSeleccionado.description || 'Sin motivo' }}</span>
                     </p>
+                    <div v-if="turnoSeleccionado.observaciones" class="p-3 rounded-lg bg-slate-50 dark:bg-slate-800/40 text-xs border border-slate-100 dark:border-slate-700">
+                        <span class="font-semibold text-slate-500 block mb-1"><i class="pi pi-align-left mr-1 text-[#0891B2]"></i>Observaciones:</span>
+                        <p class="text-slate-600 dark:text-slate-300 whitespace-pre-wrap">{{ turnoSeleccionado.observaciones }}</p>
+                    </div>
+                    <div class="p-3 rounded-lg bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-700 space-y-2">
+                        <span class="font-semibold text-slate-500 text-xs block"><i class="pi pi-check-square mr-1 text-[#0891B2]"></i>Asistencia del Paciente:</span>
+                        <div class="flex flex-wrap gap-2 pt-1">
+                            <Button
+                                label="Presente"
+                                icon="pi pi-check"
+                                :severity="!turnoSeleccionado.ausencia ? 'success' : 'secondary'"
+                                :outlined="!!turnoSeleccionado.ausencia"
+                                size="small"
+                                class="!text-xs !py-1 !px-2.5 !rounded-lg"
+                                :loading="guardandoAusencia"
+                                @click="guardarAusenciaTurno(null)"
+                            />
+                            <Button
+                                label="Faltó con aviso"
+                                icon="pi pi-envelope"
+                                :severity="turnoSeleccionado.ausencia === 'con_aviso' ? 'warning' : 'secondary'"
+                                :outlined="turnoSeleccionado.ausencia !== 'con_aviso'"
+                                size="small"
+                                class="!text-xs !py-1 !px-2.5 !rounded-lg"
+                                :loading="guardandoAusencia"
+                                @click="guardarAusenciaTurno('con_aviso')"
+                            />
+                            <Button
+                                label="Faltó sin aviso"
+                                icon="pi pi-times"
+                                :severity="turnoSeleccionado.ausencia === 'sin_aviso' ? 'danger' : 'secondary'"
+                                :outlined="turnoSeleccionado.ausencia !== 'sin_aviso'"
+                                size="small"
+                                class="!text-xs !py-1 !px-2.5 !rounded-lg"
+                                :loading="guardandoAusencia"
+                                @click="guardarAusenciaTurno('sin_aviso')"
+                            />
+                        </div>
+                        <div v-if="ausenciasConteoDetalle" class="text-[11px] text-slate-400 pt-1">
+                            Historial: {{ ausenciasConteoDetalle.total }} ausencias ({{ ausenciasConteoDetalle.con_aviso }} con aviso, {{ ausenciasConteoDetalle.sin_aviso }} sin aviso)
+                        </div>
+                    </div>
                 </div>
                 <div class="flex justify-between pt-4 border-t border-[#E0F2FE] dark:border-slate-700">
                     <div class="flex gap-2">
@@ -594,6 +772,10 @@ onMounted(async () => {
                         <label class="font-heading font-semibold text-sm block mb-1.5 text-[#134E4A] dark:text-slate-200"><i class="pi pi-clock mr-1.5 text-[#0891B2]"></i>Duracion (min)</label>
                         <InputText type="number" min="5" step="5" v-model.number="editForm.duracion_minutos" class="w-full" />
                     </div>
+                </div>
+                <div>
+                    <label class="font-heading font-semibold text-sm block mb-1.5 text-[#134E4A] dark:text-slate-200"><i class="pi pi-align-left mr-1.5 text-[#0891B2]"></i>Observaciones</label>
+                    <Textarea v-model="editForm.observaciones" rows="3" autoResize class="w-full" placeholder="Observaciones adicionales" />
                 </div>
             </div>
             <template #footer>

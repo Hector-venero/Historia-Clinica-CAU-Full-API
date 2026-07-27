@@ -178,3 +178,233 @@ def test_crear_turno_grupal_tanda_rechaza_cantidad_invalida(client, monkeypatch)
 
     assert response.status_code == 400
     assert "cantidad" in response.get_json()["error"].lower()
+
+
+def test_generar_fechas_tanda_quincenal():
+    from app.routes.turnos_routes import _generar_fechas_tanda
+
+    fecha_base, fechas, err = _generar_fechas_tanda(
+        fecha_inicio_raw="2026-07-06T10:00:00",
+        raw_weekdays=["Monday", "Wednesday"],
+        cantidad_raw=4,
+        raw_hora="10:00",
+        frecuencia_semanas=2
+    )
+
+    assert err is None
+    assert len(fechas) == 4
+    assert fechas[0].strftime("%Y-%m-%d") == "2026-07-06"
+    assert fechas[1].strftime("%Y-%m-%d") == "2026-07-08"
+    assert fechas[2].strftime("%Y-%m-%d") == "2026-07-20"
+    assert fechas[3].strftime("%Y-%m-%d") == "2026-07-22"
+
+
+def test_generar_fechas_tanda_mensual():
+    from app.routes.turnos_routes import _generar_fechas_tanda
+
+    fecha_base, fechas, err = _generar_fechas_tanda(
+        fecha_inicio_raw="2026-07-06T10:00:00",
+        raw_weekdays=["Monday"],
+        cantidad_raw=3,
+        raw_hora="10:00",
+        frecuencia_semanas=4
+    )
+
+    assert err is None
+    assert len(fechas) == 3
+    assert fechas[0].strftime("%Y-%m-%d") == "2026-07-06"
+    assert fechas[1].strftime("%Y-%m-%d") == "2026-08-03"
+    assert fechas[2].strftime("%Y-%m-%d") == "2026-08-31"
+
+
+def test_crear_turnos_tanda_individual_endpoint_works(client, monkeypatch):
+    login_as(client, MockUser(user_id=7, rol="profesional"))
+
+    from app.routes import turnos_routes
+
+    fake_cursor = FakeCursor(fetchone_results=[{"duracion_turno": 20}])
+    fake_connection = FakeConnection(fake_cursor)
+    monkeypatch.setattr(turnos_routes, "get_connection", lambda: fake_connection)
+    monkeypatch.setattr(turnos_routes, "medico_disponible", lambda *args, **kwargs: True)
+
+    response = client.post(
+        "/api/turnos/tanda",
+        json={
+            "paciente_id": 10,
+            "usuario_id": 7,
+            "fecha": "2026-07-06T10:00:00",
+            "cantidad": 2,
+            "dias_semana": ["Lunes"],
+            "frecuencia_semanas": 2,
+            "motivo": "Consulta"
+        }
+    )
+
+    assert response.status_code == 201
+    payload = response.get_json()
+    assert "crearon 2 turnos" in payload["message"].lower()
+    assert fake_connection.committed is True
+
+
+def test_crear_y_editar_turno_con_observaciones(client, monkeypatch):
+    login_as(client, MockUser(user_id=7, rol="profesional"))
+
+    from app.routes import turnos_routes
+
+    # 1. Test POST /api/turnos
+    # Para POST, fetchone se usa para buscar email de paciente y nombre de profesional.
+    # Así que mockeamos esas consultas.
+    fake_cursor_post = FakeCursor(
+        fetchone_results=[
+            {"email": "test@paciente.com", "nombre": "P", "apellido": "P"},  # Paciente
+            {"nombre": "Doc"},  # Profesional
+        ]
+    )
+    fake_conn_post = FakeConnection(fake_cursor_post)
+    monkeypatch.setattr(turnos_routes, "get_connection", lambda: fake_conn_post)
+    monkeypatch.setattr(turnos_routes, "medico_disponible", lambda *args, **kwargs: True)
+
+    response = client.post(
+        "/api/turnos",
+        json={
+            "paciente_id": 10,
+            "usuario_id": 7,
+            "fecha_inicio": "2026-07-06T10:00:00",
+            "motivo": "Consulta",
+            "observaciones": "Paciente necesita silla de ruedas"
+        }
+    )
+
+    assert response.status_code == 201
+    # Verificar que el execute insertó observaciones
+    inserted_queries = [item for item in fake_cursor_post.executed if "INSERT INTO turnos" in item[0]]
+    assert len(inserted_queries) == 1
+    assert "observaciones" in inserted_queries[0][0]
+
+    # 2. Test PUT /api/turnos/15
+    # Para PUT, fetchone busca el turno inicial. Mockeamos eso.
+    fake_cursor_put = FakeCursor(
+        fetchone_results=[
+            {"usuario_id": 7, "fecha_inicio": "2026-07-06T10:00:00", "fecha_fin": "2026-07-06T10:20:00", "motivo": "Consulta", "observaciones": ""}
+        ]
+    )
+    fake_conn_put = FakeConnection(fake_cursor_put)
+    monkeypatch.setattr(turnos_routes, "get_connection", lambda: fake_conn_put)
+
+    response = client.put(
+        "/api/turnos/15",
+        json={
+            "fecha_inicio": "2026-07-06T10:00:00",
+            "motivo": "Consulta Modificada",
+            "observaciones": "Observaciones modificadas"
+        }
+    )
+
+    assert response.status_code == 200
+    update_queries = [item for item in fake_cursor_put.executed if "UPDATE turnos" in item[0]]
+    assert len(update_queries) == 1
+    assert "observaciones" in update_queries[0][0]
+
+
+def test_actualizar_ausencia_y_conteo_ausencias(client, monkeypatch):
+    login_as(client, MockUser(user_id=7, rol="profesional"))
+
+    from app.routes import turnos_routes
+
+    # 1. Test PATCH /api/turnos/15/ausencia
+    fake_cursor_patch = FakeCursor(
+        fetchone_results=[{"usuario_id": 7}]
+    )
+    fake_conn_patch = FakeConnection(fake_cursor_patch)
+    monkeypatch.setattr(turnos_routes, "get_connection", lambda: fake_conn_patch)
+
+    response = client.patch(
+        "/api/turnos/15/ausencia",
+        json={"ausencia": "sin_aviso"}
+    )
+    assert response.status_code == 200
+    update_queries = [item for item in fake_cursor_patch.executed if "UPDATE turnos SET" in item[0]]
+    assert len(update_queries) == 1
+    assert "ausencia" in update_queries[0][0]
+    assert update_queries[0][1] == ("sin_aviso", 15)
+
+    # 2. Test PATCH /api/turnos/grupales/20/ausencia
+    login_as(client, MockUser(user_id=7, rol="administrativo")) # Administrativo tiene rol para grupales
+    fake_cursor_patch_grup = FakeCursor(
+        fetchone_results=[{"id": 20}]
+    )
+    fake_conn_patch_grup = FakeConnection(fake_cursor_patch_grup)
+    monkeypatch.setattr(turnos_routes, "get_connection", lambda: fake_conn_patch_grup)
+
+    response = client.patch(
+        "/api/turnos/grupales/20/ausencia",
+        json={"ausencia": "con_aviso"}
+    )
+    assert response.status_code == 200
+    update_queries_grup = [item for item in fake_cursor_patch_grup.executed if "UPDATE turnos_grupales SET" in item[0]]
+    assert len(update_queries_grup) == 1
+    assert "ausencia" in update_queries_grup[0][0]
+    assert update_queries_grup[0][1] == ("con_aviso", 20)
+
+    # 3. Test GET /api/pacientes/10/ausencias
+    fake_cursor_count = FakeCursor(
+        fetchone_results=[{"id": 10}],
+        fetchall_results=[
+            [{"ausencia": "sin_aviso", "cant": 2}, {"ausencia": "con_aviso", "cant": 1}], # indiv
+            [{"ausencia": "sin_aviso", "cant": 1}] # grup
+        ]
+    )
+    fake_conn_count = FakeConnection(fake_cursor_count)
+    monkeypatch.setattr(turnos_routes, "get_connection", lambda: fake_conn_count)
+
+    response = client.get("/api/pacientes/10/ausencias")
+    assert response.status_code == 200
+    data = response.get_json()
+    assert data["total"] == 4
+    assert data["sin_aviso"] == 3
+    assert data["con_aviso"] == 1
+
+
+def test_actualizar_ausencia_turno_ajeno_devuelve_403(client, monkeypatch):
+    login_as(client, MockUser(user_id=7, rol="profesional"))
+
+    from app.routes import turnos_routes
+
+    # El turno 15 pertenece al profesional 99, no al usuario logueado (7)
+    fake_cursor = FakeCursor(fetchone_results=[{"usuario_id": 99}])
+    fake_connection = FakeConnection(fake_cursor)
+    monkeypatch.setattr(turnos_routes, "get_connection", lambda: fake_connection)
+
+    response = client.patch(
+        "/api/turnos/15/ausencia",
+        json={"ausencia": "sin_aviso"}
+    )
+
+    assert response.status_code == 403
+    update_queries = [item for item in fake_cursor.executed if "UPDATE turnos SET" in item[0]]
+    assert len(update_queries) == 0
+
+
+def test_actualizar_ausencia_turno_propio_devuelve_200(client, monkeypatch):
+    login_as(client, MockUser(user_id=7, rol="profesional"))
+
+    from app.routes import turnos_routes
+
+    fake_cursor = FakeCursor(fetchone_results=[{"usuario_id": 7}])
+    fake_connection = FakeConnection(fake_cursor)
+    monkeypatch.setattr(turnos_routes, "get_connection", lambda: fake_connection)
+
+    response = client.patch(
+        "/api/turnos/15/ausencia",
+        json={"ausencia": "sin_aviso"}
+    )
+
+    assert response.status_code == 200
+
+
+def test_conteo_ausencias_paciente_deniega_rol_no_reconocido(client):
+    login_as(client, MockUser(user_id=1, rol="invitado"))
+
+    response = client.get("/api/pacientes/10/ausencias")
+
+    assert response.status_code == 403

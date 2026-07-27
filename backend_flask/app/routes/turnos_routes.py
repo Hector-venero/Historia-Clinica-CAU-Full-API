@@ -218,7 +218,7 @@ def _resolver_duracion_grupal(fecha_inicio_raw, fecha_fin_raw=None, slot_minutes
     return fin_dt - inicio_dt, None
 
 
-def _generar_fechas_tanda(fecha_inicio_raw, raw_weekdays, cantidad_raw, raw_hora):
+def _generar_fechas_tanda(fecha_inicio_raw, raw_weekdays, cantidad_raw, raw_hora, frecuencia_semanas=1):
     fecha_base = _normalize_datetime(_parse_iso_datetime(fecha_inicio_raw))
     if not fecha_base:
         return None, None, "Formato de fecha invalido"
@@ -230,6 +230,13 @@ def _generar_fechas_tanda(fecha_inicio_raw, raw_weekdays, cantidad_raw, raw_hora
     if cantidad <= 0 or cantidad > 500:
         return None, None, "cantidad debe estar entre 1 y 500"
 
+    try:
+        frecuencia_semanas = int(frecuencia_semanas)
+    except (TypeError, ValueError):
+        frecuencia_semanas = 1
+    if frecuencia_semanas <= 0 or frecuencia_semanas > 52:
+        frecuencia_semanas = 1
+
     weekdays, err = _parse_weekdays(raw_weekdays)
     if err:
         return None, None, err
@@ -240,12 +247,16 @@ def _generar_fechas_tanda(fecha_inicio_raw, raw_weekdays, cantidad_raw, raw_hora
 
     fechas = []
     cursor_day = fecha_base.date()
-    max_iter = max(366, cantidad * 30)
+    max_iter = max(366, cantidad * 30 * frecuencia_semanas)
     loops = 0
+    base_monday = fecha_base.date() - timedelta(days=fecha_base.date().weekday())
     while len(fechas) < cantidad and loops < max_iter:
         candidate = datetime.combine(cursor_day, time(hour=hora, minute=minuto))
         if candidate.weekday() in weekdays and candidate >= fecha_base:
-            fechas.append(candidate)
+            candidate_monday = cursor_day - timedelta(days=cursor_day.weekday())
+            weeks_diff = (candidate_monday - base_monday).days // 7
+            if weeks_diff % frecuencia_semanas == 0:
+                fechas.append(candidate)
         cursor_day += timedelta(days=1)
         loops += 1
 
@@ -370,7 +381,7 @@ def api_turnos():
         if current_user.rol in ["profesional", "area"]:
             cursor.execute(
                 """
-                SELECT t.id, t.fecha_inicio, t.fecha_fin, t.motivo,
+                SELECT t.id, t.paciente_id, t.fecha_inicio, t.fecha_fin, t.motivo, t.observaciones, t.ausencia,
                        p.nombre, p.dni, u.nombre AS profesional
                 FROM turnos t
                 JOIN pacientes p ON t.paciente_id = p.id
@@ -383,7 +394,7 @@ def api_turnos():
         else:
             cursor.execute(
                 """
-                SELECT t.id, t.fecha_inicio, t.fecha_fin, t.motivo,
+                SELECT t.id, t.paciente_id, t.fecha_inicio, t.fecha_fin, t.motivo, t.observaciones, t.ausencia,
                        p.nombre, p.dni, u.nombre AS profesional
                 FROM turnos t
                 JOIN pacientes p ON t.paciente_id = p.id
@@ -404,6 +415,9 @@ def api_turnos():
                 "start": t["fecha_inicio"].replace(tzinfo=TZ_ARG).isoformat(),
                 "end": t["fecha_fin"].replace(tzinfo=TZ_ARG).isoformat(),
                 "description": t["motivo"],
+                "observaciones": t["observaciones"],
+                "ausencia": t["ausencia"],
+                "paciente_id": t["paciente_id"],
                 "profesional": t["profesional"],
             }
             for t in turnos
@@ -418,6 +432,7 @@ def api_turnos():
     usuario_id = data.get("usuario_id")
     fecha_inicio_raw = data.get("fecha_inicio")
     motivo = data.get("motivo")
+    observaciones = data.get("observaciones")
 
     if not (paciente_id and usuario_id and fecha_inicio_raw):
         return jsonify({"error": "Campos obligatorios faltantes"}), 400
@@ -448,10 +463,10 @@ def api_turnos():
 
         cursor.execute(
             """
-            INSERT INTO turnos (paciente_id, usuario_id, fecha_inicio, fecha_fin, motivo)
-            VALUES (%s, %s, %s, %s, %s)
+            INSERT INTO turnos (paciente_id, usuario_id, fecha_inicio, fecha_fin, motivo, observaciones)
+            VALUES (%s, %s, %s, %s, %s, %s)
         """,
-            (paciente_id, usuario_id, fecha_inicio, fecha_fin, motivo),
+            (paciente_id, usuario_id, fecha_inicio, fecha_fin, motivo, observaciones),
         )
         conn.commit()
 
@@ -560,7 +575,7 @@ def editar_turno(id):
 
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
-    cursor.execute("SELECT usuario_id, fecha_inicio, fecha_fin, motivo FROM turnos WHERE id=%s", (id,))
+    cursor.execute("SELECT usuario_id, fecha_inicio, fecha_fin, motivo, observaciones FROM turnos WHERE id=%s", (id,))
     turno = cursor.fetchone()
 
     if not turno:
@@ -586,6 +601,7 @@ def editar_turno(id):
     fecha_inicio = _to_db_iso(inicio_dt)
     fecha_fin = _to_db_iso(fin_dt)
     motivo = data.get("motivo", turno.get("motivo"))
+    observaciones = data.get("observaciones", turno.get("observaciones"))
 
     if not medico_disponible(
         turno["usuario_id"],
@@ -601,10 +617,10 @@ def editar_turno(id):
     cursor.execute(
         """
         UPDATE turnos
-        SET fecha_inicio=%s, fecha_fin=%s, motivo=%s
+        SET fecha_inicio=%s, fecha_fin=%s, motivo=%s, observaciones=%s
         WHERE id=%s
     """,
-        (fecha_inicio, fecha_fin, motivo, id),
+        (fecha_inicio, fecha_fin, motivo, observaciones, id),
     )
     conn.commit()
     cursor.close()
@@ -627,15 +643,27 @@ def crear_turnos_tanda():
         paciente_id = data.get("paciente_id")
         usuario_id = data.get("usuario_id")
         motivo = data.get("motivo", "")
-        fecha_inicial = datetime.fromisoformat(data.get("fecha"))
+        observaciones = data.get("observaciones")
+        
+        fecha_raw = data.get("fecha")
+        if not fecha_raw:
+            return jsonify({"error": "Falta fecha de inicio"}), 400
+        fecha_inicial = datetime.fromisoformat(fecha_raw)
+        
         cantidad = int(data.get("cantidad", 1))
         dias_semana = data.get("dias_semana", [])
+        frecuencia_semanas = int(data.get("frecuencia_semanas", 1))
+        if frecuencia_semanas <= 0:
+            frecuencia_semanas = 1
 
         if not (paciente_id and usuario_id and fecha_inicial and dias_semana):
             return jsonify({"error": "Faltan datos requeridos"}), 400
 
         if current_user.rol == "profesional" and usuario_id != current_user.id:
             return jsonify({"error": "No puede asignar turnos a otros profesionales"}), 403
+
+        conn = get_connection()
+        cursor = conn.cursor(dictionary=True)
 
         cursor.execute("SELECT duracion_turno FROM usuarios WHERE id=%s", (usuario_id,))
         profesional = cursor.fetchone()
@@ -650,8 +678,16 @@ def crear_turnos_tanda():
 
         turnos_creados = 0
         fecha_actual = fecha_inicial
-        while turnos_creados < cantidad:
-            if fecha_actual.weekday() in dias_indices:
+        base_monday = fecha_inicial.date() - timedelta(days=fecha_inicial.weekday())
+        
+        max_iter = max(366, cantidad * 30 * frecuencia_semanas)
+        loops = 0
+
+        while turnos_creados < cantidad and loops < max_iter:
+            candidate_monday = fecha_actual.date() - timedelta(days=fecha_actual.weekday())
+            weeks_diff = (candidate_monday - base_monday).days // 7
+            
+            if weeks_diff % frecuencia_semanas == 0 and fecha_actual.weekday() in dias_indices:
                 fecha_fin = fecha_actual + timedelta(minutes=dur)
                 if not medico_disponible(
                     usuario_id,
@@ -660,16 +696,18 @@ def crear_turnos_tanda():
                     permitir_solape=current_user.rol in ["administrativo", "area"],
                 ):
                     fecha_actual += timedelta(days=1)
+                    loops += 1
                     continue
                 cursor.execute(
                     """
-                    INSERT INTO turnos (paciente_id, usuario_id, fecha_inicio, fecha_fin, motivo)
-                    VALUES (%s, %s, %s, %s, %s)
+                    INSERT INTO turnos (paciente_id, usuario_id, fecha_inicio, fecha_fin, motivo, observaciones)
+                    VALUES (%s, %s, %s, %s, %s, %s)
                 """,
-                    (paciente_id, usuario_id, fecha_actual, fecha_fin, motivo),
+                    (paciente_id, usuario_id, fecha_actual, fecha_fin, motivo, observaciones),
                 )
                 turnos_creados += 1
             fecha_actual += timedelta(days=1)
+            loops += 1
 
         conn.commit()
         return jsonify({"message": f"Se crearon {turnos_creados} turnos correctamente."}), 201
@@ -695,9 +733,11 @@ def turnos_profesional(usuario_id):
         """
         SELECT
             t.id,
+            t.paciente_id AS paciente_id,
             t.fecha_inicio,
             t.fecha_fin,
             t.motivo,
+            t.ausencia,
             p.nombre AS paciente,
             p.dni,
             u.nombre AS profesional,
@@ -721,9 +761,11 @@ def turnos_profesional(usuario_id):
             f"""
             SELECT
                 t.id,
+                t.paciente_id AS paciente_id,
                 t.fecha_inicio,
                 t.fecha_fin,
                 t.motivo,
+                t.ausencia,
                 p.nombre AS paciente,
                 p.dni,
                 u.nombre AS profesional,
@@ -752,6 +794,8 @@ def turnos_profesional(usuario_id):
             "dni": t["dni"],
             "profesional": t["profesional"],
             "description": t["motivo"],
+            "ausencia": t["ausencia"],
+            "paciente_id": t["paciente_id"],
             "backgroundColor": t["color"],
             "borderColor": t["color"],
         }
@@ -785,12 +829,15 @@ def turnos_profesional_completo():
             """
             SELECT
                 t.id,
+                t.paciente_id AS paciente_id,
                 t.fecha_inicio AS start,
                 t.fecha_fin AS end,
                 p.nombre AS paciente,
                 p.dni,
                 u.nombre AS profesional,
                 t.motivo AS description,
+                t.observaciones,
+                t.ausencia,
                 '#1976D2' AS color,
                 'individual' AS tipo,
                 NULL AS grupo_id,
@@ -816,12 +863,15 @@ def turnos_profesional_completo():
         """
         SELECT
             t.id,
+            t.paciente_id AS paciente_id,
             t.fecha_inicio AS start,
             t.fecha_fin AS end,
             p.nombre AS paciente,
             p.dni,
             u.nombre AS profesional,
             t.motivo AS description,
+            t.observaciones,
+            t.ausencia,
             '#1976D2' AS color,
             'individual' AS tipo,
             NULL AS grupo_id,
@@ -841,12 +891,15 @@ def turnos_profesional_completo():
         """
         SELECT
             tg.id,
+            tg.paciente_id AS paciente_id,
             tg.fecha_inicio AS start,
             tg.fecha_fin AS end,
             p.nombre AS paciente,
             p.dni,
             CONCAT('Grupo: ', gp.nombre) AS profesional,
             tg.motivo AS description,
+            tg.observaciones,
+            tg.ausencia,
             gp.color AS color,
             'grupal' AS tipo,
             gp.id AS grupo_id,
@@ -892,9 +945,12 @@ def turnos_por_grupo(grupo_id):
         """
         SELECT
             t.id,
+            t.paciente_id,
             t.fecha_inicio AS start,
             t.fecha_fin AS end,
             t.motivo AS description,
+            t.observaciones,
+            t.ausencia,
             p.nombre AS paciente,
             p.dni,
             u.nombre AS profesional,
@@ -921,6 +977,9 @@ def turnos_por_grupo(grupo_id):
                 "dni": t["dni"],
                 "profesional": t["profesional"],
                 "description": t["description"],
+                "observaciones": t["observaciones"],
+                "ausencia": t["ausencia"],
+                "paciente_id": t["paciente_id"],
                 "start": _to_iso_arg(t["start"]),
                 "end": _to_iso_arg(t["end"]),
                 "color": t["color"],
@@ -961,7 +1020,9 @@ def listar_turnos_grupales():
             tg.fecha_inicio,
             tg.fecha_fin,
             tg.motivo,
-            tg.creado_por
+            tg.creado_por,
+            tg.observaciones,
+            tg.ausencia
         FROM turnos_grupales tg
         JOIN grupos_profesionales gp ON gp.id = tg.grupo_id
         JOIN pacientes p ON p.id = tg.paciente_id
@@ -991,6 +1052,8 @@ def listar_turnos_grupales():
                 "start": _to_iso_arg(row["fecha_inicio"]),
                 "end": _to_iso_arg(row["fecha_fin"]),
                 "description": row["motivo"],
+                "observaciones": row["observaciones"],
+                "ausencia": row["ausencia"],
                 "tipo": "grupal",
                 "editable": puede_editar,
             }
@@ -1008,6 +1071,7 @@ def crear_turno_grupal():
     fecha_inicio = data.get("fecha_inicio")
     fecha_fin = data.get("fecha_fin")
     motivo = data.get("motivo", "")
+    observaciones = data.get("observaciones")
     modo = str(data.get("modo", "simple")).strip().lower()
     en_tanda_flag = str(data.get("en_tanda", "0")).strip().lower() in {"1", "true", "yes", "on"}
     es_tanda = modo == "tanda" or en_tanda_flag
@@ -1032,6 +1096,7 @@ def crear_turno_grupal():
             data.get("dias_semana"),
             data.get("cantidad"),
             data.get("hora"),
+            data.get("frecuencia_semanas", 1),
         )
         if err:
             return jsonify({"error": err}), 400
@@ -1064,10 +1129,10 @@ def crear_turno_grupal():
                     raise ValueError(err)
                 cursor.execute(
                     """
-                    INSERT INTO turnos_grupales (grupo_id, paciente_id, fecha_inicio, fecha_fin, motivo, creado_por)
-                    VALUES (%s, %s, %s, %s, %s, %s)
+                    INSERT INTO turnos_grupales (grupo_id, paciente_id, fecha_inicio, fecha_fin, motivo, creado_por, observaciones)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
                 """,
-                    (grupo_id, paciente_id, _to_db_iso(inicio_item), _to_db_iso(fin_item), motivo, current_user.id),
+                    (grupo_id, paciente_id, _to_db_iso(inicio_item), _to_db_iso(fin_item), motivo, current_user.id, observaciones),
                 )
                 created_ids.append(cursor.lastrowid)
                 if ajuste_item:
@@ -1087,10 +1152,10 @@ def crear_turno_grupal():
 
         cursor.execute(
             """
-            INSERT INTO turnos_grupales (grupo_id, paciente_id, fecha_inicio, fecha_fin, motivo, creado_por)
-            VALUES (%s, %s, %s, %s, %s, %s)
+            INSERT INTO turnos_grupales (grupo_id, paciente_id, fecha_inicio, fecha_fin, motivo, creado_por, observaciones)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
         """,
-            (grupo_id, paciente_id, _to_db_iso(inicio_dt), _to_db_iso(fin_dt), motivo, current_user.id),
+            (grupo_id, paciente_id, _to_db_iso(inicio_dt), _to_db_iso(fin_dt), motivo, current_user.id, observaciones),
         )
         conn.commit()
         payload = {"message": "Turno grupal creado correctamente", "id": cursor.lastrowid}
@@ -1118,7 +1183,7 @@ def editar_turno_grupal(turno_grupal_id):
     try:
         cursor.execute(
             """
-            SELECT id, grupo_id, paciente_id, fecha_inicio, fecha_fin, motivo
+            SELECT id, grupo_id, paciente_id, fecha_inicio, fecha_fin, motivo, observaciones
             FROM turnos_grupales
             WHERE id = %s
         """,
@@ -1133,6 +1198,7 @@ def editar_turno_grupal(turno_grupal_id):
         fecha_inicio = data.get("fecha_inicio") or actual["fecha_inicio"].strftime("%Y-%m-%dT%H:%M:%S")
         fecha_fin = data.get("fecha_fin") or actual["fecha_fin"].strftime("%Y-%m-%dT%H:%M:%S")
         motivo = data.get("motivo", actual["motivo"])
+        observaciones = data.get("observaciones", actual["observaciones"])
 
         inicio_dt, fin_dt, ajuste, err = _alinear_turno_grupal(fecha_inicio, fecha_fin)
         if err:
@@ -1145,10 +1211,10 @@ def editar_turno_grupal(turno_grupal_id):
         cursor.execute(
             """
             UPDATE turnos_grupales
-            SET grupo_id=%s, paciente_id=%s, fecha_inicio=%s, fecha_fin=%s, motivo=%s
+            SET grupo_id=%s, paciente_id=%s, fecha_inicio=%s, fecha_fin=%s, motivo=%s, observaciones=%s
             WHERE id=%s
         """,
-            (grupo_id, paciente_id, _to_db_iso(inicio_dt), _to_db_iso(fin_dt), motivo, turno_grupal_id),
+            (grupo_id, paciente_id, _to_db_iso(inicio_dt), _to_db_iso(fin_dt), motivo, observaciones, turno_grupal_id),
         )
         conn.commit()
         payload = {"message": "Turno grupal actualizado correctamente"}
@@ -1179,3 +1245,121 @@ def eliminar_turno_grupal(turno_grupal_id):
     finally:
         cursor.close()
         conn.close()
+
+
+@bp_turnos.route("/api/turnos/<int:id>/ausencia", methods=["PATCH"])
+@login_required
+@requiere_rol(*ROLES_TURNOS)
+def api_actualizar_ausencia_turno(id):
+    data = request.get_json(silent=True) or {}
+    ausencia = data.get("ausencia")
+
+    if ausencia not in [None, "con_aviso", "sin_aviso"]:
+        return jsonify({"error": "ausencia debe ser 'con_aviso', 'sin_aviso' o null"}), 400
+
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute("SELECT usuario_id FROM turnos WHERE id = %s", (id,))
+        turno = cursor.fetchone()
+        if not turno:
+            return jsonify({"error": "Turno no encontrado"}), 404
+
+        if current_user.rol == "profesional" and turno["usuario_id"] != current_user.id:
+            return jsonify({"error": "No autorizado"}), 403
+
+        cursor.execute(
+            "UPDATE turnos SET ausencia = %s WHERE id = %s",
+            (ausencia, id)
+        )
+        conn.commit()
+        return jsonify({"mensaje": "Ausencia de turno actualizada correctamente"})
+    except Exception as e:
+        conn.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+
+@bp_turnos.route("/api/turnos/grupales/<int:turno_grupal_id>/ausencia", methods=["PATCH"])
+@login_required
+@requiere_rol(*ROLES_TURNOS_GRUPALES)
+def api_actualizar_ausencia_turno_grupal(turno_grupal_id):
+    data = request.get_json(silent=True) or {}
+    ausencia = data.get("ausencia")
+
+    if ausencia not in [None, "con_aviso", "sin_aviso"]:
+        return jsonify({"error": "ausencia debe ser 'con_aviso', 'sin_aviso' o null"}), 400
+
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute("SELECT id FROM turnos_grupales WHERE id = %s", (turno_grupal_id,))
+        if not cursor.fetchone():
+            return jsonify({"error": "Turno grupal no encontrado"}), 404
+
+        cursor.execute(
+            "UPDATE turnos_grupales SET ausencia = %s WHERE id = %s",
+            (ausencia, turno_grupal_id)
+        )
+        conn.commit()
+        return jsonify({"mensaje": "Ausencia de turno grupal actualizada correctamente"})
+    except Exception as e:
+        conn.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+
+@bp_turnos.route("/api/pacientes/<int:paciente_id>/ausencias", methods=["GET"])
+@login_required
+@requiere_rol(*ROLES_TURNOS)
+def api_conteo_ausencias_paciente(paciente_id):
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        # Verificar que el paciente exista
+        cursor.execute("SELECT id FROM pacientes WHERE id = %s", (paciente_id,))
+        if not cursor.fetchone():
+            return jsonify({"error": "Paciente no encontrado"}), 404
+
+        # Contar ausencias individuales
+        cursor.execute(
+            "SELECT ausencia, COUNT(*) as cant FROM turnos WHERE paciente_id = %s AND ausencia IS NOT NULL GROUP BY ausencia",
+            (paciente_id,)
+        )
+        indiv_res = cursor.fetchall()
+
+        # Contar ausencias grupales
+        cursor.execute(
+            "SELECT ausencia, COUNT(*) as cant FROM turnos_grupales WHERE paciente_id = %s AND ausencia IS NOT NULL GROUP BY ausencia",
+            (paciente_id,)
+        )
+        grup_res = cursor.fetchall()
+
+        con_aviso = 0
+        sin_aviso = 0
+
+        for r in indiv_res:
+            if r["ausencia"] == "con_aviso":
+                con_aviso += r["cant"]
+            elif r["ausencia"] == "sin_aviso":
+                sin_aviso += r["cant"]
+
+        for r in grup_res:
+            if r["ausencia"] == "con_aviso":
+                con_aviso += r["cant"]
+            elif r["ausencia"] == "sin_aviso":
+                sin_aviso += r["cant"]
+
+        return jsonify({
+            "total": con_aviso + sin_aviso,
+            "con_aviso": con_aviso,
+            "sin_aviso": sin_aviso
+        })
+    finally:
+        cursor.close()
+        conn.close()
+

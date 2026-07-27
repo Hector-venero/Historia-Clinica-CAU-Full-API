@@ -13,5 +13,11 @@ export default {
     },
     eliminar(id) {
         return api.delete(`/turnos/${id}`, { withCredentials: true });
+    },
+    actualizarAusencia(id, ausencia) {
+        return api.patch(`/turnos/${id}/ausencia`, { ausencia }, { withCredentials: true });
+    },
+    actualizarAusenciaGrupal(turnoGrupalId, ausencia) {
+        return api.patch(`/turnos/grupales/${turnoGrupalId}/ausencia`, { ausencia }, { withCredentials: true });
     }
 };

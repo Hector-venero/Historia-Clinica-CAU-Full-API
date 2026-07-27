@@ -12,6 +12,8 @@ import Button from 'primevue/button';
 import InputText from 'primevue/inputtext';
 import Toast from 'primevue/toast';
 import { useToast } from 'primevue/usetoast';
+import Dropdown from 'primevue/dropdown';
+import Textarea from 'primevue/textarea';
 
 const toast = useToast();
 
@@ -21,6 +23,53 @@ const rolUsuario = ref('');
 const eventos = ref([]);
 const seleccionado = ref(null);
 const detalleVisible = ref(false);
+
+const ausenciasConteoNuevoTurno = ref(null);
+const ausenciasConteoDetalle = ref(null);
+const guardandoAusencia = ref(false);
+
+async function fetchAusenciasConteo(pacienteId) {
+    ausenciasConteoNuevoTurno.value = null;
+    try {
+        const res = await api.get(`/pacientes/${pacienteId}/ausencias`, { withCredentials: true });
+        ausenciasConteoNuevoTurno.value = res.data;
+        if (res.data && res.data.sin_aviso >= 3) {
+            toast.add({
+                severity: 'warn',
+                summary: 'Alerta de Ausencias',
+                detail: `El paciente seleccionado tiene ${res.data.sin_aviso} ausencias sin aviso.`,
+                life: 6000
+            });
+        }
+    } catch (e) {
+        console.error(e);
+    }
+}
+
+async function guardarAusenciaTurno(ausencia) {
+    if (!seleccionado.value) return;
+    guardandoAusencia.value = true;
+    try {
+        const url = `/turnos/grupales/${seleccionado.value.turnoId}/ausencia`;
+        await api.patch(url, { ausencia }, { withCredentials: true });
+        seleccionado.value.ausencia = ausencia;
+
+        // Recargar agenda para refrescar color
+        await cargarTurnos();
+
+        // Volver a buscar conteo para actualizar el detalle
+        if (seleccionado.value.paciente_id) {
+            const res = await api.get(`/pacientes/${seleccionado.value.paciente_id}/ausencias`, { withCredentials: true });
+            ausenciasConteoDetalle.value = res.data;
+        }
+        toast.add({ severity: 'success', summary: 'Estado de asistencia', detail: 'Se actualizó el estado de ausencia correctamente.', life: 3000 });
+    } catch (e) {
+        console.error(e);
+        toast.add({ severity: 'error', summary: 'Error', detail: 'No se pudo actualizar el estado de ausencia.', life: 3500 });
+    } finally {
+        guardandoAusencia.value = false;
+    }
+}
 
 const modalNuevoVisible = ref(false);
 const DURACION_GRUPAL_DEFAULT = 20;
@@ -33,6 +82,12 @@ const DIAS_TANDA = [
     { value: 5, label: 'Sab' },
     { value: 6, label: 'Dom' }
 ];
+const opcionesFrecuencia = [
+    { label: 'Semanal (Cada 1 semana)', value: 1 },
+    { label: 'Quincenal (Cada 2 semanas)', value: 2 },
+    { label: 'Cada 3 semanas', value: 3 },
+    { label: 'Mensual (Cada 4 semanas)', value: 4 }
+];
 const nuevo = reactive({
     modo_creacion: 'simple',
     grupo_id: '',
@@ -41,7 +96,9 @@ const nuevo = reactive({
     hora_tanda: '',
     dias_tanda: [],
     cantidad_tanda: 4,
+    frecuencia_semanas: 1,
     motivo: '',
+    observaciones: '',
     pacienteBusqueda: '',
     paciente: null,
     duracion_minutos: DURACION_GRUPAL_DEFAULT
@@ -53,6 +110,7 @@ const modalEditarVisible = ref(false);
 const edit = reactive({
     fecha_inicio: '',
     motivo: '',
+    observaciones: '',
     duracion_minutos: DURACION_GRUPAL_DEFAULT
 });
 const guardandoEdit = ref(false);
@@ -126,6 +184,7 @@ const calendarOptions = reactive({
         nuevo.paciente = null;
         nuevo.pacienteBusqueda = '';
         nuevo.motivo = '';
+        nuevo.observaciones = '';
         nuevo.duracion_minutos = DURACION_GRUPAL_DEFAULT;
         pacientes.value = [];
         if (filtroGrupoId.value) nuevo.grupo_id = filtroGrupoId.value;
@@ -138,6 +197,7 @@ const calendarOptions = reactive({
             paciente: info.event.extendedProps.paciente,
             dni: info.event.extendedProps.dni,
             description: info.event.extendedProps.description,
+            observaciones: info.event.extendedProps.observaciones,
             editable: Boolean(info.event.extendedProps.editable),
             start: info.event.start,
             end: info.event.end
@@ -145,6 +205,19 @@ const calendarOptions = reactive({
         detalleVisible.value = true;
     },
     eventDidMount(info) {
+        const ausencia = info.event.extendedProps.ausencia;
+        if (ausencia === 'sin_aviso') {
+            info.el.style.setProperty('background-color', '#C0392B', 'important');
+            info.el.style.setProperty('border-color', '#C0392B', 'important');
+            info.el.style.setProperty('color', '#ffffff', 'important');
+            return;
+        } else if (ausencia === 'con_aviso') {
+            info.el.style.setProperty('background-color', '#E67E22', 'important');
+            info.el.style.setProperty('border-color', '#E67E22', 'important');
+            info.el.style.setProperty('color', '#ffffff', 'important');
+            return;
+        }
+
         // calendar-medical.css fuerza el color de .evento-rehab con !important;
         // se pisa con !important inline para respetar el color propio de cada grupo.
         const color = info.event.extendedProps.color;
@@ -168,9 +241,15 @@ function hexToRgba(hex, alpha) {
 
 function mapEvento(t) {
     const color = t.color || REHAB_COLOR_DEFAULT;
+    let title = `${t.grupo_nombre}: ${t.paciente}`;
+    if (t.ausencia === 'sin_aviso') {
+        title = `[Falta Sin Aviso] ${title}`;
+    } else if (t.ausencia === 'con_aviso') {
+        title = `[Falta Con Aviso] ${title}`;
+    }
     return {
         id: `rehab-${t.id}`,
-        title: `${t.grupo_nombre}: ${t.paciente}`,
+        title,
         start: t.start,
         end: t.end,
         backgroundColor: hexToRgba(color, 0.12) || hexToRgba(REHAB_COLOR_DEFAULT, 0.12),
@@ -185,6 +264,9 @@ function mapEvento(t) {
             paciente: t.paciente,
             dni: t.dni,
             description: t.description,
+            observaciones: t.observaciones,
+            ausencia: t.ausencia,
+            paciente_id: t.paciente_id,
             editable: Boolean(t.editable)
         }
     };
@@ -217,6 +299,7 @@ function seleccionarPaciente(p) {
     nuevo.paciente = p;
     nuevo.pacienteBusqueda = `${p.apellido} ${p.nombre} (DNI: ${p.dni})`;
     pacientes.value = [];
+    fetchAusenciasConteo(p.id);
 }
 
 function toggleDiaTanda(day) {
@@ -257,10 +340,12 @@ async function crearTurno() {
                 fecha_inicio: fechaInicioRef,
                 fecha_fin: fechaFin,
                 motivo: nuevo.motivo,
+                observaciones: nuevo.observaciones,
                 modo: esTanda ? 'tanda' : 'simple',
                 dias_semana: esTanda ? nuevo.dias_tanda : undefined,
                 cantidad: esTanda ? Number(nuevo.cantidad_tanda) : undefined,
-                hora: esTanda ? nuevo.hora_tanda : undefined
+                hora: esTanda ? nuevo.hora_tanda : undefined,
+                frecuencia_semanas: esTanda ? Number(nuevo.frecuencia_semanas) : undefined
             },
             { withCredentials: true }
         );
@@ -285,6 +370,7 @@ function abrirEditar() {
     if (!seleccionado.value) return;
     edit.fecha_inicio = toLocalDateTimeString(new Date(seleccionado.value.start));
     edit.motivo = seleccionado.value.description || '';
+    edit.observaciones = seleccionado.value.observaciones || '';
     edit.duracion_minutos = minutosEntreFechas(seleccionado.value.start, seleccionado.value.end);
     modalEditarVisible.value = true;
 }
@@ -298,7 +384,7 @@ async function guardarEdicion() {
     }
     guardandoEdit.value = true;
     try {
-        const resp = await api.put(`/turnos/grupales/${seleccionado.value.id}`, { fecha_inicio: edit.fecha_inicio, fecha_fin: fechaFin, motivo: edit.motivo }, { withCredentials: true });
+        const resp = await api.put(`/turnos/grupales/${seleccionado.value.id}`, { fecha_inicio: edit.fecha_inicio, fecha_fin: fechaFin, motivo: edit.motivo, observaciones: edit.observaciones }, { withCredentials: true });
         if (resp.data?.ajuste_horario?.aplicado) {
             toast.add({ severity: 'info', summary: 'Horario ajustado', detail: `Inicio ajustado a ${resp.data.ajuste_horario.inicio_ajustado}`, life: 4500 });
         }
@@ -430,9 +516,15 @@ onMounted(async () => {
                             </button>
                         </div>
                     </div>
-                    <div>
-                        <label class="font-heading font-semibold text-sm block mb-1.5 text-[#134E4A] dark:text-slate-200">Cantidad de semanas</label>
-                        <InputText type="number" min="1" step="1" v-model.number="nuevo.cantidad_tanda" class="w-full" />
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="font-heading font-semibold text-sm block mb-1.5 text-[#134E4A] dark:text-slate-200">Frecuencia</label>
+                            <Dropdown v-model="nuevo.frecuencia_semanas" :options="opcionesFrecuencia" optionLabel="label" optionValue="value" class="w-full" />
+                        </div>
+                        <div>
+                            <label class="font-heading font-semibold text-sm block mb-1.5 text-[#134E4A] dark:text-slate-200">Cantidad total de turnos</label>
+                            <InputText type="number" min="1" step="1" v-model.number="nuevo.cantidad_tanda" class="w-full" />
+                        </div>
                     </div>
                 </div>
                 <!-- Paciente -->
@@ -452,6 +544,20 @@ onMounted(async () => {
                     <div v-if="nuevo.paciente" class="flex items-center gap-2 mt-2 px-3 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300 text-xs font-medium">
                         <i class="pi pi-check-circle"></i> {{ nuevo.paciente.apellido }} {{ nuevo.paciente.nombre }}
                     </div>
+                    <div v-if="nuevo.paciente && ausenciasConteoNuevoTurno" class="flex flex-col gap-1.5 mt-2">
+                        <div
+                            v-if="ausenciasConteoNuevoTurno.sin_aviso >= 3"
+                            class="flex items-center gap-2 px-3 py-2 rounded-lg bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-300 text-xs font-semibold border border-red-200 dark:border-red-900"
+                        >
+                            <i class="pi pi-exclamation-triangle text-sm"></i>
+                            <span>¡Alerta! El paciente tiene {{ ausenciasConteoNuevoTurno.sin_aviso }} ausencias sin aviso.</span>
+                        </div>
+                        <div class="text-[11px] text-slate-500 px-1">
+                            Historial de ausencias: <strong class="text-slate-700 dark:text-slate-300">{{ ausenciasConteoNuevoTurno.total }}</strong> total (<span class="text-orange-600 font-semibold"
+                                >{{ ausenciasConteoNuevoTurno.con_aviso }} con aviso</span
+                            >, <span class="text-red-600 font-semibold">{{ ausenciasConteoNuevoTurno.sin_aviso }} sin aviso</span>)
+                        </div>
+                    </div>
                 </div>
                 <div class="grid grid-cols-2 gap-3">
                     <div>
@@ -462,6 +568,10 @@ onMounted(async () => {
                         <label class="font-heading font-semibold text-sm block mb-1.5 text-[#134E4A] dark:text-slate-200"><i class="pi pi-clock mr-1.5 text-emerald-600"></i>Duracion (min)</label>
                         <InputText type="number" min="5" step="5" v-model.number="nuevo.duracion_minutos" class="w-full" />
                     </div>
+                </div>
+                <div>
+                    <label class="font-heading font-semibold text-sm block mb-1.5 text-[#134E4A] dark:text-slate-200"><i class="pi pi-align-left mr-1.5 text-emerald-600"></i>Observaciones</label>
+                    <Textarea v-model="nuevo.observaciones" rows="3" autoResize class="w-full" placeholder="Observaciones adicionales" />
                 </div>
             </div>
             <template #footer>
@@ -489,6 +599,48 @@ onMounted(async () => {
                     <p class="flex items-center gap-2">
                         <i class="pi pi-comment text-emerald-600"></i> <span class="text-slate-600 dark:text-slate-300">{{ seleccionado.description || 'Sin motivo' }}</span>
                     </p>
+                    <div v-if="seleccionado.observaciones" class="p-3 rounded-lg bg-slate-50 dark:bg-slate-800/40 text-xs border border-slate-100 dark:border-slate-700">
+                        <span class="font-semibold text-slate-500 block mb-1"><i class="pi pi-align-left mr-1 text-emerald-600"></i>Observaciones:</span>
+                        <p class="text-slate-600 dark:text-slate-300 whitespace-pre-wrap">{{ seleccionado.observaciones }}</p>
+                    </div>
+                    <div class="p-3 rounded-lg bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-700 space-y-2">
+                        <span class="font-semibold text-slate-500 text-xs block"><i class="pi pi-check-square mr-1 text-[#059669]"></i>Asistencia del Paciente:</span>
+                        <div class="flex flex-wrap gap-2 pt-1">
+                            <Button
+                                label="Presente"
+                                icon="pi pi-check"
+                                :severity="!seleccionado.ausencia ? 'success' : 'secondary'"
+                                :outlined="!!seleccionado.ausencia"
+                                size="small"
+                                class="!text-xs !py-1 !px-2.5 !rounded-lg"
+                                :loading="guardandoAusencia"
+                                @click="guardarAusenciaTurno(null)"
+                            />
+                            <Button
+                                label="Faltó con aviso"
+                                icon="pi pi-envelope"
+                                :severity="seleccionado.ausencia === 'con_aviso' ? 'warning' : 'secondary'"
+                                :outlined="seleccionado.ausencia !== 'con_aviso'"
+                                size="small"
+                                class="!text-xs !py-1 !px-2.5 !rounded-lg"
+                                :loading="guardandoAusencia"
+                                @click="guardarAusenciaTurno('con_aviso')"
+                            />
+                            <Button
+                                label="Faltó sin aviso"
+                                icon="pi pi-times"
+                                :severity="seleccionado.ausencia === 'sin_aviso' ? 'danger' : 'secondary'"
+                                :outlined="seleccionado.ausencia !== 'sin_aviso'"
+                                size="small"
+                                class="!text-xs !py-1 !px-2.5 !rounded-lg"
+                                :loading="guardandoAusencia"
+                                @click="guardarAusenciaTurno('sin_aviso')"
+                            />
+                        </div>
+                        <div v-if="ausenciasConteoDetalle" class="text-[11px] text-slate-400 pt-1">
+                            Historial: {{ ausenciasConteoDetalle.total }} ausencias ({{ ausenciasConteoDetalle.con_aviso }} con aviso, {{ ausenciasConteoDetalle.sin_aviso }} sin aviso)
+                        </div>
+                    </div>
                 </div>
                 <div class="flex justify-between pt-4 border-t border-[#E0F2FE] dark:border-slate-700">
                     <div class="flex gap-2">
@@ -516,6 +668,10 @@ onMounted(async () => {
                         <label class="font-heading font-semibold text-sm block mb-1.5 text-[#134E4A] dark:text-slate-200"><i class="pi pi-clock mr-1.5 text-emerald-600"></i>Duracion (min)</label>
                         <InputText type="number" min="5" step="5" v-model.number="edit.duracion_minutos" class="w-full" />
                     </div>
+                </div>
+                <div>
+                    <label class="font-heading font-semibold text-sm block mb-1.5 text-[#134E4A] dark:text-slate-200"><i class="pi pi-align-left mr-1.5 text-emerald-600"></i>Observaciones</label>
+                    <Textarea v-model="edit.observaciones" rows="3" autoResize class="w-full" placeholder="Observaciones adicionales" />
                 </div>
             </div>
             <template #footer>

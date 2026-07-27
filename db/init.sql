@@ -200,6 +200,8 @@ CREATE TABLE turnos (
     fecha_fin DATETIME NOT NULL,
     motivo VARCHAR(255),
     notificado BOOLEAN DEFAULT FALSE,
+    observaciones TEXT DEFAULT NULL,
+    ausencia ENUM('con_aviso', 'sin_aviso') DEFAULT NULL,
     FOREIGN KEY (paciente_id) REFERENCES pacientes(id),
     FOREIGN KEY (usuario_id) REFERENCES usuarios(id)
 ) ENGINE=InnoDB
@@ -259,6 +261,8 @@ CREATE TABLE turnos_grupales (
     motivo VARCHAR(255),
     creado_por INT NOT NULL,
     creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    observaciones TEXT DEFAULT NULL,
+    ausencia ENUM('con_aviso', 'sin_aviso') DEFAULT NULL,
     FOREIGN KEY (grupo_id) REFERENCES grupos_profesionales(id) ON DELETE CASCADE,
     FOREIGN KEY (paciente_id) REFERENCES pacientes(id),
     FOREIGN KEY (creado_por) REFERENCES usuarios(id),

@@ -237,7 +237,8 @@ Fecha de auditoria: 2026-04-13
 - [x] Sugerir numero de Historia Last (actualmente en 2567) - se puede registrar numero custom o 'proxima disponible'
   - Estado: nuevo endpoint `GET /api/pacientes/proximo-nro-hc` en `pacientes_routes.py` (MAX numerico + 1, con fallback a 1 si no hay pacientes). Cubierto con tests TDD en `tests/test_pacientes_routes.py`. Frontend pendiente de conectar el formulario de alta al endpoint.
 
-- [ ] Poder marcar turnos como ausente
+- [x] Poder marcar turnos como ausente
+  - Estado: implementado. Añadido campo `ausencia` (con_aviso / sin_aviso) a tablas `turnos` y `turnos_grupales` en base de datos. Implementados endpoints backend `PATCH` para ausencias de turnos individuales/grupales, y `GET` para contador de ausencias por paciente. En el frontend, se implementaron indicadores visuales en las tres vistas de agenda (`Turnos.vue`, `CalendarioGrupo.vue`, `ModuloRehabilitacion.vue`) pintando los turnos de rojo ladrillo (sin aviso) o naranja (con aviso). Se agregaron controles de asistencia en el modal de detalle de turnos y alertas informativas al dar un nuevo turno si el paciente cuenta con 3+ ausencias sin aviso.
 
 - [ ] Informar sobre turnos del dia proximo a profesionales
 
@@ -269,12 +270,17 @@ Fecha de auditoria: 2026-04-13
 
 - [ ] Agregar forms de faltas
 
-- [ ] Tandas no semanales (cada 2 semanas, cada 3, cada 4, etc)
+- [x] Tandas no semanales (cada 2 semanas, cada 3, cada 4, etc)
+  - Estado: implementado. Modificada la lógica del backend (`_generar_fechas_tanda` en `turnos_routes.py`) utilizando diferencia de semanas calendario modulo `frecuencia_semanas`. Añadido Dropdown de frecuencia (Semanal, Quincenal, Cada 3 semanas, Mensual) en `ModuloRehabilitacion.vue` y `CalendarioGrupo.vue` del frontend, enviando el nuevo parámetro al backend. Corregido además el bug de inicialización de conexión en el endpoint de tandas individuales del backend.
 
 - [x] Diferentes colores para Turnos en Rehab / Grupos
   - Estado: cada grupo (`grupos_profesionales.color`) ya tenia color propio configurable en `CrearGrupo.vue`/`EditarGrupo.vue`, y el backend (`turnos_profesional_completo`, `turnos_por_grupo`, `listar_turnos_grupales`) ya lo devolvia. El bug real estaba en `ModuloRehabilitacion.vue`: `mapEvento()` ignoraba `t.color` y forzaba el mismo verde para todos los grupos, y ademas `calendar-medical.css` fuerza `.evento-rehab` con `!important`, pisando cualquier color inline de FullCalendar. Fix: se usa `t.color` (con fallback) para armar el evento, y se agrego `eventDidMount` que aplica el color por grupo via `style.setProperty(..., 'important')` para ganarle al `!important` del CSS global. Verificado en navegador con 2 grupos de colores distintos (rojo/azul): cada uno se ve con su propio color en la agenda de Rehabilitacion. Nota: los turnos individuales (no grupales) siguen con color fijo hardcodeado (`#1976D2`/`#007AFF`), eso no formaba parte de este pedido.
 
 - [ ] Sección de Informes Particulares en Area - 
+
+- [x] **Agregar campo 'Observaciones' en turnos (además de motivo)**
+  - Detalle: Las observaciones son de uso interno y no deben enviarse al paciente en el mail del turno.
+  - Notificación: El paciente recibe por mail el turno (fecha/hora) y el motivo (las observaciones quedan excluidas).
 
 ### Funcionalidad General
 
