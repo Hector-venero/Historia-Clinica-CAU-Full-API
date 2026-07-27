@@ -463,10 +463,10 @@ def api_turnos():
 
         cursor.execute(
             """
-            INSERT INTO turnos (paciente_id, usuario_id, fecha_inicio, fecha_fin, motivo, observaciones)
-            VALUES (%s, %s, %s, %s, %s, %s)
+            INSERT INTO turnos (paciente_id, usuario_id, fecha_inicio, fecha_fin, motivo, observaciones, creado_por, creado_en)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
         """,
-            (paciente_id, usuario_id, fecha_inicio, fecha_fin, motivo, observaciones),
+            (paciente_id, usuario_id, fecha_inicio, fecha_fin, motivo, observaciones, current_user.id, datetime.now()),
         )
         conn.commit()
 
@@ -697,10 +697,10 @@ def crear_turnos_tanda():
                     continue
                 cursor.execute(
                     """
-                    INSERT INTO turnos (paciente_id, usuario_id, fecha_inicio, fecha_fin, motivo, observaciones)
-                    VALUES (%s, %s, %s, %s, %s, %s)
+                    INSERT INTO turnos (paciente_id, usuario_id, fecha_inicio, fecha_fin, motivo, observaciones, creado_por, creado_en)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                 """,
-                    (paciente_id, usuario_id, fecha_actual, fecha_fin, motivo, observaciones),
+                    (paciente_id, usuario_id, fecha_actual, fecha_fin, motivo, observaciones, current_user.id, datetime.now()),
                 )
                 turnos_creados += 1
             fecha_actual += timedelta(days=1)
@@ -835,6 +835,8 @@ def turnos_profesional_completo():
                 t.motivo AS description,
                 t.observaciones,
                 t.ausencia,
+                uc.nombre AS creado_por_nombre,
+                t.creado_en,
                 '#1976D2' AS color,
                 'individual' AS tipo,
                 NULL AS grupo_id,
@@ -843,6 +845,7 @@ def turnos_profesional_completo():
             FROM turnos t
             JOIN pacientes p ON p.id = t.paciente_id
             JOIN usuarios u ON u.id = t.usuario_id
+            LEFT JOIN usuarios uc ON uc.id = t.creado_por
             ORDER BY t.fecha_inicio ASC
         """
         )
@@ -853,6 +856,7 @@ def turnos_profesional_completo():
         for t in turnos:
             t["start"] = _to_iso_arg(t["start"])
             t["end"] = _to_iso_arg(t["end"])
+            t["creado_en"] = _to_iso_arg(t["creado_en"])
             t["turnoId"] = t["id"]
         return jsonify(turnos)
 
@@ -869,6 +873,8 @@ def turnos_profesional_completo():
             t.motivo AS description,
             t.observaciones,
             t.ausencia,
+            uc.nombre AS creado_por_nombre,
+            t.creado_en,
             '#1976D2' AS color,
             'individual' AS tipo,
             NULL AS grupo_id,
@@ -877,6 +883,7 @@ def turnos_profesional_completo():
         FROM turnos t
         JOIN pacientes p ON p.id = t.paciente_id
         JOIN usuarios u ON u.id = t.usuario_id
+        LEFT JOIN usuarios uc ON uc.id = t.creado_por
         WHERE t.usuario_id = %s
         ORDER BY t.fecha_inicio ASC
     """,
@@ -897,6 +904,8 @@ def turnos_profesional_completo():
             tg.motivo AS description,
             tg.observaciones,
             tg.ausencia,
+            ucg.nombre AS creado_por_nombre,
+            tg.creado_en,
             gp.color AS color,
             'grupal' AS tipo,
             gp.id AS grupo_id,
@@ -906,6 +915,7 @@ def turnos_profesional_completo():
         JOIN grupos_profesionales gp ON gp.id = tg.grupo_id
         JOIN grupo_miembros gm ON gm.grupo_id = tg.grupo_id
         JOIN pacientes p ON p.id = tg.paciente_id
+        LEFT JOIN usuarios ucg ON ucg.id = tg.creado_por
         WHERE gm.usuario_id = %s
         ORDER BY tg.fecha_inicio ASC
     """,
@@ -920,12 +930,14 @@ def turnos_profesional_completo():
     for t in individuales:
         t["start"] = _to_iso_arg(t["start"])
         t["end"] = _to_iso_arg(t["end"])
+        t["creado_en"] = _to_iso_arg(t["creado_en"])
         t["turnoId"] = t["id"]
         eventos.append(t)
 
     for g in grupales_proyectados:
         g["start"] = _to_iso_arg(g["start"])
         g["end"] = _to_iso_arg(g["end"])
+        g["creado_en"] = _to_iso_arg(g["creado_en"])
         g["turnoId"] = g["id"]
         g["id"] = f"grupal-{g['id']}"
         eventos.append(g)
@@ -948,6 +960,8 @@ def turnos_por_grupo(grupo_id):
             t.motivo AS description,
             t.observaciones,
             t.ausencia,
+            uc.nombre AS creado_por_nombre,
+            t.creado_en,
             p.nombre AS paciente,
             p.dni,
             u.nombre AS profesional,
@@ -957,6 +971,7 @@ def turnos_por_grupo(grupo_id):
         JOIN pacientes p ON p.id = t.paciente_id
         JOIN usuarios u ON u.id = t.usuario_id
         JOIN grupos_profesionales gp ON gp.id = gm.grupo_id
+        LEFT JOIN usuarios uc ON uc.id = t.creado_por
         WHERE gm.grupo_id = %s
         ORDER BY t.fecha_inicio ASC
     """,
@@ -976,6 +991,8 @@ def turnos_por_grupo(grupo_id):
                 "description": t["description"],
                 "observaciones": t["observaciones"],
                 "ausencia": t["ausencia"],
+                "creado_por_nombre": t["creado_por_nombre"],
+                "creado_en": _to_iso_arg(t["creado_en"]),
                 "paciente_id": t["paciente_id"],
                 "start": _to_iso_arg(t["start"]),
                 "end": _to_iso_arg(t["end"]),
@@ -1019,10 +1036,13 @@ def listar_turnos_grupales():
             tg.motivo,
             tg.creado_por,
             tg.observaciones,
-            tg.ausencia
+            tg.ausencia,
+            ucg.nombre AS creado_por_nombre,
+            tg.creado_en
         FROM turnos_grupales tg
         JOIN grupos_profesionales gp ON gp.id = tg.grupo_id
         JOIN pacientes p ON p.id = tg.paciente_id
+        LEFT JOIN usuarios ucg ON ucg.id = tg.creado_por
         {where_sql}
         ORDER BY tg.fecha_inicio ASC
     """,
@@ -1051,6 +1071,8 @@ def listar_turnos_grupales():
                 "description": row["motivo"],
                 "observaciones": row["observaciones"],
                 "ausencia": row["ausencia"],
+                "creado_por_nombre": row["creado_por_nombre"],
+                "creado_en": _to_iso_arg(row["creado_en"]),
                 "tipo": "grupal",
                 "editable": puede_editar,
             }

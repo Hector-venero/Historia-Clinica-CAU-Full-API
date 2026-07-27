@@ -7,6 +7,7 @@ import interactionPlugin from '@fullcalendar/interaction';
 import tippy from 'tippy.js';
 import 'tippy.js/dist/tippy.css';
 import api from '@/api/axios';
+import { fechaBonitaCompleta } from '@/utils/formatDate';
 import '@/assets/calendar-medical.css';
 
 import Dialog from 'primevue/dialog';
@@ -330,6 +331,8 @@ const calendarOptions = reactive({
             ausenciaId: e.extendedProps.ausenciaId,
             usuarioId: e.extendedProps.usuarioId,
             grupoId: e.extendedProps.grupoId,
+            creadoPorNombre: e.extendedProps.creadoPorNombre ?? e.extendedProps.creado_por_nombre,
+            creadoEn: e.extendedProps.creadoEn ?? e.extendedProps.creado_en,
             start: e.start,
             end: e.end
         };
@@ -447,7 +450,9 @@ function crearEventosAusencia(ausencia) {
                 ausenciaId: ausencia.id,
                 usuarioId: ausencia.usuario_id,
                 profesional: ausencia.nombre_usuario,
-                description: motivoLimpio
+                description: motivoLimpio,
+                creadoPorNombre: ausencia.creado_por_nombre,
+                creadoEn: ausencia.creado_en
             }
         }
     ];
@@ -498,6 +503,8 @@ function adaptarEventoTurno(t) {
             observaciones: t.observaciones,
             ausencia: t.ausencia,
             paciente_id: t.paciente_id,
+            creadoPorNombre: t.creado_por_nombre,
+            creadoEn: t.creado_en,
             editable: Boolean(t.editable) && !esGrupal,
             grupoId: t.grupo_id
         }
@@ -890,6 +897,14 @@ onUnmounted(() => {
                             <i class="pi pi-comment text-slate-400"></i> <strong class="text-[#134E4A] dark:text-slate-200">Detalle:</strong> <span class="text-slate-600 dark:text-slate-300">{{ turnoSeleccionado.description || 'Sin detalle' }}</span>
                         </p>
                     </div>
+                    <div class="mt-3 pt-3 border-t border-slate-100 dark:border-slate-700 text-xs text-slate-400 dark:text-slate-500">
+                        <i class="pi pi-user-edit mr-1"></i>
+                        <template v-if="turnoSeleccionado.creadoPorNombre">
+                            Cargado por <span class="font-medium text-slate-500 dark:text-slate-400">{{ turnoSeleccionado.creadoPorNombre }}</span>
+                            <template v-if="turnoSeleccionado.creadoEn"> el {{ fechaBonitaCompleta(turnoSeleccionado.creadoEn) }}</template>
+                        </template>
+                        <template v-else>Sin registro de carga</template>
+                    </div>
                     <div class="flex justify-end gap-2 mt-5">
                         <Button label="Cerrar" text severity="secondary" class="!rounded-lg" @click="modalVisible = false" />
                         <Button v-if="canDeleteAusencia" label="Eliminar evento" severity="danger" icon="pi pi-trash" class="!rounded-lg" @click="eliminarAusencia" />
@@ -982,6 +997,14 @@ onUnmounted(() => {
                             <div v-if="ausenciasConteoDetalle" class="text-[11px] text-slate-400 pt-1">
                                 Historial: {{ ausenciasConteoDetalle.total }} ausencias ({{ ausenciasConteoDetalle.con_aviso }} con aviso, {{ ausenciasConteoDetalle.sin_aviso }} sin aviso)
                             </div>
+                        </div>
+                        <div class="pt-3 border-t border-slate-100 dark:border-slate-700 text-xs text-slate-400 dark:text-slate-500">
+                            <i class="pi pi-user-edit mr-1"></i>
+                            <template v-if="turnoSeleccionado.creadoPorNombre">
+                                Cargado por <span class="font-medium text-slate-500 dark:text-slate-400">{{ turnoSeleccionado.creadoPorNombre }}</span>
+                                <template v-if="turnoSeleccionado.creadoEn"> el {{ fechaBonitaCompleta(turnoSeleccionado.creadoEn) }}</template>
+                            </template>
+                            <template v-else>Sin registro de carga</template>
                         </div>
                     </div>
                     <div class="flex justify-between pt-4 border-t border-[#E0F2FE] dark:border-slate-700 mt-4">

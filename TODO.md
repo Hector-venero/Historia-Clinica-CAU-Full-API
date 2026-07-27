@@ -228,7 +228,21 @@ Fecha de auditoria: 2026-04-13
 - [x] Anotaciones en modo Oscuro
   - Estado: agregadas variantes `dark:` a tarjetas de evolucion, formulario de nueva evolucion y tarjeta de datos del paciente en `HistoriaPaciente.vue`, siguiendo la convencion ya usada en `Comunicados.vue`/`PosteosGrupo.vue`. Verificado con datos reales: tarjetas de evolucion confirman fondo oscuro + texto claro correctos. Nota: se detecto un problema pre-existente y no relacionado (fuera de este cambio) donde algunos elementos no recalculan su estilo dark hasta que ocurre otra interaccion en la pagina; no afecta legibilidad (el texto sigue siendo oscuro sobre blanco en ese caso), pero vale la pena investigarlo aparte.
 
+- [x] Ver en la agenda QUIEN cargo cada evento y CUANDO
+  - Estado: implementado. Se unifico la trazabilidad de creacion en los tres tipos de evento de agenda. Estado previo (inconsistente): `turnos_grupales` ya tenia `creado_por` + `creado_en`; `ausencias` tenia `creado_por` pero no `creado_en`; `turnos` no tenia ninguno de los dos. Ojo: `turnos.usuario_id` NO es quien cargo el turno sino el profesional dueño de la agenda, por eso hizo falta columna nueva.
+  - Backend: migracion `20260727_trazabilidad_creacion_agenda.sql` (`turnos.creado_por` + `turnos.creado_en`, `ausencias.creado_en`). Los INSERT de `api_turnos`, `crear_turnos_tanda` y `crear_ausencia` guardan `current_user.id` + `datetime.now()`. Los endpoints que alimentan las agendas (`turnos_profesional_completo`, `turnos_por_grupo`, `listar_turnos_grupales`, `listar_ausencias`) devuelven `creado_por_nombre` y `creado_en` via `LEFT JOIN usuarios`.
+  - Frontend: el modal de detalle de las tres agendas (`Turnos.vue`, `CalendarioGrupo.vue`, `ModuloRehabilitacion.vue`) muestra "Cargado por X el DD/MM/AAAA HH:MM" al ampliar el evento.
+  - Limitacion conocida: los eventos anteriores a esta migracion no tienen el dato y no es recuperable — se muestran como "Sin registro de carga". Las columnas se agregaron `NULL DEFAULT NULL` a proposito: con `DEFAULT CURRENT_TIMESTAMP`, MySQL le estampa a todas las filas viejas la fecha de la migracion (verificado), lo que seria un dato falso con apariencia de valido. El `LEFT JOIN` es obligatorio: con `JOIN` los eventos historicos desaparecerian de la agenda.
+
+- [ ] Registrar tambien QUIEN modifico y QUIEN elimino cada evento de agenda
+  - Continuacion del item anterior, postergada a pedido. Hoy solo se registra la creacion.
+  - Requiere mas que columnas nuevas: eliminar un bloqueo es un `DELETE` duro (`DELETE FROM ausencias`), asi que para saber quien desbloqueo hace falta soft-delete o una tabla de auditoria aparte. Mismo caso para turnos.
+  - Relacionado: el item de abajo (no desbloquear agendas de dias anteriores) se resuelve mejor con esto que con una prohibicion dura.
+
 - [ ] No se debe poder desbloquear agendas de dias anteriores (por seguridad interna).
+  - Analisis hecho: hoy NO hay ninguna validacion de fecha pasada en el flujo de agenda. Se puede borrar un bloqueo de una fecha pasada (`DELETE /api/ausencias/<id>`), crear un bloqueo en el pasado (`POST /api/ausencias`) y crear turnos en el pasado (`POST /api/turnos`). La cadena que importa: borrar el bloqueo de un dia pasado hace que `medico_disponible()` pase, y permite cargar un turno retroactivo en un dia donde el profesional figuraba ausente.
+  - Arreglar solo el desbloqueo (lo que pide el titulo) deja abiertas las otras dos puertas.
+  - Pendiente de definicion: prohibicion dura para todos, o prohibicion con excepcion auditada para director.
 
 - [x] Permititr ediciones de Historia auditadas (se registra que fue una anotacion editada, se puede ver la anterior)
   - Estado: implementado. Modelo append-only en `evoluciones` (`padre_id`, `version`, `activo` + FK autoreferencial e indice `idx_evoluciones_padre_activo`): editar no pisa el registro, inserta una version nueva y desactiva las anteriores del mismo arbol. Backend: `PUT /api/pacientes/<id>/evolucion/<evo_id>` (solo el autor original o director) y `GET .../historial` para ver todas las versiones. Los listados y ambos PDFs filtran `activo = 1` y marcan "(Editado)" cuando `version > 1`. Frontend: `HistoriaPaciente.vue` con formulario de edicion y dialogo de historial de cambios. Migracion `20260727_ausencias_observaciones_evoluciones_auditadas.sql`.

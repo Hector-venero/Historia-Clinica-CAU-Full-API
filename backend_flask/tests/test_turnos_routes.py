@@ -1,8 +1,10 @@
+from datetime import datetime
+
 import pytest
 
 from conftest import FakeConnection, FakeCursor, MockUser, login_as
 
-from app.routes import turnos_routes
+from app.routes import ausencias_routes, turnos_routes
 
 
 def test_editar_turno_allows_overlap_for_area_role(client, monkeypatch):
@@ -410,6 +412,68 @@ def test_conteo_ausencias_paciente_deniega_rol_no_reconocido(client):
     response = client.get("/api/pacientes/10/ausencias")
 
     assert response.status_code == 403
+
+
+def test_crear_turno_registra_quien_lo_cargo_y_cuando(client, monkeypatch):
+    # El administrativo 42 carga un turno para el profesional 7: creado_por debe ser
+    # 42 (quien lo cargo), NO 7 (el dueño de la agenda).
+    login_as(client, MockUser(user_id=42, rol="administrativo"))
+
+    fake_cursor = FakeCursor(fetchone_results=[None, None])
+    fake_connection = FakeConnection(fake_cursor)
+    monkeypatch.setattr(turnos_routes, "get_connection", lambda: fake_connection)
+    monkeypatch.setattr(turnos_routes, "medico_disponible", lambda *args, **kwargs: True)
+
+    response = client.post(
+        "/api/turnos",
+        json={
+            "paciente_id": 10,
+            "usuario_id": 7,
+            "fecha_inicio": "2026-03-20T10:00:00",
+            "fecha_fin": "2026-03-20T10:30:00",
+            "motivo": "Control",
+        },
+    )
+
+    assert response.status_code == 201
+    inserts = [item for item in fake_cursor.executed if "INSERT INTO turnos" in item[0]]
+    assert len(inserts) == 1
+    query, params = inserts[0]
+    assert "creado_por" in query
+    assert "creado_en" in query
+    # creado_por = usuario logueado (42), distinto del profesional del turno (7)
+    assert params[6] == 42
+    assert params[1] == 7
+    assert isinstance(params[7], datetime)
+
+
+def test_crear_ausencia_registra_quien_la_cargo_y_cuando(client, monkeypatch):
+    # El administrativo 42 bloquea la agenda del profesional 7.
+    login_as(client, MockUser(user_id=42, rol="administrativo"))
+
+    fake_cursor = FakeCursor(fetchone_results=[None], lastrowid=5)
+    fake_connection = FakeConnection(fake_cursor)
+    monkeypatch.setattr(ausencias_routes, "get_connection", lambda: fake_connection)
+
+    response = client.post(
+        "/api/ausencias",
+        json={
+            "usuario_id": 7,
+            "fecha_inicio": "2026-03-26T09:00:00",
+            "fecha_fin": "2026-03-26T12:00:00",
+            "motivo": "Capacitacion",
+        },
+    )
+
+    assert response.status_code == 201
+    inserts = [item for item in fake_cursor.executed if "INSERT INTO ausencias" in item[0]]
+    assert len(inserts) == 1
+    query, params = inserts[0]
+    assert "creado_en" in query
+    # usuario_id = dueño de la agenda (7); creado_por = quien la bloqueo (42)
+    assert params[0] == 7
+    assert params[4] == 42
+    assert isinstance(params[5], datetime)
 
 
 def test_editar_turno_error_en_update_hace_rollback_cierra_y_retorna_500(client, monkeypatch):

@@ -202,8 +202,11 @@ CREATE TABLE turnos (
     notificado BOOLEAN DEFAULT FALSE,
     observaciones TEXT DEFAULT NULL,
     ausencia ENUM('con_aviso', 'sin_aviso') DEFAULT NULL,
+    creado_por INT NULL,
+    creado_en TIMESTAMP NULL DEFAULT NULL,
     FOREIGN KEY (paciente_id) REFERENCES pacientes(id),
-    FOREIGN KEY (usuario_id) REFERENCES usuarios(id)
+    FOREIGN KEY (usuario_id) REFERENCES usuarios(id),
+    FOREIGN KEY (creado_por) REFERENCES usuarios(id)
 ) ENGINE=InnoDB
   DEFAULT CHARSET=utf8mb4
   COLLATE=utf8mb4_unicode_ci;
@@ -218,6 +221,7 @@ CREATE TABLE ausencias (
     fecha_fin DATETIME NOT NULL,
     motivo VARCHAR(255),
     creado_por INT NOT NULL,
+    creado_en TIMESTAMP NULL DEFAULT NULL,
     FOREIGN KEY (usuario_id) REFERENCES usuarios(id)
 ) ENGINE=InnoDB
   DEFAULT CHARSET=utf8mb4

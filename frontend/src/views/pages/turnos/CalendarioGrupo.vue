@@ -8,6 +8,7 @@ import interactionPlugin from '@fullcalendar/interaction';
 import tippy from 'tippy.js';
 import 'tippy.js/dist/tippy.css';
 import api from '@/api/axios';
+import { fechaBonitaCompleta } from '@/utils/formatDate';
 import '@/assets/calendar-medical.css';
 
 import Dialog from 'primevue/dialog';
@@ -212,6 +213,8 @@ const calendarOptions = reactive({
             observaciones: info.event.extendedProps.observaciones,
             ausencia: info.event.extendedProps.ausencia,
             paciente_id: info.event.extendedProps.paciente_id,
+            creadoPorNombre: info.event.extendedProps.creado_por_nombre,
+            creadoEn: info.event.extendedProps.creado_en,
             start: info.event.start,
             end: info.event.end,
             editable: Boolean(info.event.extendedProps.editable)
@@ -299,6 +302,8 @@ function crearEventoIndividual(t) {
             observaciones: t.observaciones,
             ausencia: t.ausencia,
             paciente_id: t.paciente_id,
+            creado_por_nombre: t.creado_por_nombre,
+            creado_en: t.creado_en,
             editable: false
         }
     };
@@ -330,6 +335,8 @@ function crearEventoGrupal(t) {
             observaciones: t.observaciones,
             ausencia: t.ausencia,
             paciente_id: t.paciente_id,
+            creado_por_nombre: t.creado_por_nombre,
+            creado_en: t.creado_en,
             editable: Boolean(t.editable)
         }
     };
@@ -744,6 +751,14 @@ onMounted(async () => {
                         <div v-if="ausenciasConteoDetalle" class="text-[11px] text-slate-400 pt-1">
                             Historial: {{ ausenciasConteoDetalle.total }} ausencias ({{ ausenciasConteoDetalle.con_aviso }} con aviso, {{ ausenciasConteoDetalle.sin_aviso }} sin aviso)
                         </div>
+                    </div>
+                    <div class="pt-3 border-t border-slate-100 dark:border-slate-700 text-xs text-slate-400 dark:text-slate-500">
+                        <i class="pi pi-user-edit mr-1"></i>
+                        <template v-if="turnoSeleccionado.creadoPorNombre">
+                            Cargado por <span class="font-medium text-slate-500 dark:text-slate-400">{{ turnoSeleccionado.creadoPorNombre }}</span>
+                            <template v-if="turnoSeleccionado.creadoEn"> el {{ fechaBonitaCompleta(turnoSeleccionado.creadoEn) }}</template>
+                        </template>
+                        <template v-else>Sin registro de carga</template>
                     </div>
                 </div>
                 <div class="flex justify-between pt-4 border-t border-[#E0F2FE] dark:border-slate-700">

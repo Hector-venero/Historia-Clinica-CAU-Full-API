@@ -130,10 +130,10 @@ def crear_ausencia():
 
         cursor.execute(
             """
-            INSERT INTO ausencias (usuario_id, fecha_inicio, fecha_fin, motivo, creado_por)
-            VALUES (%s, %s, %s, %s, %s)
+            INSERT INTO ausencias (usuario_id, fecha_inicio, fecha_fin, motivo, creado_por, creado_en)
+            VALUES (%s, %s, %s, %s, %s, %s)
             """,
-            (usuario_id, fecha_inicio_dt, fecha_fin_dt, motivo, current_user.id),
+            (usuario_id, fecha_inicio_dt, fecha_fin_dt, motivo, current_user.id, datetime.now()),
         )
         conn.commit()
 
@@ -164,9 +164,10 @@ def listar_ausencias():
         usuario_id = current_user.id
         cursor.execute(
             """
-            SELECT a.*, u.nombre AS nombre_usuario
+            SELECT a.*, u.nombre AS nombre_usuario, uc.nombre AS creado_por_nombre
             FROM ausencias a
             JOIN usuarios u ON a.usuario_id = u.id
+            LEFT JOIN usuarios uc ON uc.id = a.creado_por
             WHERE a.usuario_id = %s
             ORDER BY fecha_inicio
             """,
@@ -177,9 +178,10 @@ def listar_ausencias():
         if filtro_usuario:
             cursor.execute(
                 """
-                SELECT a.*, u.nombre AS nombre_usuario
+                SELECT a.*, u.nombre AS nombre_usuario, uc.nombre AS creado_por_nombre
                 FROM ausencias a
                 JOIN usuarios u ON a.usuario_id = u.id
+                LEFT JOIN usuarios uc ON uc.id = a.creado_por
                 WHERE a.usuario_id = %s
                 ORDER BY fecha_inicio
                 """,
@@ -188,9 +190,10 @@ def listar_ausencias():
         else:
             cursor.execute(
                 """
-                SELECT a.*, u.nombre AS nombre_usuario
+                SELECT a.*, u.nombre AS nombre_usuario, uc.nombre AS creado_por_nombre
                 FROM ausencias a
                 JOIN usuarios u ON a.usuario_id = u.id
+                LEFT JOIN usuarios uc ON uc.id = a.creado_por
                 ORDER BY fecha_inicio
                 """
             )
@@ -210,6 +213,7 @@ def listar_ausencias():
 
         a["fecha_inicio"] = _to_iso_arg(fecha_inicio)
         a["fecha_fin"] = _to_iso_arg(fecha_fin)
+        a["creado_en"] = _to_iso_arg(a.get("creado_en"))
 
     return jsonify(ausencias)
 
