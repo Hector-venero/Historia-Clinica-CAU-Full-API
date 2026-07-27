@@ -18,6 +18,11 @@ const archivoFoto = ref(null);
 const previewFoto = ref(null);
 const imgVersion = ref(Date.now());
 const confirmarEliminarFoto = ref(false);
+const inputFoto = ref(null);
+
+const seleccionarFoto = () => {
+    inputFoto.value.click();
+};
 
 onMounted(async () => {
     if (!userStore.id) {
@@ -100,10 +105,10 @@ const eliminarFoto = async () => {
                 {{ nombre ? nombre.charAt(0).toUpperCase() : 'U' }}
             </div>
 
-            <label class="cursor-pointer">
-                <Button :label="userStore.foto || previewFoto ? 'Cambiar foto' : 'Subir foto'" icon="pi pi-camera" severity="secondary" outlined size="small" />
-                <input type="file" class="hidden" accept="image/*" @change="onFileChange" />
-            </label>
+            <div>
+                <Button :label="userStore.foto || previewFoto ? 'Cambiar foto' : 'Subir foto'" icon="pi pi-camera" severity="secondary" outlined size="small" @click="seleccionarFoto" />
+                <input ref="inputFoto" type="file" class="hidden" accept="image/*" @change="onFileChange" />
+            </div>
         </div>
 
         <div class="space-y-5">

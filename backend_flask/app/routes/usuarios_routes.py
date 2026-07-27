@@ -388,14 +388,14 @@ def obtener_perfil():
 @bp_usuarios.route('/api/usuario/perfil', methods=['POST'])
 @login_required
 def actualizar_perfil():
-    print("🔵 INICIO actualizar_perfil()")
+    print("INICIO actualizar_perfil()")
     conn = get_connection()
     cursor = conn.cursor()
     nuevo_nombre = request.form.get('nombre')
     nuevo_email = request.form.get('email')
     
-    # IMPORTANTE: Ruta absoluta para Docker
-    carpeta_fotos = "/app/static/fotos_usuarios" 
+    # Ruta de fotos dinámica basada en el root_path de Flask (funciona dentro y fuera de Docker)
+    carpeta_fotos = os.path.join(app.root_path, 'static', 'fotos_usuarios')
     if not os.path.exists(carpeta_fotos):
         os.makedirs(carpeta_fotos, exist_ok=True)
 
@@ -405,7 +405,7 @@ def actualizar_perfil():
     if "foto" in request.files:
         archivo = request.files["foto"]
         if archivo.filename:
-            print("📁 Nueva foto:", archivo.filename)
+            print("Nueva foto:", archivo.filename)
             # Borrar anterior
             if foto_anterior:
                 path_anterior = os.path.join(carpeta_fotos, foto_anterior)
@@ -422,9 +422,10 @@ def actualizar_perfil():
                 image = Image.open(archivo)
                 if image.mode in ("RGBA", "P", "LA"): image = image.convert("RGB")
                 image.save(path_nuevo, optimize=True, quality=85)
-                print(f"✅ Foto guardada en: {path_nuevo}")
+                print(f"Foto guardada en: {path_nuevo}")
             except Exception as e:
-                print("⚠ Error procesando imagen, guardando directo:", e)
+                print("Error procesando imagen, guardando directo:", e)
+                archivo.seek(0)  # Posicionar el puntero al inicio antes de guardar el stream
                 archivo.save(path_nuevo)
 
     cursor.execute("UPDATE usuarios SET nombre=%s, email=%s, foto=%s WHERE id=%s", 
@@ -485,11 +486,11 @@ def borrar_foto():
         return jsonify({"message": "No hay foto", "foto": None}), 200
 
     foto = data["foto"]
-    ruta_foto = os.path.join("/app/static/fotos_usuarios", foto)
+    ruta_foto = os.path.join(app.root_path, 'static', 'fotos_usuarios', foto)
 
     if os.path.exists(ruta_foto):
         os.remove(ruta_foto)
-        print(f"🗑 Foto eliminada: {ruta_foto}")
+        print(f"Foto eliminada: {ruta_foto}")
 
     cursor.execute("UPDATE usuarios SET foto=NULL WHERE id=%s", (user_id,))
     conn.commit()
