@@ -1,7 +1,7 @@
 <script setup>
 import { FilterMatchMode } from '@primevue/core/api';
 import api from '@/api/axios';
-import { ref } from 'vue';
+import { ref, watch, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
 
 const dni = ref('');
@@ -24,12 +24,21 @@ const buscarPacientes = async () => {
         return;
     }
 
-    let query = dni.value || nombre.value || apellido.value || nroHc.value;
+    let url = '/pacientes/buscar';
+    if (dni.value) {
+        url += `?dni=${encodeURIComponent(dni.value)}`;
+    } else if (nombre.value) {
+        url += `?nombre=${encodeURIComponent(nombre.value)}`;
+    } else if (apellido.value) {
+        url += `?apellido=${encodeURIComponent(apellido.value)}`;
+    } else if (nroHc.value) {
+        url += `?nro_hc=${encodeURIComponent(nroHc.value)}`;
+    }
 
     try {
         loading.value = true;
         mensaje.value = '';
-        const res = await api.get(`/pacientes/buscar?q=${encodeURIComponent(query)}`, {
+        const res = await api.get(url, {
             withCredentials: true
         });
         pacientes.value = res.data.pacientes;
@@ -44,6 +53,69 @@ const buscarPacientes = async () => {
         loading.value = false;
     }
 };
+
+// Debounce logic for real-time search
+let debounceTimer = null;
+
+const debouncedBuscar = () => {
+    if (debounceTimer) clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => {
+        buscarPacientes();
+    }, 400); // 400ms debounce
+};
+
+// Clear other fields to prevent conflicting OR search parameter behavior
+const clearOthers = (except) => {
+    if (except !== 'dni') dni.value = '';
+    if (except !== 'nombre') nombre.value = '';
+    if (except !== 'apellido') apellido.value = '';
+    if (except !== 'nroHc') nroHc.value = '';
+};
+
+// Watchers for inputs
+watch(dni, (val) => {
+    if (val) {
+        clearOthers('dni');
+        debouncedBuscar();
+    } else if (!nombre.value && !apellido.value && !nroHc.value) {
+        pacientes.value = [];
+        mensaje.value = 'Podés buscar con un solo campo (no hace falta llenarlos todos).';
+    }
+});
+
+watch(nombre, (val) => {
+    if (val) {
+        clearOthers('nombre');
+        debouncedBuscar();
+    } else if (!dni.value && !apellido.value && !nroHc.value) {
+        pacientes.value = [];
+        mensaje.value = 'Podés buscar con un solo campo (no hace falta llenarlos todos).';
+    }
+});
+
+watch(apellido, (val) => {
+    if (val) {
+        clearOthers('apellido');
+        debouncedBuscar();
+    } else if (!dni.value && !nombre.value && !nroHc.value) {
+        pacientes.value = [];
+        mensaje.value = 'Podés buscar con un solo campo (no hace falta llenarlos todos).';
+    }
+});
+
+watch(nroHc, (val) => {
+    if (val) {
+        clearOthers('nroHc');
+        debouncedBuscar();
+    } else if (!dni.value && !nombre.value && !apellido.value) {
+        pacientes.value = [];
+        mensaje.value = 'Podés buscar con un solo campo (no hace falta llenarlos todos).';
+    }
+});
+
+onUnmounted(() => {
+    if (debounceTimer) clearTimeout(debounceTimer);
+});
 
 const columns = [
     { field: 'apellido', header: 'Apellido' },

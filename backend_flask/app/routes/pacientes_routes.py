@@ -233,7 +233,7 @@ def api_listar_pacientes():
     cursor = conn.cursor(dictionary=True)
     try:
         cursor.execute("""
-            SELECT id, dni, nombre, apellido, fecha_nacimiento, sexo, telefono, email
+            SELECT id, nro_hc, dni, nombre, apellido, fecha_nacimiento, sexo, telefono, email
             FROM pacientes
             ORDER BY apellido, nombre
         """)
@@ -341,29 +341,46 @@ def proximo_nro_hc():
 def buscar_pacientes():
     """Busca pacientes por nombre, apellido, DNI o N° de historia clínica."""
     term = request.args.get('q', '')
+    dni = request.args.get('dni', '')
+    nombre = request.args.get('nombre', '')
+    apellido = request.args.get('apellido', '')
+    nro_hc = request.args.get('nro_hc', '')
     page = int(request.args.get('page', 1))
     per_page = 10
 
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
     try:
-        like_term = f"%{term}%"
+        if dni:
+            where_clause = "dni LIKE %s"
+            params = (f"%{dni}%",)
+        elif nombre:
+            where_clause = "nombre LIKE %s"
+            params = (f"%{nombre}%",)
+        elif apellido:
+            where_clause = "apellido LIKE %s"
+            params = (f"%{apellido}%",)
+        elif nro_hc:
+            where_clause = "nro_hc LIKE %s"
+            params = (f"%{nro_hc}%",)
+        else:
+            where_clause = "dni LIKE %s OR nombre LIKE %s OR apellido LIKE %s OR nro_hc LIKE %s"
+            like_term = f"%{term}%"
+            params = (like_term, like_term, like_term, like_term)
 
-        cursor.execute("""
-            SELECT COUNT(*) as total
-            FROM pacientes
-            WHERE dni LIKE %s OR nombre LIKE %s OR apellido LIKE %s OR nro_hc LIKE %s
-        """, (like_term, like_term, like_term, like_term))
+        # Contar total
+        cursor.execute(f"SELECT COUNT(*) as total FROM pacientes WHERE {where_clause}", params)
         total = cursor.fetchone()['total']
 
         offset = (page - 1) * per_page
-        cursor.execute("""
+        query_params = params + (per_page, offset)
+        cursor.execute(f"""
             SELECT id, nro_hc, dni, nombre, apellido
             FROM pacientes
-            WHERE dni LIKE %s OR nombre LIKE %s OR apellido LIKE %s OR nro_hc LIKE %s
+            WHERE {where_clause}
             ORDER BY apellido, nombre
             LIMIT %s OFFSET %s
-        """, (like_term, like_term, like_term, like_term, per_page, offset))
+        """, query_params)
         results = cursor.fetchall()
 
         return jsonify({

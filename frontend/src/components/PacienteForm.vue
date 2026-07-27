@@ -1,6 +1,6 @@
 <script setup>
 import DatePicker from 'primevue/datepicker';
-import { ref, watch } from 'vue';
+import { ref, watch, onMounted } from 'vue';
 import pacienteService from '@/service/pacienteService';
 
 // Props
@@ -23,6 +23,24 @@ const paciente = ref({ ...props.paciente }); // copiamos para mantener reactivid
 const mensaje = ref('');
 const tipoMensaje = ref('');
 const intentadoEnviar = ref(false);
+const proximoNroHc = ref('');
+
+onMounted(async () => {
+    // Solo si estamos registrando (el paciente no tiene id)
+    if (!paciente.value.id) {
+        try {
+            const res = await pacienteService.getProximoNroHc();
+            if (res.data && res.data.proximo_nro_hc) {
+                proximoNroHc.value = res.data.proximo_nro_hc;
+                if (!paciente.value.nro_hc) {
+                    paciente.value.nro_hc = res.data.proximo_nro_hc;
+                }
+            }
+        } catch (err) {
+            console.error('Error fetching proximo_nro_hc:', err);
+        }
+    }
+});
 
 // Si las props cambian (por ejemplo, al montar EditarPaciente.vue), actualizamos los campos
 watch(
@@ -125,7 +143,13 @@ const registrar = async () => {
                 <div>
                     <label class="block mb-1">Nº de H.C. <span class="text-red-500">*</span></label>
                     <input v-model="paciente.nro_hc" type="text" class="p-inputtext p-component w-full h-12" />
-                    <span v-if="intentadoEnviar && !paciente.nro_hc" class="text-red-500 text-sm">Campo obligatorio</span>
+                    <span v-if="intentadoEnviar && !paciente.nro_hc" class="text-red-500 text-sm block">Campo obligatorio</span>
+                    <small v-if="proximoNroHc && !paciente.id" class="text-muted-color mt-1 block">
+                        Próximo sugerido:
+                        <a href="#" @click.prevent="paciente.nro_hc = proximoNroHc" class="text-primary underline">
+                            {{ proximoNroHc }}
+                        </a>
+                    </small>
                 </div>
                 <!-- Nombre -->
                 <div>

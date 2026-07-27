@@ -36,7 +36,7 @@ onMounted(() => {
 const filtrados = computed(() => {
     if (!busqueda.value) return pacientes.value;
     const q = busqueda.value.toLowerCase();
-    return pacientes.value.filter((p) => p.nombre.toLowerCase().includes(q) || p.apellido.toLowerCase().includes(q) || p.dni.includes(q));
+    return pacientes.value.filter((p) => p.nombre.toLowerCase().includes(q) || p.apellido.toLowerCase().includes(q) || p.dni.includes(q) || (p.nro_hc && p.nro_hc.toLowerCase().includes(q)));
 });
 
 const editarPaciente = (id) => {
@@ -112,7 +112,7 @@ const formatFecha = (fecha) => {
                         </template>
                     </Column>
 
-                    <Column field="sexo" header="Sexo" sortable></Column>
+                    <Column field="nro_hc" header="N° H.C." sortable></Column>
 
                     <Column field="telefono" header="Teléfono">
                         <template #body="slotProps">

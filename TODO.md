@@ -250,7 +250,13 @@ Fecha de auditoria: 2026-04-13
   - Nota operativa: cada edicion deja la evolucion nueva y la historia consolidada del paciente en `estado_bfa = 'pendiente'`. El sellado en la TSA de BFA es manual, asi que hay que re-sellar despues de editar.
 
 - [x] Sugerir numero de Historia Last (actualmente en 2567) - se puede registrar numero custom o 'proxima disponible'
-  - Estado: nuevo endpoint `GET /api/pacientes/proximo-nro-hc` en `pacientes_routes.py` (MAX numerico + 1, con fallback a 1 si no hay pacientes). Cubierto con tests TDD en `tests/test_pacientes_routes.py`. Frontend pendiente de conectar el formulario de alta al endpoint.
+  - Estado: implementado. Endpoint backend `GET /api/pacientes/proximo-nro-hc` (MAX numerico + 1). Integrado en `PacienteForm.vue` del frontend para auto-completar por defecto en el alta y mostrar recomendación visual cliqueable.
+
+- [x] Reemplazar Sexo por N° H.C. en listado de pacientes para ordenar y buscar por historia
+  - Estado: implementado. Modificado endpoint `/api/pacientes` en backend para incluir `nro_hc` y reemplazada la columna "Sexo" por "N° H.C." en la grilla del frontend (`Pacientes.vue`), permitiendo ordenar y buscar localmente a los pacientes por su número de historia clínica.
+
+- [x] Búsqueda reactiva en tiempo real y precisa al buscar Historias Clínicas
+  - Estado: implementado. Añadidos watchers y debounce (400ms) en los inputs de `BuscarHistorias.vue` para buscar sin clickear el botón. Además, el backend ahora soporta parámetros por columna (`nro_hc`, `dni`, `nombre`, `apellido`) para evitar cruzar búsquedas (ej. que H.C. 2 traiga DNI 2) y el frontend limpia automáticamente los otros campos al escribir para mantener un único parámetro activo de forma clara e intuitiva.
 
 - [x] Poder marcar turnos como ausente
   - Estado: implementado. Añadido campo `ausencia` (con_aviso / sin_aviso) a tablas `turnos` y `turnos_grupales` en base de datos. Implementados endpoints backend `PATCH` para ausencias de turnos individuales/grupales, y `GET` para contador de ausencias por paciente. En el frontend, se implementaron indicadores visuales en las tres vistas de agenda (`Turnos.vue`, `CalendarioGrupo.vue`, `ModuloRehabilitacion.vue`) pintando los turnos de rojo ladrillo (sin aviso) o naranja (con aviso). Se agregaron controles de asistencia en el modal de detalle de turnos y alertas informativas al dar un nuevo turno si el paciente cuenta con 3+ ausencias sin aviso.
