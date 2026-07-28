@@ -12,7 +12,7 @@ from reportlab.lib.units import cm
 from reportlab.pdfbase.cidfonts import UnicodeCIDFont
 from reportlab.pdfbase import pdfmetrics
 from reportlab.lib.enums import TA_CENTER, TA_RIGHT
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from app.routes.historias_routes import actualizar_hash_evolucion, actualizar_historia
 import os
 from reportlab.lib.colors import Color
@@ -22,6 +22,18 @@ from reportlab.lib import colors
 pdfmetrics.registerFont(UnicodeCIDFont('HeiseiMin-W3'))
 
 bp_pacientes = Blueprint("pacientes", __name__)
+
+TZ_ARG = timezone(timedelta(hours=-3))
+
+
+def _to_iso_arg(dt):
+    if not isinstance(dt, datetime):
+        return dt
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=TZ_ARG)
+    else:
+        dt = dt.astimezone(TZ_ARG)
+    return dt.isoformat()
 
 
 def _safe_current_user_id():
@@ -484,6 +496,7 @@ def get_evoluciones(id):
                 e.contenido,
                 e.indicaciones,
                 e.creado_en,
+                e.version,
                 e.usuario_id,
                 e.hash_local,
                 e.tx_hash,
@@ -514,6 +527,7 @@ def get_evoluciones(id):
                 'nombre': a['filename'],
                 'url': f"/api/uploads/evoluciones/{evo['id']}/{a['filename']}"
             } for a in archivos]
+            evo['creado_en'] = _to_iso_arg(evo.get('creado_en'))
 
         return jsonify(evoluciones)
     except Exception:
@@ -693,6 +707,7 @@ def api_get_historial_evolucion(paciente_id, evo_id):
                 'nombre': a['filename'],
                 'url': f"/api/uploads/evoluciones/{item['id']}/{a['filename']}"
             } for a in archivos]
+            item['creado_en'] = _to_iso_arg(item.get('creado_en'))
 
         return jsonify(historial)
 

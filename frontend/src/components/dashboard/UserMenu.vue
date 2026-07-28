@@ -34,7 +34,9 @@ const fotoUrl = computed(() => {
 const inicial = computed(() => (userStore.nombre ? userStore.nombre.charAt(0).toUpperCase() : 'U'));
 
 userStore.$subscribe((mutation) => {
-    if (mutation.events.key === 'fotoVersion') {
+    const events = mutation.events;
+    const cambioFoto = Array.isArray(events) ? events.some((e) => e.key === 'fotoVersion') : events?.key === 'fotoVersion';
+    if (cambioFoto) {
         imageError.value = false;
     }
 });

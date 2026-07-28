@@ -46,9 +46,7 @@ VITE_API_URL=/api
 # Para producción:
 # API_URL=https://api.midominio.com
 
-FRONTEND_URL=http://localhost
-# Para producción:
-# FRONTEND_URL=https://midominio.com
+FRONTEND_URL=https://cau-hc.com.ar
 
 
 #Variables para el Backup automático remoto (opcional)
