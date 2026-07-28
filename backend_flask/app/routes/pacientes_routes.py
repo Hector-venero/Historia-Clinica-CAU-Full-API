@@ -63,6 +63,36 @@ def _log_db_error(message, conn=None):
         _request_id(),
     )
 
+
+_PACIENTE_BUSCAR_CONDITIONS = {
+    'dni': 'dni LIKE %s',
+    'nombre': 'nombre LIKE %s',
+    'apellido': 'apellido LIKE %s',
+    'nro_hc': 'nro_hc LIKE %s',
+}
+_PACIENTE_BUSCAR_DEFAULT_CONDITION = (
+    'dni LIKE %s OR nombre LIKE %s OR apellido LIKE %s OR nro_hc LIKE %s'
+)
+_SQL_COUNT_PACIENTES = 'SELECT COUNT(*) as total FROM pacientes WHERE '
+_SQL_SELECT_PACIENTES_BUSCAR = (
+    'SELECT id, nro_hc, dni, nombre, apellido FROM pacientes WHERE '
+)
+_SQL_PACIENTES_BUSCAR_TAIL = ' ORDER BY apellido, nombre LIMIT %s OFFSET %s'
+
+
+def _paciente_buscar_condition_and_params(term, dni, nombre, apellido, nro_hc):
+    """Return a whitelisted WHERE fragment and bound parameters for patient search."""
+    if dni:
+        return _PACIENTE_BUSCAR_CONDITIONS['dni'], (f'%{dni}%',)
+    if nombre:
+        return _PACIENTE_BUSCAR_CONDITIONS['nombre'], (f'%{nombre}%',)
+    if apellido:
+        return _PACIENTE_BUSCAR_CONDITIONS['apellido'], (f'%{apellido}%',)
+    if nro_hc:
+        return _PACIENTE_BUSCAR_CONDITIONS['nro_hc'], (f'%{nro_hc}%',)
+    like_term = f'%{term}%'
+    return _PACIENTE_BUSCAR_DEFAULT_CONDITION, (like_term, like_term, like_term, like_term)
+
 # ==========================================================
 # 📁 CRUD de Pacientes
 # ==========================================================
@@ -363,36 +393,20 @@ def buscar_pacientes():
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
     try:
-        if dni:
-            where_clause = "dni LIKE %s"
-            params = (f"%{dni}%",)
-        elif nombre:
-            where_clause = "nombre LIKE %s"
-            params = (f"%{nombre}%",)
-        elif apellido:
-            where_clause = "apellido LIKE %s"
-            params = (f"%{apellido}%",)
-        elif nro_hc:
-            where_clause = "nro_hc LIKE %s"
-            params = (f"%{nro_hc}%",)
-        else:
-            where_clause = "dni LIKE %s OR nombre LIKE %s OR apellido LIKE %s OR nro_hc LIKE %s"
-            like_term = f"%{term}%"
-            params = (like_term, like_term, like_term, like_term)
+        condition, params = _paciente_buscar_condition_and_params(
+            term, dni, nombre, apellido, nro_hc
+        )
 
         # Contar total
-        cursor.execute(f"SELECT COUNT(*) as total FROM pacientes WHERE {where_clause}", params)
+        cursor.execute(_SQL_COUNT_PACIENTES + condition, params)
         total = cursor.fetchone()['total']
 
         offset = (page - 1) * per_page
         query_params = params + (per_page, offset)
-        cursor.execute(f"""
-            SELECT id, nro_hc, dni, nombre, apellido
-            FROM pacientes
-            WHERE {where_clause}
-            ORDER BY apellido, nombre
-            LIMIT %s OFFSET %s
-        """, query_params)
+        cursor.execute(
+            _SQL_SELECT_PACIENTES_BUSCAR + condition + _SQL_PACIENTES_BUSCAR_TAIL,
+            query_params,
+        )
         results = cursor.fetchall()
 
         return jsonify({
