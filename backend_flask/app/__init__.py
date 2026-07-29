@@ -1,4 +1,5 @@
 from flask import Flask, jsonify
+import click
 import json
 import os
 from flask_login import LoginManager
@@ -13,12 +14,45 @@ from app.database import get_connection
 from datetime import timedelta
 from flask import send_from_directory
 
+
+def build_cors_origins(environment, frontend_url, configured_origins):
+    """Build a strict CORS allowlist from production configuration."""
+    environment = (environment or "development").strip().lower()
+    frontend_url = (frontend_url or "").strip().rstrip("/")
+    explicit_origins = [
+        origin.strip().rstrip("/")
+        for origin in (configured_origins or "").split(",")
+        if origin.strip()
+    ]
+
+    if explicit_origins:
+        return list(dict.fromkeys(explicit_origins))
+
+    if environment == "production":
+        if not frontend_url.startswith("https://"):
+            raise RuntimeError("FRONTEND_URL must be an HTTPS URL in production.")
+        return [frontend_url]
+
+    return list(dict.fromkeys([
+        frontend_url or "http://localhost",
+        "http://localhost",
+        "http://localhost:80",
+        "http://localhost:5173",
+        "http://localhost:4173",
+    ]))
+
 # -------------------------
 # Crear app Flask
 # -------------------------
 app = Flask(__name__)
 app.config.from_object(Config)
 app.config['FRONTEND_URL'] = os.getenv("FRONTEND_URL", "http://localhost")
+env = os.getenv("FLASK_ENV", "development")
+app.config['CORS_ORIGINS'] = build_cors_origins(
+    environment=env,
+    frontend_url=app.config['FRONTEND_URL'],
+    configured_origins=os.getenv("CORS_ORIGINS", ""),
+)
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
 # Seguridad HTTP (headers CSP, HTTPS, etc.)
@@ -29,7 +63,6 @@ csp = {
     "script-src": ["'self'"]
 }
 # Seguridad HTTP (headers CSP, HTTPS según entorno)
-env = os.getenv("FLASK_ENV", "development")
 force_https = False #(env == "production")
 
 Talisman(
@@ -42,13 +75,13 @@ Talisman(
 )
 
 
-# CORS (permite peticiones desde el frontend React)
-CORS(app, supports_credentials=True, origins=[
-    "http://localhost",        # NGINX
-    "http://localhost:80",     # NGINX explícito
-    "http://localhost:5173",   # Vite Dev
-    "http://localhost:4173"    # Vite Preview
-])
+# CORS solo aplica a la API. Con credenciales no se permiten comodines.
+CORS(
+    app,
+    resources={r"/api/*": {"origins": app.config['CORS_ORIGINS']}},
+    supports_credentials=True,
+    always_send=False,
+)
 
 # -------------------------
 # Configuración Login
@@ -157,8 +190,21 @@ def fotos_usuarios(filename):
 # Comandos CLI
 # -------------------------
 @app.cli.command("enviar-alertas")
-def enviar_alertas_command():
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    help="Calcula destinatarios y agendas sin enviar correos.",
+)
+def enviar_alertas_command(dry_run):
     """Comando CLI para enviar el mail de alertas diarias a los profesionales."""
     from app.utils.alertas import procesar_y_enviar_alertas
-    procesar_y_enviar_alertas()
-
+    resultado = procesar_y_enviar_alertas(dry_run=dry_run)
+    click.echo(
+        "Proceso finalizado. "
+        f"Profesionales: {resultado['profesionales']}. "
+        f"Enviados: {resultado['enviados']}. "
+        f"Simulados: {resultado['simulados']}. "
+        f"Errores: {resultado['errores']}."
+    )
+    if resultado["errores"]:
+        raise click.ClickException("El proceso de alertas terminó con errores.")

@@ -128,7 +128,7 @@ def test_procesar_y_enviar_alertas_flujo_completo(client, monkeypatch):
     enviados = []
     monkeypatch.setattr(mail, "send", lambda msg: enviados.append(msg))
     
-    alertas.procesar_y_enviar_alertas()
+    resultado = alertas.procesar_y_enviar_alertas()
     
     assert agenda_call_count == 2
     assert len(enviados) == 2
@@ -139,3 +139,50 @@ def test_procesar_y_enviar_alertas_flujo_completo(client, monkeypatch):
     
     assert enviados[1].recipients == ["chase@cau.com"]
     assert "No tenés turnos programados" in enviados[1].html
+
+    assert resultado == {
+        "profesionales": 2,
+        "enviados": 2,
+        "simulados": 0,
+        "errores": 0,
+    }
+
+
+def test_procesar_alertas_dry_run_no_envia_correos(client, monkeypatch):
+    profesionales = [{"id": 1, "nombre": "Dr. House", "email": "house@cau.com"}]
+    fake_cursor = FakeCursor(fetchall_results=[profesionales])
+    monkeypatch.setattr(alertas, "get_connection", lambda: FakeConnection(fake_cursor))
+    monkeypatch.setattr(alertas, "obtener_agenda_manana", lambda *_: ([], []))
+    monkeypatch.setattr(
+        mail,
+        "send",
+        lambda _msg: pytest.fail("dry-run no debe enviar correos"),
+    )
+
+    resultado = alertas.procesar_y_enviar_alertas(dry_run=True)
+
+    assert resultado == {
+        "profesionales": 1,
+        "enviados": 0,
+        "simulados": 1,
+        "errores": 0,
+    }
+
+
+def test_cli_alertas_imprime_resumen_verificable(client, monkeypatch):
+    monkeypatch.setattr(
+        alertas,
+        "procesar_y_enviar_alertas",
+        lambda dry_run=False: {
+            "profesionales": 3,
+            "enviados": 0 if dry_run else 3,
+            "simulados": 3 if dry_run else 0,
+            "errores": 0,
+        },
+    )
+
+    result = app.test_cli_runner().invoke(args=["enviar-alertas", "--dry-run"])
+
+    assert result.exit_code == 0
+    assert "Proceso finalizado" in result.output
+    assert "Simulados: 3" in result.output

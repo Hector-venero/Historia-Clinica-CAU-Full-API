@@ -161,7 +161,7 @@ def generar_html_correo(nombre_profesional, fecha_str, turnos_ind, turnos_grup):
     """
     return html
 
-def procesar_y_enviar_alertas():
+def procesar_y_enviar_alertas(dry_run=False):
     """
     Función principal llamada desde CLI para buscar profesionales disponibles mañana
     y enviarles el resumen de turnos.
@@ -194,7 +194,12 @@ def procesar_y_enviar_alertas():
         profesionales = cursor.fetchall()
     except Exception as e:
         current_app.logger.error(f"Error al buscar profesionales disponibles: {str(e)}")
-        return
+        return {
+            "profesionales": 0,
+            "enviados": 0,
+            "simulados": 0,
+            "errores": 1,
+        }
     finally:
         cursor.close()
         conn.close()
@@ -203,6 +208,7 @@ def procesar_y_enviar_alertas():
     
     enviados_ok = 0
     enviados_error = 0
+    simulados = 0
     
     for prof in profesionales:
         try:
@@ -236,13 +242,22 @@ def procesar_y_enviar_alertas():
                     for tg in turnos_grup:
                         msg.body += f"- {tg['fecha_inicio'].strftime('%H:%M')} - {tg['fecha_fin'].strftime('%H:%M')}: Grupo: {tg['grupo_nombre']}\n"
             
-            # Enviar mail
-            mail.send(msg)
-            enviados_ok += 1
-            current_app.logger.info(f"Alerta enviada correctamente a: {email}")
+            if dry_run:
+                simulados += 1
+                current_app.logger.info(f"Alerta simulada para: {email}")
+            else:
+                mail.send(msg)
+                enviados_ok += 1
+                current_app.logger.info(f"Alerta enviada correctamente a: {email}")
             
         except Exception as ex:
             enviados_error += 1
             current_app.logger.error(f"Error al enviar alerta a {prof.get('email')}: {str(ex)}")
             
     current_app.logger.info(f"Proceso finalizado. Enviados correctamente: {enviados_ok}. Errores: {enviados_error}.")
+    return {
+        "profesionales": len(profesionales),
+        "enviados": enviados_ok,
+        "simulados": simulados,
+        "errores": enviados_error,
+    }
