@@ -1,7 +1,7 @@
 from flask import Blueprint, request, jsonify
 from flask_login import login_required, current_user
 from datetime import datetime, timedelta, timezone
-from app.database import get_connection
+from app.database import get_connection, db_cursor
 from app.utils.permisos import requiere_rol
 from app import mail
 from flask_mail import Message
@@ -365,54 +365,48 @@ def editar_turno(id):
     if not data:
         return jsonify({"error": "Faltan datos"}), 400
 
-    conn = get_connection()
-    cursor = conn.cursor(dictionary=True)
+    # Los returns tempranos por "falta fecha" y "sin duracion configurada"
+    # salian sin cerrar la conexion: cada request invalido filtraba una.
+    with db_cursor() as (conn, cursor):
+        cursor.execute("SELECT usuario_id FROM turnos WHERE id=%s", (id,))
+        turno = cursor.fetchone()
+        if not turno:
+            return jsonify({"error": "Turno no encontrado"}), 404
 
-    cursor.execute("SELECT usuario_id FROM turnos WHERE id=%s", (id,))
-    turno = cursor.fetchone()
-    if not turno:
-        cursor.close()
-        conn.close()
-        return jsonify({"error": "Turno no encontrado"}), 404
+        if current_user.rol == 'profesional' and turno['usuario_id'] != current_user.id:
+            return jsonify({"error": "No autorizado"}), 403
 
-    if current_user.rol == 'profesional' and turno['usuario_id'] != current_user.id:
-        cursor.close()
-        conn.close()
-        return jsonify({"error": "No autorizado"}), 403
+        motivo = data.get("motivo")
 
-    motivo = data.get("motivo")
+        fecha_inicio = data.get("fecha_inicio")
+        fecha_fin = data.get("fecha_fin")
 
-    fecha_inicio = data.get("fecha_inicio")
-    fecha_fin = data.get("fecha_fin")
+        if not fecha_inicio or not fecha_fin:
+            nueva_fecha = data.get("fecha")
+            if not nueva_fecha:
+                return jsonify({"error": "Falta fecha"}), 400
 
-    if not fecha_inicio or not fecha_fin:
-        nueva_fecha = data.get("fecha")
-        if not nueva_fecha:
-            return jsonify({"error": "Falta fecha"}), 400
+            cursor.execute("SELECT duracion_turno FROM usuarios WHERE id=%s", (turno['usuario_id'],))
+            info_prof = cursor.fetchone()
 
-        cursor.execute("SELECT duracion_turno FROM usuarios WHERE id=%s", (turno['usuario_id'],))
-        info_prof = cursor.fetchone()
+            if not info_prof or not info_prof["duracion_turno"]:
+                return jsonify({"error": "El profesional no tiene duración de turno configurada"}), 400
 
-        if not info_prof or not info_prof["duracion_turno"]:
-            return jsonify({"error": "El profesional no tiene duración de turno configurada"}), 400
+            duracion = info_prof["duracion_turno"]
 
-        duracion = info_prof["duracion_turno"]
+            inicio_dt = datetime.fromisoformat(nueva_fecha)
+            fin_dt = inicio_dt + timedelta(minutes=duracion)
 
-        inicio_dt = datetime.fromisoformat(nueva_fecha)
-        fin_dt = inicio_dt + timedelta(minutes=duracion)
+            fecha_inicio = inicio_dt.isoformat()
+            fecha_fin = fin_dt.isoformat()
 
-        fecha_inicio = inicio_dt.isoformat()
-        fecha_fin = fin_dt.isoformat()
+        cursor.execute("""
+            UPDATE turnos
+            SET fecha_inicio=%s, fecha_fin=%s, motivo=%s
+            WHERE id=%s
+        """, (fecha_inicio, fecha_fin, motivo, id))
 
-    cursor.execute("""
-        UPDATE turnos
-        SET fecha_inicio=%s, fecha_fin=%s, motivo=%s
-        WHERE id=%s
-    """, (fecha_inicio, fecha_fin, motivo, id))
-
-    conn.commit()
-    cursor.close()
-    conn.close()
+        conn.commit()
 
     return jsonify({"message": "Turno actualizado correctamente ✅"})
 

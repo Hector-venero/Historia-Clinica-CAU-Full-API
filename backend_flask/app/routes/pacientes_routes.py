@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify, send_from_directory, send_file, current_app
 from flask_login import login_required, current_user
-from app.database import get_connection
+from app.database import db_cursor
 from werkzeug.utils import secure_filename
 from io import BytesIO
 from reportlab.platypus import (SimpleDocTemplate, Paragraph, Spacer, Image, PageBreak, Table, TableStyle)
@@ -35,65 +35,62 @@ def api_crear_paciente():
     else:
         data = request.form.to_dict()
 
-    conn = get_connection()
-    cursor = conn.cursor(dictionary=True)
+    with db_cursor() as (conn, cursor):
+        # Verificar duplicado por DNI
+        cursor.execute("SELECT id FROM pacientes WHERE dni = %s", (data.get('dni'),))
+        if cursor.fetchone():
+            return jsonify({'error': f"⚠️ Ya existe un paciente con DNI {data.get('dni')}"}), 400
 
-    # Verificar duplicado por DNI
-    cursor.execute("SELECT id FROM pacientes WHERE dni = %s", (data.get('dni'),))
-    if cursor.fetchone():
-        cursor.close(); conn.close()
-        return jsonify({'error': f"⚠️ Ya existe un paciente con DNI {data.get('dni')}"}), 400
+        # Normalizar campo discapacidad
+        cert_discapacidad = data.get('cert_discapacidad')
+        if cert_discapacidad:
+            cert_discapacidad = 'Sí' if cert_discapacidad.lower() in ['si', 'sí'] else 'No' if cert_discapacidad.lower() == 'no' else None
 
-    # Normalizar campo discapacidad
-    cert_discapacidad = data.get('cert_discapacidad')
-    if cert_discapacidad:
-        cert_discapacidad = 'Sí' if cert_discapacidad.lower() in ['si', 'sí'] else 'No' if cert_discapacidad.lower() == 'no' else None
+        usuario_id = current_user.id if current_user.is_authenticated else None
 
-    usuario_id = current_user.id if current_user.is_authenticated else None
+        cursor.execute("""
+            INSERT INTO pacientes (
+                nro_hc, dni, apellido, nombre, fecha_nacimiento, sexo, nacionalidad,
+                ocupacion, direccion, codigo_postal, telefono, celular, email, contacto,
+                cobertura, cert_discapacidad, nro_certificado, derivado_por, diagnostico,
+                motivo_derivacion, medico_cabecera, comentarios, motivo_ingreso, enfermedad_actual, antecedentes_enfermedad_actual,
+                antecedentes_personales, antecedentes_heredofamiliares, registrado_por
+            ) VALUES (
+                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,%s, %s, %s, %s, %s, %s, %s, %s,%s, %s, %s, %s, %s, %s
+            )
+        """, (
+            data.get('nro_hc'),
+            data.get('dni'),
+            data.get('apellido', '').upper(),
+            data.get('nombre', '').upper(),
+            data.get('fecha_nacimiento'),
+            data.get('sexo'),
+            data.get('nacionalidad'),
+            data.get('ocupacion'),
+            data.get('direccion'),
+            data.get('codigo_postal'),
+            data.get('telefono'),
+            data.get('celular'),
+            data.get('email'),
+            data.get('contacto'),
+            data.get('cobertura'),
+            cert_discapacidad,
+            data.get('nro_certificado'),
+            data.get('derivado_por'),
+            data.get('diagnostico'),
+            data.get('motivo_derivacion'),
+            data.get('medico_cabecera'),
+            data.get('comentarios'),
+            data.get('motivo_ingreso'),
+            data.get('enfermedad_actual'),
+            data.get('antecedentes_enfermedad_actual'),
+            data.get('antecedentes_personales'),
+            data.get('antecedentes_heredofamiliares'),
+            usuario_id
+        ))
 
-    cursor.execute("""
-        INSERT INTO pacientes (
-            nro_hc, dni, apellido, nombre, fecha_nacimiento, sexo, nacionalidad,
-            ocupacion, direccion, codigo_postal, telefono, celular, email, contacto,
-            cobertura, cert_discapacidad, nro_certificado, derivado_por, diagnostico,
-            motivo_derivacion, medico_cabecera, comentarios, motivo_ingreso, enfermedad_actual, antecedentes_enfermedad_actual,
-            antecedentes_personales, antecedentes_heredofamiliares, registrado_por
-        ) VALUES (
-            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,%s, %s, %s, %s, %s, %s, %s, %s,%s, %s, %s, %s, %s, %s
-        )
-    """, (
-        data.get('nro_hc'),
-        data.get('dni'),
-        data.get('apellido', '').upper(),
-        data.get('nombre', '').upper(),
-        data.get('fecha_nacimiento'),
-        data.get('sexo'),
-        data.get('nacionalidad'),
-        data.get('ocupacion'),
-        data.get('direccion'),
-        data.get('codigo_postal'),
-        data.get('telefono'),
-        data.get('celular'),
-        data.get('email'),
-        data.get('contacto'),
-        data.get('cobertura'),
-        cert_discapacidad,
-        data.get('nro_certificado'),
-        data.get('derivado_por'),
-        data.get('diagnostico'),
-        data.get('motivo_derivacion'),
-        data.get('medico_cabecera'),
-        data.get('comentarios'),
-        data.get('motivo_ingreso'),
-        data.get('enfermedad_actual'),
-        data.get('antecedentes_enfermedad_actual'),
-        data.get('antecedentes_personales'),
-        data.get('antecedentes_heredofamiliares'),
-        usuario_id
-    ))
+        conn.commit()
 
-    conn.commit()
-    cursor.close(); conn.close()
     return jsonify({'message': 'Paciente registrado correctamente ✅'})
 
 @bp_pacientes.route('/api/pacientes/<int:id>', methods=['PUT'])
@@ -101,8 +98,6 @@ def api_crear_paciente():
 def api_modificar_paciente(id):
     """Modifica los datos de un paciente existente."""
     data = request.get_json() if request.is_json else request.form.to_dict()
-    conn = get_connection()
-    cursor = conn.cursor()
 
     cert_discapacidad = data.get('cert_discapacidad')
     if cert_discapacidad:
@@ -147,10 +142,11 @@ def api_modificar_paciente(id):
     values = list(campos_no_vacios.values()) + [usuario_id, id]
 
     query = f"UPDATE pacientes SET {set_clause}, modificado_por=%s WHERE id=%s"
-    cursor.execute(query, values)
 
-    conn.commit()
-    cursor.close(); conn.close()
+    with db_cursor(dictionary=False) as (conn, cursor):
+        cursor.execute(query, values)
+        conn.commit()
+
     return jsonify({'message': 'Paciente modificado correctamente ✅'})
 
 
@@ -158,32 +154,27 @@ def api_modificar_paciente(id):
 @login_required
 def api_listar_pacientes():
     """Devuelve el listado completo de pacientes."""
-    conn = get_connection()
-    cursor = conn.cursor(dictionary=True)
     try:
-        cursor.execute("""
-            SELECT id, dni, nombre, apellido, fecha_nacimiento, sexo, telefono, email
-            FROM pacientes
-            ORDER BY apellido, nombre
-        """)
-        pacientes = cursor.fetchall()
+        with db_cursor() as (conn, cursor):
+            cursor.execute("""
+                SELECT id, dni, nombre, apellido, fecha_nacimiento, sexo, telefono, email
+                FROM pacientes
+                ORDER BY apellido, nombre
+            """)
+            pacientes = cursor.fetchall()
         return jsonify(pacientes)
     except Exception as e:
-        print("⚠️ Error en /api/pacientes:", e)
+        current_app.logger.exception("Error en /api/pacientes")
         return jsonify({"error": str(e)}), 500
-    finally:
-        cursor.close(); conn.close()
 
 
 @bp_pacientes.route('/api/pacientes/<int:id>', methods=['GET'])
 @login_required
 def api_get_paciente(id):
     """Obtiene los datos de un paciente por ID."""
-    conn = get_connection()
-    cursor = conn.cursor(dictionary=True)
-    cursor.execute("SELECT * FROM pacientes WHERE id = %s", (id,))
-    paciente = cursor.fetchone()
-    cursor.close(); conn.close()
+    with db_cursor() as (_conn, cursor):
+        cursor.execute("SELECT * FROM pacientes WHERE id = %s", (id,))
+        paciente = cursor.fetchone()
 
     if not paciente:
         return jsonify({'error': 'Paciente no encontrado'}), 404
@@ -201,16 +192,14 @@ def api_get_paciente(id):
 @login_required
 def api_eliminar_paciente(id):
     """Elimina un paciente."""
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("SELECT id FROM pacientes WHERE id = %s", (id,))
-    if not cursor.fetchone():
-        cursor.close(); conn.close()
-        return jsonify({'error': 'Paciente no encontrado'}), 404
+    with db_cursor(dictionary=False) as (conn, cursor):
+        cursor.execute("SELECT id FROM pacientes WHERE id = %s", (id,))
+        if not cursor.fetchone():
+            return jsonify({'error': 'Paciente no encontrado'}), 404
 
-    cursor.execute("DELETE FROM pacientes WHERE id = %s", (id,))
-    conn.commit()
-    cursor.close(); conn.close()
+        cursor.execute("DELETE FROM pacientes WHERE id = %s", (id,))
+        conn.commit()
+
     return jsonify({'message': 'Paciente eliminado correctamente ✅'})
 
 
@@ -222,28 +211,26 @@ def buscar_pacientes():
     page = int(request.args.get('page', 1))
     per_page = 10
 
-    conn = get_connection()
-    cursor = conn.cursor(dictionary=True)
     like_term = f"%{term}%"
 
-    cursor.execute("""
-        SELECT COUNT(*) as total 
-        FROM pacientes
-        WHERE dni LIKE %s OR nombre LIKE %s OR apellido LIKE %s OR nro_hc LIKE %s
-    """, (like_term, like_term, like_term, like_term))
-    total = cursor.fetchone()['total']
+    with db_cursor() as (_conn, cursor):
+        cursor.execute("""
+            SELECT COUNT(*) as total
+            FROM pacientes
+            WHERE dni LIKE %s OR nombre LIKE %s OR apellido LIKE %s OR nro_hc LIKE %s
+        """, (like_term, like_term, like_term, like_term))
+        total = cursor.fetchone()['total']
 
-    offset = (page - 1) * per_page
-    cursor.execute("""
-        SELECT id, nro_hc, dni, nombre, apellido 
-        FROM pacientes
-        WHERE dni LIKE %s OR nombre LIKE %s OR apellido LIKE %s OR nro_hc LIKE %s
-        ORDER BY apellido, nombre
-        LIMIT %s OFFSET %s
-    """, (like_term, like_term, like_term, like_term, per_page, offset))
-    results = cursor.fetchall()
+        offset = (page - 1) * per_page
+        cursor.execute("""
+            SELECT id, nro_hc, dni, nombre, apellido
+            FROM pacientes
+            WHERE dni LIKE %s OR nombre LIKE %s OR apellido LIKE %s OR nro_hc LIKE %s
+            ORDER BY apellido, nombre
+            LIMIT %s OFFSET %s
+        """, (like_term, like_term, like_term, like_term, per_page, offset))
+        results = cursor.fetchall()
 
-    cursor.close(); conn.close()
     return jsonify({
         'pacientes': results,
         'total': total,
@@ -269,31 +256,28 @@ def agregar_evolucion(id):
     if not fecha or not contenido:
         return jsonify({'error': 'Faltan campos obligatorios'}), 400
 
-    conn = get_connection()
-    cursor = conn.cursor()
+    # El guardado de archivos a disco puede fallar (permisos, espacio); sin el
+    # context manager, esa excepcion dejaba la conexion abierta.
+    with db_cursor(dictionary=False) as (conn, cursor):
+        cursor.execute("""
+                INSERT INTO evoluciones (paciente_id, fecha, contenido, indicaciones, usuario_id)
+                VALUES (%s, %s, %s, %s, %s)
+        """, (id, fecha, contenido, indicaciones, current_user.id))
+        conn.commit()
+        evolucion_id = cursor.lastrowid
 
-    cursor.execute("""
-            INSERT INTO evoluciones (paciente_id, fecha, contenido, indicaciones, usuario_id)
-            VALUES (%s, %s, %s, %s, %s)
-    """, (id, fecha, contenido, indicaciones, current_user.id))
-    conn.commit()
-    evolucion_id = cursor.lastrowid
+        upload_dir = os.path.join(os.getcwd(), 'uploads', 'evoluciones', str(evolucion_id))
+        os.makedirs(upload_dir, exist_ok=True)
 
-    upload_dir = os.path.join(os.getcwd(), 'uploads', 'evoluciones', str(evolucion_id))
-    os.makedirs(upload_dir, exist_ok=True)
-
-    for archivo in archivos:
-        if archivo.filename:
-            filename = secure_filename(archivo.filename)
-            archivo.save(os.path.join(upload_dir, filename))
-            cursor.execute("""
-                INSERT INTO evolucion_archivos (evolucion_id, filename)
-                VALUES (%s, %s)
-            """, (evolucion_id, filename))
-            conn.commit()
-
-    cursor.close()
-    conn.close()
+        for archivo in archivos:
+            if archivo.filename:
+                filename = secure_filename(archivo.filename)
+                archivo.save(os.path.join(upload_dir, filename))
+                cursor.execute("""
+                    INSERT INTO evolucion_archivos (evolucion_id, filename)
+                    VALUES (%s, %s)
+                """, (evolucion_id, filename))
+                conn.commit()
 
     # 🔁 Actualizar historia consolidada automáticamente
     try:
@@ -309,46 +293,41 @@ def agregar_evolucion(id):
 @login_required
 def get_evoluciones(id):
     """Obtiene las evoluciones de un paciente, mostrando también el médico y su especialidad."""
-    conn = get_connection()
-    cursor = conn.cursor(dictionary=True)
-
-    cursor.execute("""
-        SELECT 
-            e.id,
-            e.fecha,
-            e.contenido,
-            e.indicaciones,
-            e.creado_en,
-            e.usuario_id,
-            u.nombre AS nombre_usuario,
-            CASE 
-                WHEN u.rol = 'director' THEN 'Director'
-                ELSE COALESCE(u.especialidad, 'Sin especificar')
-            END AS especialidad_usuario
-        FROM evoluciones e
-        JOIN usuarios u ON e.usuario_id = u.id
-        WHERE e.paciente_id = %s
-        ORDER BY e.fecha DESC
-    """, (id,))
-
-    
-    evoluciones = cursor.fetchall()
-
-    # Adjuntar archivos de cada evolución
-    for evo in evoluciones:
+    with db_cursor() as (_conn, cursor):
         cursor.execute("""
-            SELECT filename
-            FROM evolucion_archivos
-            WHERE evolucion_id = %s
-        """, (evo['id'],))
-        archivos = cursor.fetchall()
-        evo['archivos'] = [{
-            'nombre': a['filename'],
-            'url': f"/api/uploads/evoluciones/{evo['id']}/{a['filename']}"
-        } for a in archivos]
+            SELECT
+                e.id,
+                e.fecha,
+                e.contenido,
+                e.indicaciones,
+                e.creado_en,
+                e.usuario_id,
+                u.nombre AS nombre_usuario,
+                CASE
+                    WHEN u.rol = 'director' THEN 'Director'
+                    ELSE COALESCE(u.especialidad, 'Sin especificar')
+                END AS especialidad_usuario
+            FROM evoluciones e
+            JOIN usuarios u ON e.usuario_id = u.id
+            WHERE e.paciente_id = %s
+            ORDER BY e.fecha DESC
+        """, (id,))
 
-    cursor.close()
-    conn.close()
+        evoluciones = cursor.fetchall()
+
+        # Adjuntar archivos de cada evolución
+        for evo in evoluciones:
+            cursor.execute("""
+                SELECT filename
+                FROM evolucion_archivos
+                WHERE evolucion_id = %s
+            """, (evo['id'],))
+            archivos = cursor.fetchall()
+            evo['archivos'] = [{
+                'nombre': a['filename'],
+                'url': f"/api/uploads/evoluciones/{evo['id']}/{a['filename']}"
+            } for a in archivos]
+
     return jsonify(evoluciones)
 
 @bp_pacientes.route('/api/uploads/evoluciones/<int:evo_id>/<filename>')
@@ -368,36 +347,51 @@ def exportar_historia_pdf(id):
     from flask import current_app
     from PIL import Image as PILImage
 
-    conn = get_connection()
-    cursor = conn.cursor(dictionary=True)
+    # Se leen todos los datos primero y se suelta la conexion antes de generar
+    # el PDF: el render con reportlab puede tardar segundos y no tiene sentido
+    # retener una conexion de MySQL mientras tanto.
+    with db_cursor() as (_conn, cursor):
+        # Paciente
+        cursor.execute("SELECT * FROM pacientes WHERE id = %s", (id,))
+        paciente = cursor.fetchone()
+        if not paciente:
+            return jsonify({'error': 'Paciente no encontrado'}), 404
 
-    # Paciente
-    cursor.execute("SELECT * FROM pacientes WHERE id = %s", (id,))
-    paciente = cursor.fetchone()
-    if not paciente:
-        cursor.close(); conn.close()
-        return jsonify({'error': 'Paciente no encontrado'}), 404
+        # Evoluciones
+        cursor.execute("""
+            SELECT
+                e.id,
+                e.fecha,
+                e.contenido,
+                e.indicaciones,
+                e.creado_en,
+                u.nombre AS medico,
+                CASE
+                    WHEN u.rol = 'director' THEN 'Director'
+                    ELSE COALESCE(u.especialidad, 'Sin especificar')
+                END AS especialidad
+            FROM evoluciones e
+            JOIN usuarios u ON e.usuario_id = u.id
+            WHERE e.paciente_id = %s
+            ORDER BY e.fecha DESC
+        """, (id,))
 
-    # Evoluciones
-    cursor.execute("""
-        SELECT 
-            e.id,
-            e.fecha,
-            e.contenido,
-            e.indicaciones,
-            e.creado_en,
-            u.nombre AS medico,
-            CASE 
-                WHEN u.rol = 'director' THEN 'Director'
-                ELSE COALESCE(u.especialidad, 'Sin especificar')
-            END AS especialidad
-        FROM evoluciones e
-        JOIN usuarios u ON e.usuario_id = u.id
-        WHERE e.paciente_id = %s
-        ORDER BY e.fecha DESC
-    """, (id,))
+        evoluciones = cursor.fetchall()
 
-    evoluciones = cursor.fetchall()
+        # Adjuntos de todas las evoluciones en una sola query, en vez de una por
+        # evolucion dentro del loop de render (era un N+1 y ademas obligaba a
+        # sostener la conexion durante todo el armado del PDF).
+        archivos_por_evolucion = {}
+        if evoluciones:
+            ids_evo = [e["id"] for e in evoluciones]
+            marcadores = ", ".join(["%s"] * len(ids_evo))
+            cursor.execute(f"""
+                SELECT evolucion_id, filename
+                FROM evolucion_archivos
+                WHERE evolucion_id IN ({marcadores})
+            """, tuple(ids_evo))
+            for fila in cursor.fetchall():
+                archivos_por_evolucion.setdefault(fila["evolucion_id"], []).append(fila)
 
     buffer = BytesIO()
     doc = SimpleDocTemplate(
@@ -516,13 +510,8 @@ def exportar_historia_pdf(id):
             elements.append(Spacer(1, 0.4*cm))
             elements.append(Spacer(1, 0.1*cm))
 
-            # 🔸 Buscar archivos adjuntos
-            cursor.execute("""
-                SELECT filename
-                FROM evolucion_archivos
-                WHERE evolucion_id = %s
-            """, (evo["id"],))
-            archivos = cursor.fetchall()
+            # 🔸 Archivos adjuntos (ya prefetcheados, sin tocar la DB aca)
+            archivos = archivos_por_evolucion.get(evo["id"], [])
 
             if archivos:
                 elements.append(Paragraph("<b>Archivos adjuntos:</b>", styles["Heading3"]))
@@ -599,7 +588,6 @@ def exportar_historia_pdf(id):
     # -------------------------------------------------------
     doc.build(elements, onFirstPage=first_page, onLaterPages=later_pages )
     buffer.seek(0)
-    cursor.close(); conn.close()
 
     return send_file(
         buffer,
@@ -620,45 +608,39 @@ def exportar_evolucion_pdf(paciente_id, evo_id):
     from flask import current_app
     from PIL import Image as PILImage
 
-    conn = get_connection()
-    cursor = conn.cursor(dictionary=True)
+    with db_cursor() as (_conn, cursor):
+        # ==========================================================
+        #  1) DATOS DEL PACIENTE
+        # ==========================================================
+        cursor.execute("SELECT * FROM pacientes WHERE id = %s", (paciente_id,))
+        paciente = cursor.fetchone()
+        if not paciente:
+            return jsonify({'error': 'Paciente no encontrado'}), 404
 
-    # ==========================================================
-    #  1) DATOS DEL PACIENTE
-    # ==========================================================
-    cursor.execute("SELECT * FROM pacientes WHERE id = %s", (paciente_id,))
-    paciente = cursor.fetchone()
-    if not paciente:
-        cursor.close(); conn.close()
-        return jsonify({'error': 'Paciente no encontrado'}), 404
+        # ==========================================================
+        #  2) DATOS DE LA EVOLUCIÓN
+        # ==========================================================
+        cursor.execute("""
+            SELECT e.id, e.fecha, e.contenido, e.indicaciones, e.creado_en,
+                   u.nombre AS medico,
+                   CASE WHEN u.rol = 'director' THEN 'Director'
+                        ELSE COALESCE(u.especialidad, 'Sin especificar')
+                   END AS especialidad
+            FROM evoluciones e
+            JOIN usuarios u ON e.usuario_id = u.id
+            WHERE e.paciente_id = %s AND e.id = %s
+            LIMIT 1
+        """, (paciente_id, evo_id))
+        evolucion = cursor.fetchone()
 
-    # ==========================================================
-    #  2) DATOS DE LA EVOLUCIÓN
-    # ==========================================================
-    cursor.execute("""
-        SELECT e.id, e.fecha, e.contenido, e.indicaciones, e.creado_en,
-               u.nombre AS medico, 
-               CASE WHEN u.rol = 'director' THEN 'Director'
-                    ELSE COALESCE(u.especialidad, 'Sin especificar')
-               END AS especialidad
-        FROM evoluciones e
-        JOIN usuarios u ON e.usuario_id = u.id
-        WHERE e.paciente_id = %s AND e.id = %s
-        LIMIT 1
-    """, (paciente_id, evo_id))
-    evolucion = cursor.fetchone()
+        if not evolucion:
+            return jsonify({'error': 'Evolución no encontrada'}), 404
 
-    if not evolucion:
-        cursor.close(); conn.close()
-        return jsonify({'error': 'Evolución no encontrada'}), 404
-
-    # ==========================================================
-    #  3) ARCHIVOS ADJUNTOS
-    # ==========================================================
-    cursor.execute("SELECT filename FROM evolucion_archivos WHERE evolucion_id = %s", (evo_id,))
-    archivos = cursor.fetchall()
-
-    cursor.close(); conn.close()
+        # ==========================================================
+        #  3) ARCHIVOS ADJUNTOS
+        # ==========================================================
+        cursor.execute("SELECT filename FROM evolucion_archivos WHERE evolucion_id = %s", (evo_id,))
+        archivos = cursor.fetchall()
 
     # ==========================================================
     #  4) PDF – Construcción principal
