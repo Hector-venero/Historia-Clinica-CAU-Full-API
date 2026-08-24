@@ -20,7 +20,11 @@ nginx/default.prod.conf
 *.sqlite3
 *.db
 venv/
-migrations/
+# Patron pensado para el migrations/ que genera Flask-Migrate (que este
+# proyecto no usa), pero al no estar anclado matcheaba tambien db/migrations/
+# y dejaba las migraciones SQL fuera del repo sin que nada avisara.
+/migrations/
+!db/migrations/
 *.log
 *.tmp
 
