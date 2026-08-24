@@ -11,6 +11,41 @@ from app.auth import Usuario
 from app.database import get_connection
 from datetime import timedelta
 from flask import send_from_directory
+from werkzeug.middleware.proxy_fix import ProxyFix
+
+
+def build_cors_origins(environment, frontend_url, configured_origins):
+    """Arma la allowlist de CORS a partir del entorno.
+
+    Reemplaza la lista de localhost hardcodeada, que en produccion dejaba
+    entrar peticiones desde cualquier localhost. En produccion exige HTTPS
+    y no admite otro origen que FRONTEND_URL, salvo que CORS_ORIGINS lo
+    declare explicitamente.
+    """
+    environment = (environment or "development").strip().lower()
+    frontend_url = (frontend_url or "").strip().rstrip("/")
+    explicit_origins = [
+        origin.strip().rstrip("/")
+        for origin in (configured_origins or "").split(",")
+        if origin.strip()
+    ]
+
+    if explicit_origins:
+        return list(dict.fromkeys(explicit_origins))
+
+    if environment == "production":
+        if not frontend_url.startswith("https://"):
+            raise RuntimeError("FRONTEND_URL debe ser una URL HTTPS en produccion.")
+        return [frontend_url]
+
+    return list(dict.fromkeys([
+        frontend_url or "http://localhost",
+        "http://localhost",
+        "http://localhost:80",
+        "http://localhost:5173",
+        "http://localhost:4173",
+    ]))
+
 
 # -------------------------
 # Crear app Flask
@@ -18,6 +53,10 @@ from flask import send_from_directory
 app = Flask(__name__)
 app.config.from_object(Config)
 app.config['FRONTEND_URL'] = os.getenv("FRONTEND_URL", "http://localhost")
+
+# Detras de nginx: sin esto Flask ve la IP y el esquema del proxy, no los del
+# cliente, y arma mal las URLs absolutas y los chequeos de HTTPS.
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
 # Seguridad HTTP (headers CSP, HTTPS, etc.)
 csp = {
@@ -37,13 +76,13 @@ Talisman(
 )
 
 
-# CORS (permite peticiones desde el frontend React)
-CORS(app, supports_credentials=True, origins=[
-    "http://localhost",        # NGINX
-    "http://localhost:80",     # NGINX explícito
-    "http://localhost:5173",   # Vite Dev
-    "http://localhost:4173"    # Vite Preview
-])
+# CORS: allowlist derivada del entorno (ver build_cors_origins)
+app.config['CORS_ORIGINS'] = build_cors_origins(
+    environment=env,
+    frontend_url=app.config['FRONTEND_URL'],
+    configured_origins=os.getenv("CORS_ORIGINS", ""),
+)
+CORS(app, supports_credentials=True, origins=app.config['CORS_ORIGINS'])
 
 # -------------------------
 # Configuración Login
@@ -55,10 +94,17 @@ login_manager.login_view = None
 @login_manager.user_loader
 def load_user(user_id):
     conn = get_connection()
-    cursor = conn.cursor(dictionary=True)
-    cursor.execute("SELECT * FROM usuarios WHERE id = %s", (user_id,))
-    data = cursor.fetchone()
-    conn.close()
+    try:
+        cursor = conn.cursor(dictionary=True)
+        # activo = 1 tambien aca: sin el filtro, dar de baja a un usuario no
+        # cerraba su sesion en curso, porque la cookie seguia resolviendo.
+        cursor.execute(
+            "SELECT * FROM usuarios WHERE id = %s AND activo = 1",
+            (user_id,),
+        )
+        data = cursor.fetchone()
+    finally:
+        conn.close()
 
     if data:
         return Usuario(

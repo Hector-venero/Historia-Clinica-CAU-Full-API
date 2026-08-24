@@ -25,10 +25,18 @@ class Usuario(UserMixin):
     @staticmethod
     def obtener_por_username(username):
         conn = get_connection()
-        cursor = conn.cursor(dictionary=True)
-        cursor.execute("SELECT * FROM usuarios WHERE username = %s", (username,))
-        data = cursor.fetchone()
-        conn.close()
+        try:
+            cursor = conn.cursor(dictionary=True)
+            # activo = 1 es parte del criterio de autenticacion, no un filtro de
+            # presentacion: sin el, un usuario dado de baja seguia pudiendo loguearse
+            # (los usuarios se borran con soft-delete, nunca se eliminan de la tabla).
+            cursor.execute(
+                "SELECT * FROM usuarios WHERE username = %s AND activo = 1",
+                (username,),
+            )
+            data = cursor.fetchone()
+        finally:
+            conn.close()
 
         if data:
             return Usuario(

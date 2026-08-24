@@ -13,6 +13,10 @@ instance/
 env
 env.*
 !env.example
+
+# Conf de nginx de un despliegue concreto (dominio + rutas de certificados).
+# Se genera desde nginx/default.ssl.conf.example.
+nginx/default.prod.conf
 *.sqlite3
 *.db
 venv/

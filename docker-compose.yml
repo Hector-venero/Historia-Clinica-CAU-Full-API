@@ -38,7 +38,16 @@ services:
       MYSQL_ROOT_PASSWORD: root
       MYSQL_DATABASE: hc_bfa
       TZ: America/Argentina/Buenos_Aires
-    command: --default-time-zone='America/Argentina/Buenos_Aires'
+    # wait_timeout/interactive_timeout bajos: si una conexion queda colgada (Sleep)
+    # porque la app no la cerro, MySQL la mata sola a los 5 min en vez de
+    # sostenerla 8hs (el default) reteniendo locks.
+    # innodb-lock-wait-timeout bajo: si una transaccion viva bloquea una fila,
+    # las otras queries fallan rapido y con error claro en vez de encolarse.
+    command: >
+      --default-time-zone='America/Argentina/Buenos_Aires'
+      --wait_timeout=300
+      --interactive_timeout=300
+      --innodb-lock-wait-timeout=10
     volumes:
       - db_data:/var/lib/mysql
       - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
@@ -79,7 +88,10 @@ services:
     ports:
       - "80:80"
     volumes:
-      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf
+      # Parametrizable para no hardcodear el dominio de produccion en el repo.
+      # Dev (default): ./nginx/default.conf — En prod: exportar NGINX_CONF_FILE
+      # apuntando a la conf con SSL (ver nginx/default.ssl.conf.example).
+      - ${NGINX_CONF_FILE:-./nginx/default.conf}:/etc/nginx/conf.d/default.conf:ro
       - uploads_data:/var/www/uploads # <--- El mismo volumen que usa Flask
     networks:
       - historia_net
