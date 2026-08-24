@@ -11,16 +11,31 @@ import sys
 
 import pytest
 
-APP_DIR = pathlib.Path(__file__).resolve().parents[1] / "app"
-sys.path.insert(0, str(APP_DIR))
+def _buscar_hacia_arriba(relativo):
+    """Busca un path relativo subiendo desde este archivo.
 
-from migrate import (  # noqa: E402
-    _contar_clausulas_alter,
-    es_alter_compuesto,
-    split_statements,
-)
+    Se evita indexar parents[] con numeros fijos: los tests corren tanto desde
+    backend_flask/ como montados en otra ruta dentro del contenedor, y un indice
+    fijo revienta con IndexError segun donde esten.
+    """
+    for base in pathlib.Path(__file__).resolve().parents:
+        candidato = base / relativo
+        if candidato.exists():
+            return candidato
+    return None
 
-MIGRATIONS_DIR = pathlib.Path(__file__).resolve().parents[2] / "db" / "migrations"
+
+APP_DIR = _buscar_hacia_arriba("app/migrate.py")
+if APP_DIR is not None:
+    sys.path.insert(0, str(APP_DIR.parent))
+
+migrate = pytest.importorskip("migrate", reason="no se encontro app/migrate.py")
+
+split_statements = migrate.split_statements
+es_alter_compuesto = migrate.es_alter_compuesto
+_contar_clausulas_alter = migrate._contar_clausulas_alter
+
+MIGRATIONS_DIR = _buscar_hacia_arriba("db/migrations")
 
 
 # ---------------------------------------------------------------- split
@@ -101,7 +116,7 @@ def test_create_table_nunca_es_alter_compuesto():
 # ---------------------------------------------- las migraciones reales
 
 
-@pytest.mark.skipif(not MIGRATIONS_DIR.exists(), reason="sin db/migrations")
+@pytest.mark.skipif(MIGRATIONS_DIR is None, reason="sin db/migrations")
 def test_ninguna_migracion_tiene_alter_compuesto():
     """Un ALTER compuesto no se puede aplicar de forma idempotente.
 
@@ -117,7 +132,7 @@ def test_ninguna_migracion_tiene_alter_compuesto():
     assert not ofensores, "ALTERs compuestos encontrados:\n" + "\n".join(ofensores)
 
 
-@pytest.mark.skipif(not MIGRATIONS_DIR.exists(), reason="sin db/migrations")
+@pytest.mark.skipif(MIGRATIONS_DIR is None, reason="sin db/migrations")
 def test_grupos_comunicados_parsea_cinco_sentencias():
     """Regresion del bug del apostrofe: este archivo colapsaba a 1 sentencia."""
     archivo = MIGRATIONS_DIR / "20260624_grupos_comunicados.sql"
