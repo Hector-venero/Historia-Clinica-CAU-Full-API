@@ -8,6 +8,11 @@ instance/
 .env
 *.env
 .env.*
+# 'env' sin punto NO lo atrapaba ninguno de los patrones de arriba:
+# asi se filtro un archivo con secretos reales al fork publico.
+env
+env.*
+!env.example
 *.sqlite3
 *.db
 venv/
