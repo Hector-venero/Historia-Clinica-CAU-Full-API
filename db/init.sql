@@ -39,7 +39,9 @@ CREATE TABLE usuarios (
     dni VARCHAR(20) DEFAULT NULL,
     sexo ENUM('M', 'F', 'X', 'O') DEFAULT NULL,
     profesion VARCHAR(100) DEFAULT NULL,
-    matricula_tipo ENUM('MN', 'MP') DEFAULT NULL,
+    -- 'OP' (otro profesional) viene del fork. Ver
+    -- db/migrations/20260824_reconciliacion_esquema.sql
+    matricula_tipo ENUM('MN', 'MP', 'OP') DEFAULT NULL,
     matricula_numero VARCHAR(50) DEFAULT NULL,
     matricula_provincia VARCHAR(100) DEFAULT NULL
 ) ENGINE=InnoDB
@@ -172,7 +174,7 @@ CREATE TABLE ausencias (
 CREATE TABLE disponibilidades (
     id INT AUTO_INCREMENT PRIMARY KEY,
     usuario_id INT NOT NULL,
-    dia_semana ENUM('Lunes','Martes','Miercoles','Jueves','Viernes','Sabado') NOT NULL,
+    dia_semana ENUM('Lunes','Martes','Miercoles','Jueves','Viernes','Sabado','Domingo') NOT NULL,
     hora_inicio TIME NOT NULL,
     hora_fin TIME NOT NULL,
     activo BOOLEAN DEFAULT TRUE,
