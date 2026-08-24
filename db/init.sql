@@ -1,27 +1,25 @@
--- Crear la base de datos si no existe
+-- ==============================================
+--  ESQUEMA INICIAL
+-- ==============================================
+-- Este script solo CREA. Los DROP TABLE que estaban aca se movieron a
+-- db/dev_reset.sql: al vivir en el mismo archivo que el CREATE DATABASE,
+-- init.sql parecia un script de setup seguro para correr a mano, y correrlo
+-- contra la base de produccion borraba toda la historia clinica.
+--
+-- Docker solo lo ejecuta cuando el datadir esta vacio (esta montado en
+-- /docker-entrypoint-initdb.d). Sobre una base existente, los cambios de
+-- esquema van por db/migrations/.
+
 CREATE DATABASE IF NOT EXISTS hc_bfa
   CHARACTER SET utf8mb4
   COLLATE utf8mb4_unicode_ci;
 
 USE hc_bfa;
 
-SET GLOBAL time_zone = '-3:00';
+-- Solo la sesion: SET GLOBAL requiere privilegio SUPER y afecta al servidor
+-- entero, no a esta base. La zona horaria del servidor se fija por
+-- --default-time-zone en docker-compose.yml.
 SET time_zone = '-3:00';
-
--- ==============================================
---  ELIMINAR TABLAS (solo para entorno de desarrollo)
--- ==============================================
-DROP TABLE IF EXISTS auditorias_blockchain;
-DROP TABLE IF EXISTS historias;
-DROP TABLE IF EXISTS turnos;
-DROP TABLE IF EXISTS evolucion_archivos;
-DROP TABLE IF EXISTS evoluciones;
-DROP TABLE IF EXISTS pacientes;
-DROP TABLE IF EXISTS usuarios;
-DROP TABLE IF EXISTS ausencias;
-DROP TABLE IF EXISTS disponibilidades;
-DROP TABLE IF EXISTS grupos_profesionales;
-DROP TABLE IF EXISTS grupo_miembros;
 
 -- ==============================================
 -- TABLA DE USUARIOS

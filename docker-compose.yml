@@ -13,6 +13,10 @@ services:
     volumes:
       - ./backend_flask/app:/app
       - uploads_data:/app/uploads # donde Flask guarda archivos subidos
+      # Migraciones que aplica start.sh al arrancar. Read-only: el contenedor
+      # las lee, nunca las escribe. Si falta este mount el arranque falla, en
+      # vez de servir la app contra un esquema viejo sin avisar.
+      - ./db/migrations:/app/migrations:ro
     depends_on:
       db:
         condition: service_healthy
@@ -23,6 +27,12 @@ services:
       - FLASK_DEBUG=${FLASK_DEBUG}
       - FLASK_APP=main.py
       - TZ=America/Argentina/Buenos_Aires
+      # Las migraciones necesitan DDL; el usuario de la app solo tiene DML
+      # (ver db/init.sql). Se puede acotar creando un usuario dedicado con
+      # ALTER/CREATE/INDEX/REFERENCES y setear DB_MIGRATION_USER/PASSWORD.
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD:-root}
+      - DB_MIGRATION_USER=${DB_MIGRATION_USER:-root}
+      - DB_MIGRATION_PASSWORD=${DB_MIGRATION_PASSWORD:-}
     command: bash -c "echo Starting Flask with ENV=$FLASK_ENV && /wait-for-it.sh db:3306 -- /app/start.sh"
     networks:
       - historia_net
@@ -35,7 +45,7 @@ services:
     container_name: historia_db
     restart: always
     environment:
-      MYSQL_ROOT_PASSWORD: root
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}
       MYSQL_DATABASE: hc_bfa
       TZ: America/Argentina/Buenos_Aires
     # wait_timeout/interactive_timeout bajos: si una conexion queda colgada (Sleep)

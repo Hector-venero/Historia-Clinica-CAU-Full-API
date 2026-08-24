@@ -1,8 +1,20 @@
-Flask
-Flask-Login
-mysql-connector-python
-reportlab
-Flask-Mail
-flask-cors
-Flask-Talisman
-requests
+# Versiones pineadas: sin pin, un rebuild de la imagen en otra fecha puede
+# traer una version distinta y cambiar el comportamiento en runtime. En
+# particular mysql-connector-python, del que depende el manejo de
+# multi-statements en migrate.py.
+Flask==3.1.0
+Flask-Login==0.6.3
+Flask-Mail==0.10.0
+flask-cors==6.0.5
+Flask-Talisman==1.1.0
+mysql-connector-python==9.2.0
+reportlab==4.4.0
+requests==2.32.3
+
+# Usada por usuarios_routes.py y pacientes_routes.py (from PIL import Image).
+# Estaba disponible solo por arrastre de reportlab: si reportlab dejaba de
+# depender de ella, la subida de fotos y el PDF con adjuntos se rompian.
+Pillow==11.2.1
+
+# Tests
+pytest==9.1.1
