@@ -163,31 +163,86 @@ def api_turnos():
                     fecha_legible = fecha_dt.strftime("%d/%m/%Y")
                     hora_legible = fecha_dt.strftime("%H:%M")
 
+                    # Generar fechas en formato UTC para el iCalendar
+                    fecha_fin_dt = datetime.fromisoformat(fecha_fin).replace(tzinfo=TZ_ARG)
+                    gcal_start = fecha_dt.astimezone(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+                    gcal_end = fecha_fin_dt.astimezone(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+
+                    # Generar archivo de invitación .ics (iCalendar)
+                    dtstamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+                    ics_content = f"""BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//CAU UNSAM//Historia Clinica//ES
+CALSCALE:GREGORIAN
+METHOD:REQUEST
+BEGIN:VEVENT
+DTSTAMP:{dtstamp}
+UID:turno-{paciente_id}-{fecha_dt.strftime("%Y%m%d%H%M")}@cau.unsam.edu.ar
+DTSTART:{gcal_start}
+DTEND:{gcal_end}
+SUMMARY:Turno Médico - Dr/Dra. {profesional['nombre']}
+DESCRIPTION:Motivo: {motivo if motivo else 'Consulta general'}\\nPor favor asista con 10 minutos de anticipación y su DNI.
+LOCATION:Campus Miguelete - UNSAM
+STATUS:CONFIRMED
+ORGANIZER;CN=CAU UNSAM:mailto:no-reply@unsam.edu.ar
+ATTENDEE;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE;CN={paciente['nombre']} {paciente['apellido']}:mailto:{paciente['email']}
+END:VEVENT
+END:VCALENDAR""".replace('\n', '\r\n')
+
+                    # Fallback en texto plano (por si el cliente de correo no soporta HTML)
+                    msg_body = f"Estimado/a {paciente['nombre']} {paciente['apellido']},\n\nLe confirmamos que su turno ha sido agendado correctamente.\n\nDETALLES:\nProfesional: {profesional['nombre']}\nFecha: {fecha_legible}\nHora: {hora_legible} hs\nMotivo: {motivo if motivo else 'Consulta general'}\n\nSaludos,\nEquipo CAU UNSAM"
+                    
+                    # Plantilla HTML estética
+                    msg_html = f"""
+                    <div style="background-color: #f4f6f8; padding: 30px 15px; font-family: Arial, sans-serif;">
+                        <table align="center" border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 600px; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 10px;">
+                            <tr>
+                                <td style="padding: 30px;">
+                                    <h2 style="color: #2563eb; text-align: center; margin-top: 0; margin-bottom: 15px;">Confirmación de Turno Médico</h2>
+                                    <p style="font-size: 16px; color: #333333;">Estimado/a <strong>{paciente['nombre']} {paciente['apellido']}</strong>,</p>
+                                    <p style="font-size: 16px; color: #333333;">Le confirmamos que su turno ha sido agendado correctamente en el <strong>Centro Asistencial Universitario</strong>.</p>
+                                    
+                                    <div style="background-color: #f8fafc; padding: 20px; border-radius: 8px; margin: 25px 0; border-left: 5px solid #2563eb;">
+                                        <h3 style="margin-top: 0; color: #1e40af; font-size: 18px;">📋 Detalles del Turno</h3>
+                                        <ul style="list-style: none; padding: 0; margin: 0; line-height: 1.8; font-size: 16px; color: #333333;">
+                                            <li>👨‍⚕️ <strong>Profesional:</strong> {profesional['nombre']}</li>
+                                            <li>📅 <strong>Fecha:</strong> {fecha_legible}</li>
+                                            <li>🕒 <strong>Hora:</strong> {hora_legible} hs</li>
+                                            <li>💬 <strong>Motivo:</strong> {motivo if motivo else 'Consulta general'}</li>
+                                        </ul>
+                                    </div>
+
+                                    <p style="font-size: 16px; line-height: 1.6; color: #333333;">
+                                    📍 <strong>UBICACIÓN:</strong> Campus Miguelete - UNSAM<br>
+                                    ⚠️ <strong>IMPORTANTE:</strong> Por favor, asista con 10 minutos de anticipación y su DNI.</p>
+
+                                    <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 30px 0;">
+                                    <p style="font-size: 14px; color: #64748b; line-height: 1.6; margin: 0;">
+                                        <strong>CONTACTO:</strong><br>
+                                        Ante cualquier consulta o para reprogramar, puede contactarnos:<br>
+                                        📱 WhatsApp: 11 3759-7667<br>
+                                        📞 Teléfono: 011 2033-1400 (Int. 6090)
+                                    </p>
+                                    <p style="font-size: 14px; color: #64748b; text-align: center; margin-top: 30px; margin-bottom: 0;">
+                                        Saludos cordiales,<br>
+                                        <strong>Equipo CAU UNSAM</strong>
+                                    </p>
+                                </td>
+                            </tr>
+                        </table>
+                    </div>
+                    """
+
                     msg = Message(
-                        subject="Confirmación de turno médico",
+                        subject=f"Confirmación de turno médico - Dr/Dra. {profesional['nombre']}",
                         recipients=[paciente["email"]],
-                        body=f"""Estimado {paciente['nombre']} {paciente['apellido']},
-
-Le confirmamos que su turno ha sido agendado correctamente en el Centro Asistencial Universitario.
-
-DETALLES DEL TURNO:
-👨‍⚕️ Profesional: {profesional['nombre']}
-📅 Fecha: {fecha_legible}
-🕒 Hora: {hora_legible} hs
-📋 Motivo: {motivo}
-
-📍 UBICACIÓN: Campus Miguelete - UNSAM
-⚠️ IMPORTANTE: Por favor, asista con 10 minutos de anticipación y su DNI.
-
-CONTACTO:
-Ante cualquier consulta o para reprogramar, puede contactarnos:
-💬 WhatsApp: 11 3759-7667
-📞 Teléfono: 011 2033-1400 (Int. 6090)
-
-Saludos cordiales,
-Equipo CAU UNSAM
-"""
+                        body=msg_body,
+                        html=msg_html
                     )
+                    
+                    # Adjuntar el archivo de calendario al correo
+                    msg.attach("invitacion_turno.ics", "text/calendar", ics_content.encode('utf-8'))
+                    
                     mail.send(msg)
                 except Exception as e:
                     print("⚠️ Error enviando mail:", e)
@@ -247,27 +302,48 @@ def eliminar_turno(id):
             fecha_legible = fecha_dt.strftime("%d/%m/%Y")
             hora_legible = fecha_dt.strftime("%H:%M")
 
+            msg_body = f"Estimado/a {paciente['nombre']} {paciente['apellido']},\n\nLe informamos que su turno ha sido CANCELADO.\n\nDATOS DEL TURNO CANCELADO:\nProfesional: {turno['profesional']}\nFecha: {fecha_legible}\nHora: {hora_legible} hs\n\nSaludos,\nEquipo CAU UNSAM"
+
+            msg_html  = f"""
+            <div style="background-color: #f4f6f8; padding: 30px 15px; font-family: Arial, sans-serif;">
+                <table align="center" border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 600px; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 10px;">
+                    <tr>
+                        <td style="padding: 30px;">
+                            <h2 style="color: #dc2626; text-align: center; margin-top: 0; margin-bottom: 15px;">Cancelación de Turno Médico</h2>
+                            <p style="font-size: 16px; color: #333333;">Estimado/a <strong>{paciente['nombre']} {paciente['apellido']}</strong>,</p>
+                            <p style="font-size: 16px; color: #333333;">Le informamos que su turno ha sido <strong>CANCELADO</strong>.</p>
+                            
+                            <div style="background-color: #fef2f2; padding: 20px; border-radius: 8px; margin: 25px 0; border-left: 5px solid #dc2626;">
+                                <h3 style="margin-top: 0; color: #991b1b; font-size: 18px;">❌ Datos del turno cancelado</h3>
+                                <ul style="list-style: none; padding: 0; margin: 0; line-height: 1.8; font-size: 16px; color: #333333;">
+                                    <li>👨‍⚕️ <strong>Profesional:</strong> {turno['profesional']}</li>
+                                    <li>📅 <strong>Fecha:</strong> {fecha_legible}</li>
+                                    <li>🕒 <strong>Hora:</strong> {hora_legible} hs</li>
+                                </ul>
+                            </div>
+
+                            <p style="font-size: 16px; line-height: 1.6; color: #333333;">Si usted no solicitó esta cancelación o desea reprogramar un nuevo turno, por favor ingrese al sistema o comuníquese con nosotros.</p>
+
+                            <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 30px 0;">
+                            <p style="font-size: 14px; color: #64748b; line-height: 1.6; margin: 0;">
+                                <strong>CANALES DE ATENCIÓN:</strong><br>
+                                📱 WhatsApp: 11 3759-7667<br>
+                                📞 Teléfono: 011 2033-1400 (Int. 6090)
+                            </p>
+                            <p style="font-size: 14px; color: #64748b; text-align: center; margin-top: 30px; margin-bottom: 0;">
+                                Saludos cordiales,<br>
+                                <strong>Equipo CAU UNSAM</strong>
+                            </p>
+                        </td>
+                    </tr>
+                </table>
+            </div>
+            """
             msg = Message(
-                subject="Cancelación de turno médico",
+                subject=f"Cancelación de turno médico - Dr/Dra. {turno['profesional']}",
                 recipients=[paciente["email"]],
-                body=f"""Estimado {paciente['nombre']} {paciente['apellido']},
-
-Le informamos que su turno ha sido CANCELADO.
-
-DATOS DEL TURNO CANCELADO:
-👨‍⚕️ Profesional: {turno['profesional']}
-📅 Fecha: {fecha_legible}
-🕒 Hora: {hora_legible} hs
-
-Si usted no solicitó esta cancelación o desea reprogramar un nuevo turno, por favor ingrese al sistema o comuníquese con nosotros.
-
-CANALES DE ATENCIÓN:
-💬 WhatsApp: 11 3759-7667
-📞 Teléfono: 011 2033-1400 (Int. 6090)
-
-Saludos cordiales,
-Equipo CAU UNSAM
-"""
+                body=msg_body,
+                html=msg_html
             )
             mail.send(msg)
         except Exception as e:
