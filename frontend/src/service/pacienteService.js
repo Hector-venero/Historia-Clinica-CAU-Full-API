@@ -1,4 +1,4 @@
-import api from "@/api/axios";
+import api from '@/api/axios';
 
 const API_URL = 'http://localhost:5000/api'; // ✅ Tu Flask corre aquí
 
@@ -17,5 +17,5 @@ export default {
     },
     deletePaciente(id) {
         return api.delete(`/pacientes/${id}`, { withCredentials: true });
-    },
+    }
 };

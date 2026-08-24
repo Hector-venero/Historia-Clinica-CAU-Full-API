@@ -1,0 +1,8 @@
+# Assets de vendor minificados: expandirlos genera miles de lineas de ruido
+# y no aporta legibilidad (no los editamos a mano).
+src/assets/demo/flags/flags.css
+
+# Generados
+dist/
+node_modules/
+package-lock.json

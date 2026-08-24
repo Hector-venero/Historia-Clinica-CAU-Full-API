@@ -5,7 +5,7 @@
 :root,
 html.dark,
 .app-dark {
-  color-scheme: dark;
+    color-scheme: dark;
 }
 
 /* =============================
@@ -13,19 +13,19 @@ html.dark,
    ============================= */
 html.dark,
 .app-dark {
-  --p-surface-ground: #121212;
-  --p-surface-card: #1e1e1e;
-  --p-surface-hover: #232323;
-  --p-surface-border: #2a2a2a;
+    --p-surface-ground: #121212;
+    --p-surface-card: #1e1e1e;
+    --p-surface-hover: #232323;
+    --p-surface-border: #2a2a2a;
 
-  --p-text-color: #f5f5f5;
-  --p-text-color-secondary: #cccccc;
+    --p-text-color: #f5f5f5;
+    --p-text-color-secondary: #cccccc;
 
-  --p-input-bg: #2a2a2a;
-  --p-input-border: #3a3a3a;
+    --p-input-bg: #2a2a2a;
+    --p-input-border: #3a3a3a;
 
-  --p-primary-color: #00bfa5;
-  --p-primary-color-text: #000;
+    --p-primary-color: #00bfa5;
+    --p-primary-color-text: #000;
 }
 
 /* =============================
@@ -33,9 +33,11 @@ html.dark,
    ============================= */
 html.dark body,
 .app-dark body {
-  background-color: var(--p-surface-ground);
-  color: var(--p-text-color);
-  transition: background-color .25s ease, color .25s ease;
+    background-color: var(--p-surface-ground);
+    color: var(--p-text-color);
+    transition:
+        background-color 0.25s ease,
+        color 0.25s ease;
 }
 
 /* =============================
@@ -49,9 +51,9 @@ html.dark .p-dialog,
 .app-dark .p-card,
 .app-dark .p-panel,
 .app-dark .p-dialog {
-  background-color: var(--p-surface-card) !important;
-  color: var(--p-text-color) !important;
-  border-color: var(--p-surface-border) !important;
+    background-color: var(--p-surface-card) !important;
+    color: var(--p-text-color) !important;
+    border-color: var(--p-surface-border) !important;
 }
 
 /* ==========================================
@@ -59,17 +61,17 @@ html.dark .p-dialog,
    ========================================== */
 html.dark .bg-white,
 .app-dark .bg-white {
-  background-color: #1b1b1b !important;
-  color: #f5f5f5 !important;
+    background-color: #1b1b1b !important;
+    color: #f5f5f5 !important;
 }
 
 html.dark .bg-blue-50,
 html.dark .bg-blue-100,
 .app-dark .bg-blue-50,
 .app-dark .bg-blue-100 {
-  background-color: #1e1e1e !important;
-  color: #e0e0e0 !important;
-  border-color: #2a2a2a !important;
+    background-color: #1e1e1e !important;
+    color: #e0e0e0 !important;
+    border-color: #2a2a2a !important;
 }
 
 /* Header y cuerpo de tablas HTML (no PrimeVue) */
@@ -77,13 +79,13 @@ html.dark thead,
 html.dark tbody,
 .app-dark thead,
 .app-dark tbody {
-  background-color: #1c1c1c !important;
-  color: #f0f0f0 !important;
+    background-color: #1c1c1c !important;
+    color: #f0f0f0 !important;
 }
 
 html.dark tr:hover,
 .app-dark tr:hover {
-  background-color: #2a2a2a !important;
+    background-color: #2a2a2a !important;
 }
 
 /* =============================
@@ -91,26 +93,26 @@ html.dark tr:hover,
    ============================= */
 html.dark .p-datatable,
 .app-dark .p-datatable {
-  background-color: var(--p-surface-card) !important;
-  border: 1px solid var(--p-surface-border) !important;
+    background-color: var(--p-surface-card) !important;
+    border: 1px solid var(--p-surface-border) !important;
 }
 
 html.dark .p-datatable-thead > tr > th,
 .app-dark .p-datatable-thead > tr > th {
-  background-color: var(--p-surface-hover) !important;
-  color: var(--p-text-color-secondary) !important;
-  border-color: var(--p-surface-border) !important;
+    background-color: var(--p-surface-hover) !important;
+    color: var(--p-text-color-secondary) !important;
+    border-color: var(--p-surface-border) !important;
 }
 
 html.dark .p-datatable-tbody > tr > td,
 .app-dark .p-datatable-tbody > tr > td {
-  background-color: var(--p-surface-card) !important;
-  color: var(--p-text-color) !important;
+    background-color: var(--p-surface-card) !important;
+    color: var(--p-text-color) !important;
 }
 
 html.dark .p-datatable-tbody > tr:hover,
 .app-dark .p-datatable-tbody > tr:hover {
-  background-color: #333 !important;
+    background-color: #333 !important;
 }
 
 /* =============================
@@ -124,32 +126,32 @@ html.dark textarea,
 .app-dark input,
 .app-dark select,
 .app-dark textarea {
-  background-color: var(--p-input-bg) !important;
-  border-color: var(--p-input-border) !important;
-  color: var(--p-text-color) !important;
+    background-color: var(--p-input-bg) !important;
+    border-color: var(--p-input-border) !important;
+    color: var(--p-text-color) !important;
 }
 
 html.dark .p-dropdown,
 .app-dark .p-dropdown {
-  background-color: var(--p-input-bg) !important;
-  color: var(--p-text-color) !important;
-  border-color: var(--p-input-border) !important;
+    background-color: var(--p-input-bg) !important;
+    color: var(--p-text-color) !important;
+    border-color: var(--p-input-border) !important;
 }
 
 html.dark .p-dropdown-panel,
 .app-dark .p-dropdown-panel {
-  background-color: #1e1e1e !important;
-  border-color: #2a2a2a !important;
+    background-color: #1e1e1e !important;
+    border-color: #2a2a2a !important;
 }
 
 html.dark .p-dropdown-item,
 .app-dark .p-dropdown-item {
-  color: var(--p-text-color) !important;
+    color: var(--p-text-color) !important;
 }
 
 html.dark .p-dropdown-item:hover,
 .app-dark .p-dropdown-item:hover {
-  background-color: #333 !important;
+    background-color: #333 !important;
 }
 
 /* =============================
@@ -171,7 +173,7 @@ html.dark label,
 .app-dark p,
 .app-dark span,
 .app-dark label {
-  color: var(--p-text-color) !important;
+    color: var(--p-text-color) !important;
 }
 
 /* =============================
@@ -179,13 +181,13 @@ html.dark label,
    ============================= */
 html.dark .p-button,
 .app-dark .p-button {
-  background-color: var(--p-primary-color) !important;
-  color: var(--p-primary-color-text) !important;
+    background-color: var(--p-primary-color) !important;
+    color: var(--p-primary-color-text) !important;
 }
 
 html.dark .p-button:hover,
 .app-dark .p-button:hover {
-  filter: brightness(1.1) !important;
+    filter: brightness(1.1) !important;
 }
 
 /* =============================
@@ -197,14 +199,14 @@ html.dark .text-gray-500,
 .app-dark .text-gray-700,
 .app-dark .text-gray-600,
 .app-dark .text-gray-500 {
-  color: #dcdcdc !important;
+    color: #dcdcdc !important;
 }
 
 html.dark .border-gray-200,
 html.dark .border-gray-100,
 .app-dark .border-gray-200,
 .app-dark .border-gray-100 {
-  border-color: #3a3a3a !important;
+    border-color: #3a3a3a !important;
 }
 
 /* =============================
@@ -212,5 +214,8 @@ html.dark .border-gray-100,
    ============================= */
 html.dark *,
 .app-dark * {
-  transition: background-color .25s ease, color .25s ease, border-color .25s ease;
+    transition:
+        background-color 0.25s ease,
+        color 0.25s ease,
+        border-color 0.25s ease;
 }
