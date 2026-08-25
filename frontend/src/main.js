@@ -14,8 +14,9 @@ import Dialog from 'primevue/dialog';
 
 // Estilos
 import 'primeicons/primeicons.css';
+// theme-dark.css no se importa acá: ya entra desde styles.scss, y hacerlo en
+// los dos lados dejaba el mismo archivo dos veces en el grafo de dependencias.
 import '@/assets/styles.scss';
-import '@/assets/theme-dark.css';
 
 // 🧩 Importar el store del usuario
 import { useUserStore } from '@/stores/user';
