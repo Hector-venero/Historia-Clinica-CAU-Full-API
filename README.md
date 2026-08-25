@@ -1,9 +1,9 @@
 # 🏥 Historia Clínica CAU – Full API  
-**Flask + React + MySQL + Docker + Nginx + Blockchain Federal Argentina (BFA)**
+**Flask + Vue 3 + MySQL + Docker + Nginx + Blockchain Federal Argentina (BFA)**
 
 Sistema web para la gestión de **historias clínicas unificadas** y **agendas médicas**, desarrollado como **Trabajo Final de Ingeniería en Telecomunicaciones (UNSAM)**.
 
-La solución integra un backend API en Flask, un frontend en React (Vite) y persistencia en MySQL, incorporando **auditoría de integridad** mediante hashing y (opcionalmente) publicación/verificación en **BFA**.
+La solución integra un backend API en Flask, un frontend en Vue 3 (Vite + PrimeVue) y persistencia en MySQL, incorporando **auditoría de integridad** mediante hashing y (opcionalmente) publicación/verificación en **BFA**.
 
 ---
 
@@ -20,8 +20,9 @@ La solución integra un backend API en Flask, un frontend en React (Vite) y pers
 - **Seguridad**:
   - Autenticación con sesión (Flask-Login).
   - Roles con control de acceso (RBAC) tanto en backend (decoradores) como en frontend (guards).
-  - Contraseñas hasheadas (Scrypt/Werkzeug).
-  - CORS/CSP configurables (según tu setup).
+  - Contraseñas hasheadas con **bcrypt**.
+  - La sesión vive en una cookie HttpOnly; el rol **no** se guarda en `localStorage`.
+  - CORS/CSP configurables por entorno.
 
 ---
 
@@ -45,11 +46,13 @@ La solución integra un backend API en Flask, un frontend en React (Vite) y pers
 
 ```mermaid
 graph TD
-  Client[Frontend React/Vite] -->|HTTP| Nginx[Nginx Reverse Proxy]
-  Nginx -->|/api| Flask[Backend Flask API]
-  Flask --> DB[(MySQL)]
-  Flask -->|Opcional| TSA[BFA TSA API]
-  Flask -->|Opcional| SMTP[SMTP (recuperación contraseña)]
+  Client["Frontend Vue 3 / Vite"] -->|HTTP| Nginx["Nginx Reverse Proxy"]
+  Nginx -->|/api| Flask["Backend Flask API"]
+  Nginx -->|/uploads| Files["Adjuntos (volumen)"]
+  Flask --> DB[("MySQL")]
+  Flask -->|Opcional| TSA["BFA TSA API"]
+  Flask -->|Opcional| QBI["QBI2 (recetas)"]
+  Flask -->|Opcional| SMTP["SMTP (recuperación y avisos)"]
 ```
 
 ---
@@ -59,15 +62,19 @@ graph TD
 ```bash
 historia_clinica_bfa/
 ├── backend_flask/
-│   └── app/
-│       ├── routes/              # Endpoints (auth, turnos, grupos, etc.)
-│       ├── utils/               # Decoradores permisos, hashing, helpers
-│       ├── services/            # Servicios (BFA / lógica)
-│       ├── main.py              # Entry Flask
-│       └── Dockerfile
-├── frontend/                    # React + Vite
+│   ├── app/
+│   │   ├── routes/              # Endpoints (auth, turnos, grupos, recetas, etc.)
+│   │   ├── utils/               # Permisos, hashing, clientes BFA/QBI, correo
+│   │   ├── __init__.py          # App factory (registra los blueprints)
+│   │   ├── migrate.py           # Runner de migraciones (corre al arrancar)
+│   │   └── Dockerfile
+│   └── tests/                   # pytest — no necesita MySQL
+├── frontend/                    # Vue 3 + Vite + PrimeVue
 ├── nginx/                       # Reverse proxy
-├── db/init.sql                  # Esquema MySQL
+├── scripts/                     # Utilidades (comparar_esquemas.sh)
+├── db/
+│   ├── init.sql                 # Esquema inicial (solo en base vacía)
+│   └── migrations/              # Cambios de esquema posteriores
 └── docker-compose.yml
 ```
 
@@ -140,16 +147,18 @@ En esta rama se realizó una migración completa para dejar de depender de un no
 
 **Resumen de los cambios y bugs solucionados:**
 - **Infraestructura:** Se eliminó el contenedor `bfa-node` del `docker-compose.yml` y la librería `web3` de Python, aligerando drásticamente el consumo de RAM/CPU de la aplicación.
-- **Backend:** Se reescribió `bfa_client.py` usando `requests` contra `tsaapi.bfa.ar`. Se agregó lógica de reintentos (backoff) para tolerar la asincronía de la TSA y solucionar el bug de "falsos inválidos" al verificar justo después de registrar.
+- **Backend:** Se reescribió `bfa_client.py` usando `requests` contra `tsaapi.bfa.ar`. El cliente devuelve la respuesta cruda **sin reintentar**: la TSA agrupa los hashes en lotes, así que entre el sellado y su confirmación responde `pending`, y eso **no** es una adulteración. Distinguir `pending` de `failure` es responsabilidad de quien llama.
 - **Corrección de Hash:** Se arregló un bug donde el hash sellado difería del guardado en BD debido a un `.strip()`. Ahora se sella de forma exacta el `hash_local` de la BD.
 - **Base de Datos:** Se ejecutó un `ALTER TABLE` para ampliar las columnas `tx_hash` y `hash_bfa` a `VARCHAR(512)`, soportando así los recibos extensos en formato Base64 que devuelve la TSA.
 - **Frontend:** Se mejoró la tarjeta de auditoría clínica. El recibo TSA (`permanent_rd`) ahora se decodifica en el backend para mostrarle al usuario el **número de bloque exacto** y la **fecha/hora de sellado real** en la red.
 
 **Flujo de Auditoría Actualizado:**
 
-1. El sistema genera un **hash SHA-256** del contenido clínico consolidado y lo guarda localmente.
-2. El hash se envía mediante la API a la TSA de BFA (`tsaapi.bfa.ar/api/tsa/stamp/`), obteniendo un recibo temporal (`rd`) que se guarda en la base de datos (`tx_hash`).
-3. Para verificar, el sistema consulta la TSA con el recibo. Si la historia no fue alterada, BFA confirma la inclusión del hash en la blockchain validando su inmutabilidad.
+1. El sistema genera un **hash SHA-256** del contenido clínico consolidado y lo guarda localmente. El *payload* del hash está **versionado**: la forma del JSON es parte del algoritmo, así que agregar un campo cambiaría el hash de todas las historias y las ya ancladas dejarían de verificar. Cada historia registra con qué versión se calculó.
+2. El hash se envía a la TSA de BFA (`tsaapi.bfa.ar/api/tsa/stamp/`), que devuelve un recibo. Cada sellado inserta una fila en **`anclajes_blockchain`**, que es **append-only**: la historia consolidada se recalcula con cada evolución nueva, así que un único puntero quedaría apuntando a un hash inexistente.
+3. Para verificar, el sistema consulta la TSA con el recibo **de ese anclaje**, no con el estado actual. El resultado tiene **tres estados, no dos**: `success` y `failure` son veredictos y se auditan; `pending` significa que el lote todavía no cerró y no concluye nada.
+
+También puede anclarse una **evolución individual**, con su propio hash y su propio recibo, para probar la integridad de un acto médico puntual sin depender del estado de la historia completa.
 
 ---
 

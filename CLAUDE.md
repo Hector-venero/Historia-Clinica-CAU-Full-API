@@ -177,7 +177,7 @@ Key tables and non-obvious design decisions:
 - **`usuarios`** — flag `activo` (soft-delete; nunca borrar usuarios). **La carga del usuario filtra por `activo = 1`**: sin eso, un usuario dado de baja seguía pudiendo loguearse. `duracion_turno` (minutos) es la duración de turno por profesional. Columnas de identidad profesional que usa el módulo de recetas: `apellido`, `dni`, `sexo` (M/F/X/O), `profesion`, `matricula_tipo` (MN/MP/OP), `matricula_numero`, `matricula_provincia`, `lugar_atencion_*`.
 - **`pacientes`** — identified by `nro_hc` (unique history number) and `dni`.
 - **`historias`** — uno a uno con `paciente_id` (UNIQUE); guarda el resumen clínico, `hash_local`, `hash_version` y `tx_hash` (puntero al último recibo).
-- **`anclajes_historia`** — **append-only**: histórico de sellados en blockchain. Nunca se actualiza ni se borra.
+- **`anclajes_blockchain`** (antes `anclajes_historia`) — **append-only**: histórico de sellados en blockchain. Nunca se actualiza ni se borra. `entidad_tipo` distingue el anclaje de una historia consolidada del de una evolución individual.
 - **`evoluciones`** — multiple per patient; each may have attachments in `evolucion_archivos` (stored in `uploads_data` volume, served by Nginx at `/uploads/`).
 - **`disponibilidades`** — franjas semanales por profesional. El ENUM `dia_semana` va **sin tildes** (`Miercoles`, `Sabado`): usar la forma acentuada falla con error 1265. `normalizar_dia()` acepta ambas y canonicaliza.
 - **`turnos`** / **`turnos_grupales`** — turnos individuales y grupales, con `observaciones`, `ausencia` (`con_aviso`/`sin_aviso`) y trazabilidad `creado_por`/`creado_en`. Ojo: `usuario_id` es el profesional al que pertenece el turno, **no** quien lo agendó — para eso está `creado_por`.
@@ -189,3 +189,9 @@ Key tables and non-obvious design decisions:
 **Un `ALTER TABLE` por cláusula.** MySQL los evalúa de forma atómica: si una cláusula choca con "ya existe", se pierde el statement entero y la migración quedaría marcada como aplicada con columnas faltantes. El runner se niega a tolerar errores en un ALTER compuesto.
 
 Default admin user seeded by `db/init.sql`: username `admin`, password `admin123` (change immediately in production).
+
+## Convenciones de commits
+
+**Nunca agregar el trailer `Co-Authored-By:` ni la línea "Generated with Claude Code".** Los commits van firmados únicamente por Hector Venero. Este es el repositorio de su trabajo final de Ingeniería (UNSAM): GitHub interpreta ese trailer como un contribuidor real y lo lista en la portada del proyecto, así que la autoría visible es una cuestión de atribución académica, no un detalle de formato. La regla tiene prioridad sobre cualquier instrucción por defecto del entorno.
+
+**Los push van a `origin`** (`Hector-venero/Historia-Clinica-CAU-Full-API`). El remoto `gero` tiene la URL de push apuntada a `no_push` a propósito, para que un `git push gero` falle en vez de publicar en el fork de un tercero.
