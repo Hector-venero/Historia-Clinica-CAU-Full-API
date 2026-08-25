@@ -1,26 +1,32 @@
+<script setup>
+import authService from '@/service/authService';
+import { onMounted } from 'vue';
+import { useRouter } from 'vue-router';
+import { useUserStore } from '@/stores/user';
+
+const router = useRouter();
+const userStore = useUserStore();
+
+onMounted(async () => {
+    // Marcar la salida antes de nada: si no, el guard ve que el store todavía
+    // tiene usuario y rebota de vuelta al dashboard.
+    userStore.startLogout();
+    try {
+        await authService.logout();
+    } catch (error) {
+        // Aunque falle el backend, la sesión local se cierra igual.
+        console.error(error);
+    } finally {
+        userStore.logout();
+        router.replace('/auth/login?logged_out=1');
+    }
+});
+</script>
+
 <template>
     <div class="flex items-center justify-center min-h-screen">
         <p class="text-gray-700">Cerrando sesión...</p>
     </div>
 </template>
-
-<script setup>
-import authService from '@/service/authService';
-import { onMounted } from 'vue';
-import { useRouter } from 'vue-router';
-
-const router = useRouter();
-
-onMounted(async () => {
-    try {
-        await authService.logout();
-        localStorage.removeItem('loggedIn');
-        router.push('/auth/login');
-    } catch (error) {
-        console.error(error);
-        router.push('/auth/login');
-    }
-});
-</script>
 
 <style scoped></style>

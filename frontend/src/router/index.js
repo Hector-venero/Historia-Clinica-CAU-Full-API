@@ -1,5 +1,6 @@
 import AppLayout from '@/layout/AppLayout.vue';
 import { createRouter, createWebHistory } from 'vue-router';
+import { useUserStore } from '@/stores/user';
 
 const router = createRouter({
     history: createWebHistory(),
@@ -188,32 +189,51 @@ const router = createRouter({
 });
 
 // 🛡️ Guard global para proteger rutas
-router.beforeEach((to, from, next) => {
+// 🛡️ Guard global.
+//
+// La sesión se valida contra el backend, no contra localStorage. El rol sale de
+// /api/usuarios/me, que responde en función de la cookie HttpOnly: ya no se
+// puede escalar privilegios editando localStorage desde las devtools.
+//
+// Es async: en un reload sin store cargado hay que esperar la respuesta del
+// backend antes de decidir. Ese pedido se hace una sola vez por sesión, porque
+// después el store ya tiene el usuario.
+router.beforeEach(async (to) => {
     const publicPages = ['/auth/login', '/recuperar', '/logout'];
     const isResetRoute = to.path.startsWith('/reset/');
     const authRequired = !publicPages.includes(to.path) && !isResetRoute;
-    const loggedIn = localStorage.getItem('loggedIn');
+    const userStore = useUserStore();
+    const needsUser = authRequired || Boolean(to.meta.roles);
 
-    // 1. Si requiere auth y no está logueado -> Login
-    if (authRequired && !loggedIn) {
-        return next('/auth/login');
-    }
-
-    // 2. Validación de ROLES
-    if (loggedIn && to.meta.roles) {
-        // Obtenemos el rol del localStorage (guardado por userStore)
-        const userData = JSON.parse(localStorage.getItem('user') || '{}');
-        const userRole = userData.rol || '';
-
-        // Si el rol del usuario NO está en la lista permitida de la ruta
-        if (!to.meta.roles.includes(userRole)) {
-            // Redirigir al inicio o mostrar alerta (opcional)
-            console.warn(`⛔ Acceso denegado a ${to.path}. Rol actual: ${userRole}`);
-            return next('/');
+    if (needsUser && !userStore.id) {
+        try {
+            await userStore.fetchUser();
+        } catch {
+            // Sin sesión válida: si la ruta la exigía, a login.
+            if (authRequired) return '/auth/login';
         }
     }
 
-    next();
+    if (authRequired && !userStore.id) {
+        return '/auth/login';
+    }
+
+    // Ya logueado y yendo a login: al inicio. Salvo que se esté cerrando sesión,
+    // en cuyo caso rebotarlo al dashboard impediría salir.
+    const forcedLogout = String(to.query.logged_out || '') === '1' || userStore.loggingOut;
+    if (to.path === '/auth/login' && userStore.id && !forcedLogout) {
+        return '/';
+    }
+
+    if (to.meta.roles) {
+        const userRole = (userStore.rol || '').toLowerCase().trim();
+        if (!to.meta.roles.includes(userRole)) {
+            console.warn(`⛔ Acceso denegado a ${to.path}. Rol actual: ${userRole}`);
+            return '/';
+        }
+    }
+
+    return true;
 });
 
 export default router;

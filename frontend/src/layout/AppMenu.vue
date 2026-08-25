@@ -11,13 +11,16 @@ const { clearUser } = useSession();
 const userStore = useUserStore(); // 3. Instanciar el store
 
 async function handleLogout() {
+    // Marcar la salida antes del pedido: sin esto el guard ve que el store
+    // todavía tiene usuario y rebota de vuelta al dashboard.
+    userStore.startLogout();
     try {
         await authService.logout();
     } catch (e) {
         console.error('Error cerrando sesión:', e);
     } finally {
         clearUser();
-        router.push('/auth/login');
+        router.replace('/auth/login?logged_out=1');
     }
 }
 

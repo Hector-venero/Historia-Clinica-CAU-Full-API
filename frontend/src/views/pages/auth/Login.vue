@@ -25,14 +25,12 @@ const login = async () => {
             { withCredentials: true }
         );
 
-        // 2. 👇 IMPORTANTE: Obtenemos los datos del usuario (rol, nombre, id)
-        // Esto disparará 'setUser' en el store, que a su vez guardará el JSON en localStorage
+        // 2. Cargamos el usuario desde el backend (rol, nombre, id).
+        // No se guarda nada en localStorage: la sesión vive en la cookie
+        // HttpOnly y el store se rehidrata pidiendo /api/usuarios/me.
         await userStore.fetchUser();
 
-        // 3. Marca de logueado simple
-        localStorage.setItem('loggedIn', 'true');
-
-        // 4. Redirigir
+        // 3. Redirigir
         router.push('/');
     } catch (error) {
         console.error('Error al iniciar sesión:', error);
