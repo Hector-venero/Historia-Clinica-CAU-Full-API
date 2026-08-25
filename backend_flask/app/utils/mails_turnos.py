@@ -14,6 +14,8 @@ from datetime import datetime, timedelta, timezone
 from flask import current_app
 from flask_mail import Message
 
+from app.utils.correo import enviar_en_segundo_plano
+
 TZ_ARG = timezone(timedelta(hours=-3))
 
 # Datos de contacto que van al pie del mail.
@@ -159,7 +161,7 @@ def enviar_confirmacion(paciente, profesional, inicio, fin, motivo=None):
             "text/calendar",
             construir_ics(paciente, profesional, inicio, fin, motivo).encode("utf-8"),
         )
-        current_app.extensions["mail"].send(mensaje)
+        enviar_en_segundo_plano(mensaje)
         return True
     except Exception:
         current_app.logger.exception("No se pudo enviar el mail de confirmación del turno")
@@ -204,7 +206,7 @@ def enviar_cancelacion(paciente, profesional_nombre, inicio):
             {_PIE_CONTACTO}
         """)
 
-        current_app.extensions["mail"].send(
+        enviar_en_segundo_plano(
             Message(
                 subject=f"Cancelación de turno médico - Dr/Dra. {profesional_nombre}",
                 recipients=[email],

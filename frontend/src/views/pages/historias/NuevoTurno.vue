@@ -74,9 +74,21 @@
             <p v-if="mensaje" class="mt-6 text-green-600 font-semibold text-center">
                 {{ mensaje }}
             </p>
+            <!-- El backend puede correr el turno al siguiente slot libre.
+                 Se avisa para que no se le confirme al paciente un horario distinto. -->
+            <div v-if="avisoAjuste" class="mt-4 p-3 rounded-lg bg-amber-50 border border-amber-300 text-amber-800 text-sm text-center"><i class="pi pi-clock mr-1"></i> {{ avisoAjuste }}</div>
             <p v-if="error" class="mt-6 text-red-600 font-semibold text-center">
                 {{ error }}
             </p>
+            <!-- Alternativas del mismo día, para no tener que probar a ciegas -->
+            <div v-if="horariosSugeridos.length" class="mt-3 text-center">
+                <p class="text-sm text-gray-600 mb-2">Horarios disponibles ese día:</p>
+                <div class="flex flex-wrap gap-2 justify-center">
+                    <button v-for="h in horariosSugeridos" :key="h" type="button" class="px-3 py-1 rounded-lg border border-blue-300 bg-blue-50 text-blue-700 text-sm hover:bg-blue-100 transition" @click="usarHorario(h)">
+                        {{ soloHora(h) }}
+                    </button>
+                </div>
+            </div>
         </div>
     </div>
 </template>
@@ -84,6 +96,7 @@
 <script setup>
 import { ref, onMounted } from 'vue';
 import { useUserStore } from '@/stores/user';
+import api from '@/api/axios';
 import DatePicker from 'primevue/datepicker';
 import Button from 'primevue/button';
 
@@ -97,6 +110,10 @@ const fecha = ref(null); // 👈 ahora es Date
 const motivo = ref('');
 const mensaje = ref('');
 const error = ref('');
+// Aviso cuando el backend movió el turno al siguiente slot disponible.
+const avisoAjuste = ref('');
+// Horarios que el backend ofrece cuando el pedido está ocupado.
+const horariosSugeridos = ref([]);
 const profesionales = ref([]);
 
 // 🔹 Campos nuevos para tanda
@@ -165,9 +182,23 @@ function calcularFin(fechaInicio, minutos) {
     return formatearFechaBackend(d);
 }
 
+/**
+ * Arma el aviso cuando el backend movió el turno de horario.
+ * Devuelve '' si no hubo ajuste.
+ */
+function describirAjuste(ajuste) {
+    if (!ajuste?.aplicado) return '';
+
+    const hora = (iso) => new Date(iso).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
+
+    return `El horario se ajustó de ${hora(ajuste.inicio_original)} a ${hora(ajuste.inicio_ajustado)} para que coincida con la agenda del profesional. Confirmá este horario con el paciente.`;
+}
+
 async function crearTurno() {
     mensaje.value = '';
     error.value = '';
+    avisoAjuste.value = '';
+    horariosSugeridos.value = [];
 
     if (!pacienteId.value) {
         error.value = 'Debe seleccionar un paciente';
@@ -179,7 +210,8 @@ async function crearTurno() {
         return;
     }
 
-    const endpoint = esTanda.value ? '/api/turnos/tanda' : '/api/turnos';
+    // Rutas relativas a la instancia `api`, que ya resuelve el prefijo /api.
+    const endpoint = esTanda.value ? '/turnos/tanda' : '/turnos';
     const duracion = userStore.duracion_turno || 30;
     const fechaInicioStr = formatearFechaBackend(fecha.value);
     const fechaFinStr = calcularFin(fecha.value, duracion);
@@ -199,20 +231,16 @@ async function crearTurno() {
     }
 
     try {
-        const resp = await fetch(endpoint, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'include',
-            body: JSON.stringify(payload)
-        });
+        // Se usa la instancia `api` y no fetch crudo: así pasa por el
+        // interceptor de 401 y por la resolución de baseURL como el resto.
+        const { data } = await api.post(endpoint, payload);
 
-        if (!resp.ok) {
-            const err = await resp.json().catch(() => ({}));
-            throw new Error(err.error || 'Error al crear turno');
-        }
-
-        const data = await resp.json();
         mensaje.value = data.message || 'Turno creado correctamente ✅';
+
+        // El backend alinea el turno al siguiente slot libre. Si lo movió, hay
+        // que decirlo: sin este aviso se le informa al paciente un horario y el
+        // sistema guarda otro.
+        avisoAjuste.value = describirAjuste(data.ajuste_horario);
 
         // Resetear formulario
         pacienteId.value = '';
@@ -224,8 +252,23 @@ async function crearTurno() {
         esTanda.value = false;
         diasSeleccionados.value = [];
     } catch (e) {
-        error.value = e.message;
+        const datos = e.response?.data || {};
+        error.value = datos.error || e.message || 'Error al crear turno';
+        // El backend sugiere horarios libres del mismo día cuando el pedido
+        // está ocupado; así se le puede ofrecer una alternativa al paciente.
+        horariosSugeridos.value = datos.horarios_disponibles || [];
     }
+}
+
+/** Toma un horario sugerido y lo carga en el formulario. */
+function usarHorario(iso) {
+    fecha.value = new Date(iso);
+    error.value = '';
+    horariosSugeridos.value = [];
+}
+
+function soloHora(iso) {
+    return new Date(iso).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
 }
 </script>
 

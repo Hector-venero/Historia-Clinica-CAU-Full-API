@@ -3,7 +3,7 @@ import math
 
 from flask import Blueprint, jsonify, request
 from flask_login import current_user, login_required
-from app.database import get_connection
+from app.database import get_connection, db_cursor
 from app.utils.permisos import requiere_rol
 from app.utils.mails_turnos import enviar_cancelacion, enviar_confirmacion
 
@@ -336,6 +336,94 @@ def medico_disponible(usuario_id, fecha_inicio, fecha_fin, turno_excluir_id=None
     return bool(disponible) and not ausente and not ocupado
 
 
+DIAS_EN_A_ES = {
+    "Monday": "Lunes",
+    "Tuesday": "Martes",
+    "Wednesday": "Miercoles",
+    "Thursday": "Jueves",
+    "Friday": "Viernes",
+    "Saturday": "Sabado",
+    "Sunday": "Domingo",
+}
+
+
+def proximos_slots_libres(usuario_id, desde_dt, cantidad=3):
+    """Devuelve los proximos horarios libres del profesional ese mismo dia.
+
+    Rechazar un turno con "el profesional no esta disponible" y nada mas obliga a
+    quien agenda a ir probando horarios a ciegas. Con la lista puede ofrecerle
+    una alternativa al paciente en el momento.
+
+    Solo mira el dia pedido: si no hay lugar, la respuesta vacia ya dice que hay
+    que probar otro dia.
+    """
+    duracion = _obtener_duracion_turno(usuario_id) or 30
+    dia_es = DIAS_EN_A_ES.get(desde_dt.strftime("%A"))
+    if not dia_es:
+        return []
+
+    inicio_dia = desde_dt.replace(hour=0, minute=0, second=0, microsecond=0)
+    fin_dia = inicio_dia + timedelta(days=1)
+
+    with db_cursor() as (_conn, cursor):
+        cursor.execute(
+            """
+            SELECT hora_inicio, hora_fin FROM disponibilidades
+            WHERE usuario_id = %s AND dia_semana = %s AND activo = 1
+            ORDER BY hora_inicio
+            """,
+            (usuario_id, dia_es),
+        )
+        franjas = cursor.fetchall()
+        if not franjas:
+            return []
+
+        cursor.execute(
+            """
+            SELECT fecha_inicio, fecha_fin FROM turnos
+            WHERE usuario_id = %s AND fecha_inicio >= %s AND fecha_inicio < %s
+            """,
+            (usuario_id, inicio_dia, fin_dia),
+        )
+        ocupados = [(t["fecha_inicio"], t["fecha_fin"]) for t in cursor.fetchall()]
+
+        cursor.execute(
+            """
+            SELECT 1 FROM ausencias
+            WHERE usuario_id = %s AND fecha_inicio < %s AND fecha_fin > %s
+            LIMIT 1
+            """,
+            (usuario_id, fin_dia, inicio_dia),
+        )
+        if cursor.fetchone():
+            return []  # ausencia todo el dia: no tiene sentido sugerir horarios
+
+    def _a_datetime(valor):
+        """hora_inicio/hora_fin vienen como timedelta desde MySQL."""
+        if isinstance(valor, timedelta):
+            return inicio_dia + valor
+        return inicio_dia.replace(hour=valor.hour, minute=valor.minute, second=0)
+
+    libres = []
+    for franja in franjas:
+        cursor_dt = max(_a_datetime(franja["hora_inicio"]), desde_dt)
+        limite = _a_datetime(franja["hora_fin"])
+        # Alinear al slot para no proponer horarios que el backend movería igual.
+        cursor_dt = _ceil_to_slot(cursor_dt, duracion)
+
+        while cursor_dt + timedelta(minutes=duracion) <= limite and len(libres) < cantidad:
+            fin_slot = cursor_dt + timedelta(minutes=duracion)
+            solapa = any(ini < fin_slot and fin > cursor_dt for ini, fin in ocupados)
+            if not solapa:
+                libres.append(_to_iso_arg(cursor_dt))
+            cursor_dt = fin_slot
+
+        if len(libres) >= cantidad:
+            break
+
+    return libres
+
+
 @bp_turnos.route("/api/agenda/sujetos", methods=["GET"])
 @login_required
 def agenda_sujetos():
@@ -457,7 +545,14 @@ def api_turnos():
             fecha_fin,
             permitir_solape=current_user.rol in ["administrativo", "area"],
         ):
-            return jsonify({"error": "El profesional no esta disponible en esa fecha u horario"}), 400
+            libres = proximos_slots_libres(usuario_id, fecha_inicio_dt)
+            respuesta = {"error": "El profesional no está disponible en ese horario"}
+            if libres:
+                respuesta["horarios_disponibles"] = libres
+                respuesta["error"] += ". Hay lugar más tarde ese mismo día."
+            else:
+                respuesta["error"] += ". No quedan horarios libres ese día."
+            return jsonify(respuesta), 400
 
         cursor.execute(
             """
@@ -570,7 +665,14 @@ def editar_turno(id):
             turno_excluir_id=id,
             permitir_solape=current_user.rol in ["administrativo", "area"],
         ):
-            return jsonify({"error": "El profesional no esta disponible en esa fecha u horario"}), 400
+            libres = proximos_slots_libres(turno["usuario_id"], inicio_dt)
+            respuesta = {"error": "El profesional no está disponible en ese horario"}
+            if libres:
+                respuesta["horarios_disponibles"] = libres
+                respuesta["error"] += ". Hay lugar más tarde ese mismo día."
+            else:
+                respuesta["error"] += ". No quedan horarios libres ese día."
+            return jsonify(respuesta), 400
 
         cursor.execute(
             """

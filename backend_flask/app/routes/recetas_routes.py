@@ -25,6 +25,7 @@ from flask_mail import Message
 
 from app.database import db_cursor
 from app.utils import qbi_client
+from app.utils.correo import enviar_en_segundo_plano
 from app.utils.permisos import requiere_rol
 from app.utils.validacion import validar_email
 
@@ -327,7 +328,7 @@ def _enviar_email_receta(email, nombre_paciente, link_pdf, detalle):
       Este mensaje fue generado automáticamente. No responda a este correo.
     </p>
     """
-    current_app.extensions["mail"].send(
+    enviar_en_segundo_plano(
         Message(subject="Tu Receta Médica Electrónica", recipients=[email], html=html)
     )
 
