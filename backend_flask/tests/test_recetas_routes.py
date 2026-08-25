@@ -451,3 +451,41 @@ def test_sin_email_no_intenta_mandar(client, monkeypatch, configurado, sin_smtp)
     )
 
     assert sin_smtp == []
+
+
+# --------------------------------------------------------- datos del paciente
+
+
+def test_sin_domicilio_del_paciente_avisa_antes_de_llamar_al_proveedor(client, monkeypatch, configurado):
+    """El proveedor rechaza con QBI240 'debe ingresar calle y numero', que no
+    dice de quien es el domicilio ni donde se carga."""
+    _login(client)
+    sin_direccion = dict(PACIENTE)
+    sin_direccion.pop("direccion")
+    _db(monkeypatch, filas=[sin_direccion, USUARIO])
+
+    respuesta, enviados = _emitir(
+        client,
+        monkeypatch,
+        {"paciente_id": 4, "medicamentos": [{"regNo": "R1", "cantidad": 1}]},
+    )
+
+    assert respuesta.status_code == 400
+    assert "domicilio del paciente" in respuesta.get_json()["error"]
+    assert enviados == []
+
+
+def test_sin_dni_del_paciente_tambien_avisa(client, monkeypatch, configurado):
+    _login(client)
+    sin_dni = dict(PACIENTE, dni=None)
+    _db(monkeypatch, filas=[sin_dni, USUARIO])
+
+    respuesta, enviados = _emitir(
+        client,
+        monkeypatch,
+        {"paciente_id": 4, "medicamentos": [{"regNo": "R1", "cantidad": 1}]},
+    )
+
+    assert respuesta.status_code == 400
+    assert "DNI del paciente" in respuesta.get_json()["error"]
+    assert enviados == []

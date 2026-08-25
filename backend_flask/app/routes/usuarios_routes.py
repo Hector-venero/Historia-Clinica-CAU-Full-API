@@ -14,6 +14,81 @@ bp_usuarios = Blueprint("usuarios", __name__)
 # ✅ AGREGADO "area"
 ROLES_VALIDOS = {"director", "profesional", "administrativo", "area"}
 
+# Roles que firman recetas. `especialidad` solo tiene sentido para ellos, y son
+# los que necesitan matricula y lugar de atencion cargados.
+ROLES_QUE_PRESCRIBEN = {"profesional", "director"}
+
+# Datos de identidad profesional. Sin ellos el modulo de recetas no puede
+# emitir: _validar_payload() en recetas_routes.py exige apellido, dni,
+# matricula_numero y lugar_atencion_direccion.
+#
+# `apellido` va incluido a proposito. Se deduce del nombre completo como
+# fallback, pero si el nombre es de una sola palabra no hay de donde sacarlo y
+# la receta queda bloqueada sin forma de arreglarla desde la app.
+PROFESSIONAL_FIELDS = (
+    "apellido",
+    "dni",
+    "sexo",
+    "telefono",
+    "matricula_tipo",
+    "matricula_numero",
+    "matricula_provincia",
+    "lugar_atencion_nombre",
+    "lugar_atencion_direccion",
+    "lugar_atencion_contacto",
+    "lugar_atencion_email",
+)
+
+# Valores admitidos por los ENUM de la tabla. Un valor fuera de la lista se
+# guarda como NULL en vez de reventar el INSERT con error 1265.
+SEXOS_VALIDOS = ("M", "F", "X", "O")
+TIPOS_MATRICULA = ("MN", "MP", "OP")
+
+
+def _professional_values(data):
+    """Normaliza los campos profesionales que vengan en `data`.
+
+    Sirve tanto para un dict JSON como para un `request.form` (multipart), que
+    es lo que manda la pantalla de perfil junto con la foto.
+    """
+    valores = {campo: (data.get(campo) or None) for campo in PROFESSIONAL_FIELDS}
+
+    if valores["sexo"] not in SEXOS_VALIDOS:
+        valores["sexo"] = None
+    if valores["matricula_tipo"] not in TIPOS_MATRICULA:
+        valores["matricula_tipo"] = None
+
+    return valores
+
+
+def _normalizar_especialidad(rol, especialidad):
+    """La especialidad solo se guarda para quienes prescriben."""
+    if (rol or "").lower() in ROLES_QUE_PRESCRIBEN and especialidad:
+        return especialidad.upper()
+    return None
+
+
+def _current_user_payload():
+    """Datos del usuario logueado, incluidos los profesionales.
+
+    Es lo que consume Mi Perfil para hidratar el formulario: sin los campos
+    profesionales, editarlos ahí sería imposible.
+    """
+    payload = {
+        "id": current_user.id,
+        "nombre": current_user.nombre,
+        "username": current_user.username,
+        "email": current_user.email,
+        "rol": current_user.rol,
+        "foto": getattr(current_user, "foto", None),
+        "duracion_turno": getattr(current_user, "duracion_turno", 20),
+        "especialidad": getattr(current_user, "especialidad", None),
+        "profesion": getattr(current_user, "profesion", None),
+    }
+    for campo in PROFESSIONAL_FIELDS:
+        payload[campo] = getattr(current_user, campo, None)
+    return payload
+
 # ============================================================
 #  CREAR USUARIO
 # ============================================================
@@ -21,13 +96,12 @@ ROLES_VALIDOS = {"director", "profesional", "administrativo", "area"}
 @login_required
 @requiere_rol('director')
 def api_crear_usuario():
-    data = request.json
+    data = request.get_json(silent=True) or {}
     nombre = data.get('nombre')
     username = data.get('username')
     email = data.get('email')
     password = data.get('password')
     rol = data.get('rol')
-    especialidad = data.get('especialidad')
 
     if not nombre or not username or not email or not password or not rol:
         return jsonify({'error': 'Todos los campos son obligatorios'}), 400
@@ -40,30 +114,33 @@ def api_crear_usuario():
             'error': 'La contraseña debe tener mínimo 8 caracteres, incluir mayúscula, minúscula y número.'
         }), 400
 
-    conn = get_connection()
-    cursor = conn.cursor(dictionary=True)
+    especialidad = _normalizar_especialidad(rol, data.get('especialidad'))
+    profesionales = _professional_values(data)
 
-    cursor.execute("SELECT id FROM usuarios WHERE username = %s OR email = %s", (username, email))
-    existente = cursor.fetchone()
+    with db_cursor() as (conn, cursor):
+        cursor.execute(
+            "SELECT id FROM usuarios WHERE username = %s OR email = %s",
+            (username, email),
+        )
+        if cursor.fetchone():
+            # El return temprano dejaba la conexion abierta.
+            return jsonify({'error': 'Ya existe un usuario con ese nombre de usuario o email'}), 400
 
-    if existente:
-        return jsonify({'error': 'Ya existe un usuario con ese nombre de usuario o email'}), 400
+        columnas = ['nombre', 'username', 'email', 'password_hash', 'rol', 'especialidad']
+        valores = [
+            nombre, username, email,
+            generate_password_hash(password, method="scrypt"),
+            rol, especialidad,
+        ]
+        columnas += list(PROFESSIONAL_FIELDS)
+        valores += [profesionales[campo] for campo in PROFESSIONAL_FIELDS]
 
-    password_hash = generate_password_hash(password, method="scrypt")
-
-    if rol.lower() == 'profesional' and especialidad:
-        especialidad = especialidad.upper()
-    else:
-        especialidad = None
-
-    cursor.execute("""
-        INSERT INTO usuarios (nombre, username, email, password_hash, rol, especialidad)
-        VALUES (%s, %s, %s, %s, %s, %s)
-    """, (nombre, username, email, password_hash, rol, especialidad))
-
-    conn.commit()
-    cursor.close()
-    conn.close()
+        marcadores = ", ".join(["%s"] * len(columnas))
+        cursor.execute(
+            f"INSERT INTO usuarios ({', '.join(columnas)}) VALUES ({marcadores})",
+            tuple(valores),
+        )
+        conn.commit()
 
     return jsonify({'message': f"Usuario '{username}' creado con éxito ✅"})
 
@@ -113,16 +190,15 @@ def api_usuarios_listado():
 @login_required
 @requiere_rol('director')
 def api_usuarios_detalle(usuario_id):
-    conn = get_connection()
-    cursor = conn.cursor(dictionary=True)
-    cursor.execute("""
-        SELECT id, nombre, username, email, rol, especialidad
-        FROM usuarios
-        WHERE id = %s
-    """, (usuario_id,))
-    u = cursor.fetchone()
-    cursor.close()
-    conn.close()
+    # El SELECT trae tambien los campos profesionales porque EditarUsuario.vue
+    # hidrata el formulario con Object.assign sobre esta respuesta: si no
+    # vinieran, el formulario los mostraria vacios y al guardar los borraria.
+    columnas = ", ".join(("id", "nombre", "username", "email", "rol", "especialidad") + PROFESSIONAL_FIELDS)
+
+    with db_cursor() as (_conn, cursor):
+        cursor.execute(f"SELECT {columnas} FROM usuarios WHERE id = %s", (usuario_id,))
+        u = cursor.fetchone()
+
     if not u:
         return jsonify({"error": "Usuario no encontrado"}), 404
     return jsonify(u)
@@ -143,60 +219,62 @@ def api_usuarios_editar(usuario_id):
     especialidad = (data.get("especialidad") or "").strip()
     password = data.get("password")
 
-    conn = get_connection()
-    cur = conn.cursor(dictionary=True)
+    profesionales = _professional_values(data)
 
-    cur.execute("SELECT * FROM usuarios WHERE id = %s", (usuario_id,))
-    actual = cur.fetchone()
-    if not actual:
-        cur.close(); conn.close()
-        return jsonify({"error": "Usuario no encontrado"}), 404
+    # Todos los returns tempranos de abajo dejaban la conexion abierta.
+    with db_cursor() as (conn, cur):
+        cur.execute("SELECT * FROM usuarios WHERE id = %s", (usuario_id,))
+        actual = cur.fetchone()
+        if not actual:
+            return jsonify({"error": "Usuario no encontrado"}), 404
 
-    if username and username != actual["username"]:
-        cur.execute("SELECT id FROM usuarios WHERE username=%s AND id<>%s", (username, usuario_id))
-        if cur.fetchone():
-            cur.close(); conn.close()
-            return jsonify({"error": "Ya existe otro usuario con ese username"}), 400
+        if username and username != actual["username"]:
+            cur.execute("SELECT id FROM usuarios WHERE username=%s AND id<>%s", (username, usuario_id))
+            if cur.fetchone():
+                return jsonify({"error": "Ya existe otro usuario con ese username"}), 400
 
-    if email and email != actual["email"]:
-        cur.execute("SELECT id FROM usuarios WHERE email=%s AND id<>%s", (email, usuario_id))
-        if cur.fetchone():
-            cur.close(); conn.close()
-            return jsonify({"error": "Ya existe otro usuario con ese email"}), 400
+        if email and email != actual["email"]:
+            cur.execute("SELECT id FROM usuarios WHERE email=%s AND id<>%s", (email, usuario_id))
+            if cur.fetchone():
+                return jsonify({"error": "Ya existe otro usuario con ese email"}), 400
 
-    if rol and rol not in ROLES_VALIDOS:
-        cur.close(); conn.close()
-        return jsonify({"error": "Rol inválido"}), 400
+        if rol and rol not in ROLES_VALIDOS:
+            return jsonify({"error": "Rol inválido"}), 400
 
-    sets = []
-    params = []
+        sets = []
+        params = []
 
-    if nombre: sets.append("nombre=%s"); params.append(nombre)
-    if username: sets.append("username=%s"); params.append(username)
-    if email: sets.append("email=%s"); params.append(email)
-    if rol:
-        sets.append("rol=%s"); params.append(rol)
-        if rol == "profesional":
-            sets.append("especialidad=%s"); params.append(especialidad.upper() if especialidad else None)
-        else:
-            sets.append("especialidad=%s"); params.append(None)
+        if nombre:
+            sets.append("nombre=%s"); params.append(nombre)
+        if username:
+            sets.append("username=%s"); params.append(username)
+        if email:
+            sets.append("email=%s"); params.append(email)
+        if rol:
+            sets.append("rol=%s"); params.append(rol)
+            sets.append("especialidad=%s")
+            params.append(_normalizar_especialidad(rol, especialidad))
 
-    if password:
-        if not password_valida(password):
-            cur.close(); conn.close()
-            return jsonify({"error": "La contraseña debe tener mínimo 8 caracteres..."}), 400
-        sets.append("password_hash=%s")
-        params.append(generate_password_hash(password, method="scrypt"))
+        # Solo se tocan los campos profesionales que el cliente mando. Asi se
+        # puede limpiar uno enviandolo vacio, sin pisar los que no vinieron.
+        for campo, valor in profesionales.items():
+            if campo in data:
+                sets.append(f"{campo}=%s")
+                params.append(valor)
 
-    if not sets:
-        cur.close(); conn.close()
-        return jsonify({"message": "Sin cambios"}), 200
+        if password:
+            if not password_valida(password):
+                return jsonify({"error": "La contraseña debe tener mínimo 8 caracteres..."}), 400
+            sets.append("password_hash=%s")
+            params.append(generate_password_hash(password, method="scrypt"))
 
-    params.append(usuario_id)
-    q = f"UPDATE usuarios SET {', '.join(sets)} WHERE id=%s"
-    cur.execute(q, tuple(params))
-    conn.commit()
-    cur.close(); conn.close()
+        if not sets:
+            return jsonify({"message": "Sin cambios"}), 200
+
+        params.append(usuario_id)
+        cur.execute(f"UPDATE usuarios SET {', '.join(sets)} WHERE id=%s", tuple(params))
+        conn.commit()
+
     return jsonify({"message": "Usuario actualizado ✅"})
 
 
@@ -308,27 +386,15 @@ def actualizar_duracion_turno(usuario_id):
 @bp_usuarios.route('/api/usuarios/me', methods=['GET'])
 @login_required
 def api_get_me():
-    return jsonify({
-        "id": current_user.id,
-        "nombre": current_user.nombre,
-        "username": current_user.username,
-        "email": current_user.email,
-        "rol": current_user.rol,
-        "foto": getattr(current_user, 'foto', None),
-        "duracion_turno": getattr(current_user, 'duracion_turno', 20)
-    })
+    return jsonify(_current_user_payload())
 
 # 2. RUTA PARA OBTENER DATOS SIMPLES (usada por perfil)
 @bp_usuarios.route('/api/usuario/perfil', methods=['GET'])
 @login_required
 def obtener_perfil():
-    return jsonify({
-        "id": current_user.id,
-        "nombre": current_user.nombre,
-        "email": current_user.email,
-        "foto": current_user.foto,
-        "rol": current_user.rol
-    })
+    # Mismo payload que /api/usuarios/me: Mi Perfil necesita los campos
+    # profesionales para poder mostrarlos y editarlos.
+    return jsonify(_current_user_payload())
 
 # 3. ACTUALIZAR PERFIL
 @bp_usuarios.route('/api/usuario/perfil', methods=['POST'])
@@ -373,11 +439,23 @@ def actualizar_perfil():
                 archivo.seek(0)
                 archivo.save(path_nuevo)
 
+    # request.form y no JSON: la pantalla manda multipart por la foto.
+    # _professional_values() funciona igual sobre un form.
+    profesionales = _professional_values(request.form)
+
+    sets = ["nombre=%s", "email=%s", "foto=%s"]
+    params = [nuevo_nombre, nuevo_email, nueva_foto]
+
+    # Solo lo que el formulario envio, para no pisar lo que no vino.
+    for campo, valor in profesionales.items():
+        if campo in request.form:
+            sets.append(f"{campo}=%s")
+            params.append(valor)
+
+    params.append(current_user.id)
+
     with db_cursor(dictionary=False) as (conn, cursor):
-        cursor.execute(
-            "UPDATE usuarios SET nombre=%s, email=%s, foto=%s WHERE id=%s",
-            (nuevo_nombre, nuevo_email, nueva_foto, current_user.id),
-        )
+        cursor.execute(f"UPDATE usuarios SET {', '.join(sets)} WHERE id=%s", tuple(params))
         conn.commit()
 
     return jsonify({"message": "Perfil actualizado correctamente.", "foto": nueva_foto})

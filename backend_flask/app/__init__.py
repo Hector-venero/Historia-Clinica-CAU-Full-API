@@ -108,25 +108,7 @@ def load_user(user_id):
     finally:
         conn.close()
 
-    if data:
-        return Usuario(
-            id=data["id"],
-            nombre=data["nombre"],
-            username=data["username"],
-            email=data["email"],
-            password_hash=data["password_hash"],
-            rol=data["rol"],
-            duracion_turno=data.get("duracion_turno"),
-            foto=data.get("foto"),
-            apellido=data.get("apellido"),
-            dni=data.get("dni"),
-            sexo=data.get("sexo"),
-            profesion=data.get("profesion"),
-            matricula_tipo=data.get("matricula_tipo"),
-            matricula_numero=data.get("matricula_numero"),
-            matricula_provincia=data.get("matricula_provincia"),
-        )
-    return None
+    return Usuario.desde_fila(data)
 
 @login_manager.unauthorized_handler
 def unauthorized():

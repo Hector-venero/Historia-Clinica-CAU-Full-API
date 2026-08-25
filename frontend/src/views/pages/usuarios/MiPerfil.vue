@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, reactive, computed, onMounted } from 'vue';
 import api from '@/api/axios';
 import { useUserStore } from '@/stores/user';
 import { buildFotoURL } from '@/utils/fotoUrl.js';
@@ -9,6 +9,22 @@ const userStore = useUserStore();
 // Campos del formulario
 const nombre = ref('');
 const email = ref('');
+
+// Datos que la receta electrónica exige del profesional que la firma.
+// Los edita cada uno: es quien conoce su matrícula y dónde atiende.
+const CAMPOS_PROFESIONALES = ['apellido', 'dni', 'sexo', 'telefono', 'matricula_tipo', 'matricula_numero', 'matricula_provincia', 'lugar_atencion_nombre', 'lugar_atencion_direccion', 'lugar_atencion_contacto', 'lugar_atencion_email'];
+
+const perfil = reactive(Object.fromEntries(CAMPOS_PROFESIONALES.map((c) => [c, ''])));
+
+const SEXOS = [
+    { label: 'Femenino', value: 'F' },
+    { label: 'Masculino', value: 'M' },
+    { label: 'No binario / X', value: 'X' },
+    { label: 'Otro', value: 'O' }
+];
+const TIPOS_MATRICULA = ['MN', 'MP', 'OP'];
+
+const puedePrescribir = computed(() => ['profesional', 'director'].includes((userStore.rol || '').toLowerCase()));
 const archivoFoto = ref(null);
 const previewFoto = ref(null);
 const mensaje = ref('');
@@ -24,6 +40,16 @@ onMounted(async () => {
     }
     nombre.value = userStore.nombre || '';
     email.value = userStore.email || '';
+
+    // Los campos profesionales se piden al backend: el store no los tiene.
+    try {
+        const { data } = await api.get('/usuario/perfil', { withCredentials: true });
+        CAMPOS_PROFESIONALES.forEach((campo) => {
+            perfil[campo] = data?.[campo] ?? '';
+        });
+    } catch (err) {
+        console.error('No se pudieron cargar los datos profesionales:', err);
+    }
 });
 
 /**
@@ -59,6 +85,12 @@ const actualizarPerfil = async () => {
         const form = new FormData();
         form.append('nombre', nombre.value);
         form.append('email', email.value);
+
+        // Solo se mandan si el rol prescribe; el backend actualiza únicamente
+        // las claves que llegan, así que no se pisa nada de los demás roles.
+        if (puedePrescribir.value) {
+            CAMPOS_PROFESIONALES.forEach((campo) => form.append(campo, perfil[campo] ?? ''));
+        }
 
         if (archivoFoto.value) {
             form.append('foto', archivoFoto.value);
@@ -139,6 +171,73 @@ const eliminarFoto = async () => {
                 <label class="block mb-2 font-semibold text-gray-700 text-sm">Correo electrónico</label>
                 <input v-model="email" type="email" class="w-full p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition bg-gray-50" />
             </div>
+
+            <!-- Sin estos datos no se puede emitir ninguna receta. Los completa
+                 el propio profesional: es quien conoce su matrícula y su consultorio. -->
+            <section v-if="puedePrescribir" class="p-4 bg-amber-50 border border-amber-200 rounded-xl space-y-3">
+                <h3 class="font-semibold text-gray-700 text-sm">Datos para recetas electrónicas</h3>
+                <p class="text-xs text-gray-500">Necesarios para emitir recetas: apellido, DNI, matrícula y dirección de atención.</p>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <div>
+                        <label class="block mb-1 text-sm text-gray-600">Apellido</label>
+                        <input v-model.trim="perfil.apellido" type="text" class="w-full p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition bg-gray-50" />
+                    </div>
+                    <div>
+                        <label class="block mb-1 text-sm text-gray-600">DNI</label>
+                        <input v-model.trim="perfil.dni" type="text" class="w-full p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition bg-gray-50" />
+                    </div>
+                    <div>
+                        <label class="block mb-1 text-sm text-gray-600">Sexo</label>
+                        <select v-model="perfil.sexo" class="w-full p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition bg-gray-50">
+                            <option value="">—</option>
+                            <option v-for="s in SEXOS" :key="s.value" :value="s.value">{{ s.label }}</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <div>
+                        <label class="block mb-1 text-sm text-gray-600">Tipo de matrícula</label>
+                        <select v-model="perfil.matricula_tipo" class="w-full p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition bg-gray-50">
+                            <option value="">—</option>
+                            <option v-for="t in TIPOS_MATRICULA" :key="t" :value="t">{{ t }}</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block mb-1 text-sm text-gray-600">N° de matrícula</label>
+                        <input v-model.trim="perfil.matricula_numero" type="text" class="w-full p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition bg-gray-50" />
+                    </div>
+                    <div>
+                        <label class="block mb-1 text-sm text-gray-600">Provincia</label>
+                        <input v-model.trim="perfil.matricula_provincia" type="text" class="w-full p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition bg-gray-50" />
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div>
+                        <label class="block mb-1 text-sm text-gray-600">Lugar de atención</label>
+                        <input v-model.trim="perfil.lugar_atencion_nombre" type="text" class="w-full p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition bg-gray-50" />
+                    </div>
+                    <div>
+                        <label class="block mb-1 text-sm text-gray-600">Dirección de atención</label>
+                        <input
+                            v-model.trim="perfil.lugar_atencion_direccion"
+                            type="text"
+                            placeholder="Calle y número"
+                            class="w-full p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition bg-gray-50"
+                        />
+                    </div>
+                    <div>
+                        <label class="block mb-1 text-sm text-gray-600">Teléfono</label>
+                        <input v-model.trim="perfil.telefono" type="text" class="w-full p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition bg-gray-50" />
+                    </div>
+                    <div>
+                        <label class="block mb-1 text-sm text-gray-600">Email de contacto</label>
+                        <input v-model.trim="perfil.lugar_atencion_email" type="text" class="w-full p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition bg-gray-50" />
+                    </div>
+                </div>
+            </section>
         </div>
 
         <div class="flex justify-between items-center mt-8 pt-6 border-t border-gray-100">

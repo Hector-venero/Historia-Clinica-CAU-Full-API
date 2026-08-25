@@ -36,9 +36,67 @@
                 </div>
 
                 <transition name="fade">
-                    <div v-if="form.rol === 'Profesional'" class="flex flex-col gap-2 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-xl border border-blue-100 dark:border-blue-800">
+                    <div v-if="rolPrescribe()" class="flex flex-col gap-2 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-xl border border-blue-100 dark:border-blue-800">
                         <label class="font-semibold text-gray-700 dark:text-gray-200"> <i class="pi pi-heart mr-1 text-primary"></i> Especialidad </label>
                         <InputText v-model.trim="form.especialidad" placeholder="Ej: Cardiología, Pediatría..." class="w-full" :disabled="loading" />
+                    </div>
+                </transition>
+
+                <!-- Datos que la receta electrónica exige del profesional que la firma.
+                     Sin apellido, DNI, matrícula y dirección de atención, el proveedor
+                     rechaza la emisión. -->
+                <transition name="fade">
+                    <div v-if="rolPrescribe()" class="flex flex-col gap-4 p-4 bg-amber-50 dark:bg-amber-900/20 rounded-xl border border-amber-100 dark:border-amber-800">
+                        <h3 class="font-semibold text-gray-700 dark:text-gray-200"><i class="pi pi-id-card mr-1 text-primary"></i> Datos para recetas electrónicas</h3>
+
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                            <div class="flex flex-col gap-1">
+                                <label class="text-sm text-gray-600 dark:text-gray-300">Apellido</label>
+                                <InputText v-model.trim="form.apellido" placeholder="Apellido" class="w-full" :disabled="loading" />
+                            </div>
+                            <div class="flex flex-col gap-1">
+                                <label class="text-sm text-gray-600 dark:text-gray-300">DNI</label>
+                                <InputText v-model.trim="form.dni" placeholder="Sin puntos" class="w-full" :disabled="loading" />
+                            </div>
+                            <div class="flex flex-col gap-1">
+                                <label class="text-sm text-gray-600 dark:text-gray-300">Sexo</label>
+                                <Dropdown v-model="form.sexo" :options="sexos" optionLabel="label" optionValue="value" class="w-full" :disabled="loading" />
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                            <div class="flex flex-col gap-1">
+                                <label class="text-sm text-gray-600 dark:text-gray-300">Tipo de matrícula</label>
+                                <Dropdown v-model="form.matricula_tipo" :options="tiposMatricula" class="w-full" :disabled="loading" />
+                            </div>
+                            <div class="flex flex-col gap-1">
+                                <label class="text-sm text-gray-600 dark:text-gray-300">N° de matrícula</label>
+                                <InputText v-model.trim="form.matricula_numero" class="w-full" :disabled="loading" />
+                            </div>
+                            <div class="flex flex-col gap-1">
+                                <label class="text-sm text-gray-600 dark:text-gray-300">Provincia</label>
+                                <InputText v-model.trim="form.matricula_provincia" placeholder="Ej: Buenos Aires" class="w-full" :disabled="loading" />
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <div class="flex flex-col gap-1">
+                                <label class="text-sm text-gray-600 dark:text-gray-300">Lugar de atención</label>
+                                <InputText v-model.trim="form.lugar_atencion_nombre" class="w-full" :disabled="loading" />
+                            </div>
+                            <div class="flex flex-col gap-1">
+                                <label class="text-sm text-gray-600 dark:text-gray-300">Dirección de atención</label>
+                                <InputText v-model.trim="form.lugar_atencion_direccion" placeholder="Calle y número" class="w-full" :disabled="loading" />
+                            </div>
+                            <div class="flex flex-col gap-1">
+                                <label class="text-sm text-gray-600 dark:text-gray-300">Teléfono</label>
+                                <InputText v-model.trim="form.telefono" class="w-full" :disabled="loading" />
+                            </div>
+                            <div class="flex flex-col gap-1">
+                                <label class="text-sm text-gray-600 dark:text-gray-300">Email de contacto</label>
+                                <InputText v-model.trim="form.lugar_atencion_email" class="w-full" :disabled="loading" />
+                            </div>
+                        </div>
                     </div>
                 </transition>
 
@@ -71,8 +129,35 @@ const form = reactive({
     email: '',
     password: '',
     rol: '',
-    especialidad: ''
+    especialidad: '',
+    // Datos que la receta electrónica necesita del profesional que la firma.
+    apellido: '',
+    dni: '',
+    sexo: 'X',
+    telefono: '',
+    matricula_tipo: 'MN',
+    matricula_numero: '',
+    matricula_provincia: '',
+    lugar_atencion_nombre: 'CAU - UNSAM',
+    lugar_atencion_direccion: '',
+    lugar_atencion_contacto: '',
+    lugar_atencion_email: ''
 });
+
+const ESTADO_INICIAL = { ...form };
+
+// Los cuatro valores del ENUM de la base. 'Otro' existe en el esquema y sin él
+// se perdería al guardar.
+const sexos = ref([
+    { label: 'Femenino', value: 'F' },
+    { label: 'Masculino', value: 'M' },
+    { label: 'No binario / X', value: 'X' },
+    { label: 'Otro', value: 'O' }
+]);
+const tiposMatricula = ref(['MN', 'MP', 'OP']);
+
+// Solo estos roles firman recetas, así que solo a ellos se les piden los datos.
+const rolPrescribe = () => ['Profesional', 'Director'].includes(form.rol);
 
 const loading = ref(false);
 const error = ref('');
@@ -102,6 +187,11 @@ function validate() {
         return 'La especialidad es obligatoria para profesionales';
     }
 
+    // Sin estos datos el profesional no va a poder emitir ninguna receta.
+    if (rolPrescribe() && (!form.apellido || !form.dni || !form.matricula_numero || !form.lugar_atencion_direccion)) {
+        return 'Para emitir recetas hacen falta apellido, DNI, número de matrícula y dirección del lugar de atención';
+    }
+
     return '';
 }
 
@@ -128,8 +218,8 @@ async function onSubmit() {
             payload.rol = payload.rol.toLowerCase();
         }
 
-        // 3. Limpiamos especialidad si no es profesional
-        if (payload.rol !== 'profesional') {
+        // 3. La especialidad solo aplica a quienes prescriben
+        if (!['profesional', 'director'].includes(payload.rol)) {
             payload.especialidad = null;
         }
 
@@ -137,13 +227,7 @@ async function onSubmit() {
         const resp = await usuarioService.createUsuario(payload);
         ok.value = resp.data?.message || 'Usuario creado correctamente ✅';
 
-        // Limpiar campos
-        form.nombre = '';
-        form.username = '';
-        form.email = '';
-        form.password = '';
-        form.rol = '';
-        form.especialidad = '';
+        Object.assign(form, ESTADO_INICIAL);
     } catch (e) {
         error.value = e.response?.data?.error || e.message || 'Error al crear usuario';
     } finally {

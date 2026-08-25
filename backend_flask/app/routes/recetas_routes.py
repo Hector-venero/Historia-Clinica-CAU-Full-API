@@ -234,15 +234,30 @@ def _validar_estudios(estudios):
 
 
 def _validar_payload(payload):
-    """Datos del profesional que la receta necesita para ser valida."""
+    """Datos obligatorios para que el proveedor acepte la receta.
+
+    Se chequean acá para devolver un mensaje que diga qué falta y dónde
+    completarlo. Sin esto, el proveedor rechaza con códigos como QBI240
+    ("debe ingresar calle y número"), que no indican de quién es el domicilio
+    ni en qué pantalla se carga.
+    """
     medico = payload.get("medico") or {}
     matricula = medico.get("matricula") or {}
+    paciente = payload.get("paciente") or {}
+
     if not medico.get("nombre") or not medico.get("apellido") or not medico.get("nroDoc"):
         return "Complete nombre, apellido y DNI del profesional en su perfil."
     if not matricula.get("numero"):
         return "Complete la matrícula del profesional en su perfil."
     if not payload.get("lugarAtencion", {}).get("domicilio", {}).get("direccion"):
         return "Complete la dirección del lugar de atención en su perfil."
+
+    # El domicilio del paciente también es obligatorio para el proveedor.
+    if not paciente.get("domicilio", {}).get("direccion"):
+        return "Complete el domicilio del paciente en su ficha antes de emitir la receta."
+    if not paciente.get("nroDoc"):
+        return "Complete el DNI del paciente en su ficha antes de emitir la receta."
+
     return None
 
 

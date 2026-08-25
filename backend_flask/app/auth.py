@@ -1,26 +1,67 @@
 from flask_login import UserMixin
 from werkzeug.security import check_password_hash
+
 from .database import get_connection
 
+# Campos de perfil que viajan en el usuario de sesion, mas alla de los de
+# identidad. El modulo de recetas necesita casi todos: sin matricula ni lugar de
+# atencion no se puede emitir.
+#
+# Estan en una lista y no como parametros sueltos del __init__ porque antes cada
+# columna nueva obligaba a tocar tres lugares (la firma, obtener_por_username y
+# load_user), y era cuestion de tiempo que uno quedara desactualizado y el campo
+# llegara siempre en None.
+CAMPOS_PERFIL = (
+    "apellido",
+    "dni",
+    "sexo",
+    "telefono",
+    "profesion",
+    "especialidad",
+    "matricula_tipo",
+    "matricula_numero",
+    "matricula_provincia",
+    "lugar_atencion_nombre",
+    "lugar_atencion_direccion",
+    "lugar_atencion_contacto",
+    "lugar_atencion_email",
+)
+
+
 class Usuario(UserMixin):
-    def __init__(self, id, nombre, username, email, password_hash, rol, duracion_turno,
-                 foto=None, apellido=None, dni=None, sexo=None, profesion=None,
-                 matricula_tipo=None, matricula_numero=None, matricula_provincia=None):
+    def __init__(self, id, nombre, username, email, password_hash, rol,
+                 duracion_turno=None, foto=None, **perfil):
         self.id = id
         self.nombre = nombre
-        self.apellido = apellido
         self.username = username
         self.email = email
         self.password_hash = password_hash
         self.rol = rol
         self.duracion_turno = duracion_turno
         self.foto = foto
-        self.dni = dni
-        self.sexo = sexo
-        self.profesion = profesion
-        self.matricula_tipo = matricula_tipo
-        self.matricula_numero = matricula_numero
-        self.matricula_provincia = matricula_provincia
+        for campo in CAMPOS_PERFIL:
+            setattr(self, campo, perfil.get(campo))
+
+    @classmethod
+    def desde_fila(cls, fila):
+        """Construye el usuario desde una fila de `usuarios`.
+
+        Es el unico lugar que mapea columnas a atributos: agregar una columna al
+        perfil es agregarla a CAMPOS_PERFIL y nada mas.
+        """
+        if not fila:
+            return None
+        return cls(
+            id=fila["id"],
+            nombre=fila["nombre"],
+            username=fila["username"],
+            email=fila["email"],
+            password_hash=fila["password_hash"],
+            rol=fila["rol"],
+            duracion_turno=fila.get("duracion_turno"),
+            foto=fila.get("foto"),
+            **{campo: fila.get(campo) for campo in CAMPOS_PERFIL},
+        )
 
     @staticmethod
     def obtener_por_username(username):
@@ -38,25 +79,7 @@ class Usuario(UserMixin):
         finally:
             conn.close()
 
-        if data:
-            return Usuario(
-                id=data['id'],
-                nombre=data['nombre'],
-                username=data['username'],
-                email=data['email'],
-                password_hash=data['password_hash'],
-                rol=data['rol'],
-                duracion_turno=data.get('duracion_turno'),
-                foto=data.get('foto'),
-                apellido=data.get('apellido'),
-                dni=data.get('dni'),
-                sexo=data.get('sexo'),
-                profesion=data.get('profesion'),
-                matricula_tipo=data.get('matricula_tipo'),
-                matricula_numero=data.get('matricula_numero'),
-                matricula_provincia=data.get('matricula_provincia'),
-            )
-        return None
+        return Usuario.desde_fila(data)
 
     def verificar_password(self, password):
         return check_password_hash(self.password_hash, password)

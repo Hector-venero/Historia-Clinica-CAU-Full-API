@@ -12,8 +12,11 @@ export default {
         return api.get(`${API_URL}/${id}`, { withCredentials: true });
     },
 
-    createUsuario({ nombre, username, email, password, rol, especialidad }) {
-        return api.post(API_URL, { nombre, username, email, password, rol, especialidad }, { withCredentials: true });
+    // Se manda el objeto completo y no una lista fija de campos: al
+    // desestructurar, cualquier campo nuevo del formulario (matrícula, lugar de
+    // atención) se perdía en silencio antes de llegar al backend.
+    createUsuario(data) {
+        return api.post(API_URL, data, { withCredentials: true });
     },
 
     updateUsuario(id, data) {
