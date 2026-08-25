@@ -2,7 +2,7 @@ from flask import Blueprint, request, jsonify, current_app as app
 from flask_login import login_required, current_user
 from werkzeug.utils import secure_filename
 from werkzeug.security import check_password_hash, generate_password_hash
-from app.database import get_connection, db_cursor
+from app.database import db_cursor
 from app.utils.permisos import requiere_rol
 import os
 from PIL import Image
@@ -155,31 +155,28 @@ def api_usuarios_listado():
     q = (request.args.get('q') or "").strip()
     incluir_inactivos = request.args.get('inactivos') == '1'
 
-    conn = get_connection()
-    cursor = conn.cursor(dictionary=True)
-
     filtro_activo = "" if incluir_inactivos else "AND activo=1"
 
-    if q:
-        like = f"%{q}%"
-        cursor.execute(f"""
-            SELECT id, nombre, username, email, rol, especialidad, activo
-            FROM usuarios
-            WHERE (nombre LIKE %s OR username LIKE %s OR email LIKE %s)
-            {filtro_activo}
-            ORDER BY nombre
-        """, (like, like, like))
-    else:
-        cursor.execute(f"""
-            SELECT id, nombre, username, email, rol, especialidad, activo
-            FROM usuarios
-            WHERE 1=1 {filtro_activo}
-            ORDER BY nombre
-        """)
+    with db_cursor() as (_conn, cursor):
+        if q:
+            like = f"%{q}%"
+            cursor.execute(f"""
+                SELECT id, nombre, username, email, rol, especialidad, activo
+                FROM usuarios
+                WHERE (nombre LIKE %s OR username LIKE %s OR email LIKE %s)
+                {filtro_activo}
+                ORDER BY nombre
+            """, (like, like, like))
+        else:
+            cursor.execute(f"""
+                SELECT id, nombre, username, email, rol, especialidad, activo
+                FROM usuarios
+                WHERE 1=1 {filtro_activo}
+                ORDER BY nombre
+            """)
 
-    usuarios = cursor.fetchall()
-    cursor.close()
-    conn.close()
+        usuarios = cursor.fetchall()
+
     return jsonify(usuarios)
 
 
@@ -285,19 +282,17 @@ def api_usuarios_editar(usuario_id):
 @login_required
 @requiere_rol('director')
 def api_usuarios_eliminar(usuario_id):
-    conn = get_connection()
-    cur = conn.cursor(dictionary=True)
-    cur.execute("SELECT id, activo FROM usuarios WHERE id=%s", (usuario_id,))
-    usuario = cur.fetchone()
-    if not usuario:
-        cur.close(); conn.close()
-        return jsonify({"error": "Usuario no encontrado"}), 404
-    if usuario["activo"] == 0:
-        cur.close(); conn.close()
-        return jsonify({"message": "Usuario ya estaba inactivo"}), 200
-    cur.execute("UPDATE usuarios SET activo=0 WHERE id=%s", (usuario_id,))
-    conn.commit()
-    cur.close(); conn.close()
+    with db_cursor() as (conn, cur):
+        cur.execute("SELECT id, activo FROM usuarios WHERE id=%s", (usuario_id,))
+        usuario = cur.fetchone()
+        if not usuario:
+            return jsonify({"error": "Usuario no encontrado"}), 404
+        if usuario["activo"] == 0:
+            return jsonify({"message": "Usuario ya estaba inactivo"}), 200
+
+        cur.execute("UPDATE usuarios SET activo=0 WHERE id=%s", (usuario_id,))
+        conn.commit()
+
     return jsonify({"message": "Usuario marcado como inactivo ✅"})
 
 
@@ -305,16 +300,14 @@ def api_usuarios_eliminar(usuario_id):
 @login_required
 @requiere_rol('director')
 def api_usuarios_activar(usuario_id):
-    conn = get_connection()
-    cur = conn.cursor(dictionary=True)
-    cur.execute("SELECT id, activo FROM usuarios WHERE id=%s", (usuario_id,))
-    usuario = cur.fetchone()
-    if not usuario:
-        cur.close(); conn.close()
-        return jsonify({"error": "Usuario no encontrado"}), 404
-    cur.execute("UPDATE usuarios SET activo=1 WHERE id=%s", (usuario_id,))
-    conn.commit()
-    cur.close(); conn.close()
+    with db_cursor() as (conn, cur):
+        cur.execute("SELECT id, activo FROM usuarios WHERE id=%s", (usuario_id,))
+        if not cur.fetchone():
+            return jsonify({"error": "Usuario no encontrado"}), 404
+
+        cur.execute("UPDATE usuarios SET activo=1 WHERE id=%s", (usuario_id,))
+        conn.commit()
+
     return jsonify({"message": "Usuario reactivado ✅"})
 
 
@@ -325,25 +318,22 @@ def api_usuarios_activar(usuario_id):
 @login_required
 def api_listar_profesionales():
     especialidad = request.args.get('especialidad')
-    conn = get_connection()
-    cursor = conn.cursor(dictionary=True)
 
     # ✅ INCLUIMOS 'area' EN LA CONSULTA
     base_query = """
-        SELECT id, nombre, username, especialidad, duracion_turno, rol 
-        FROM usuarios 
-        WHERE rol IN ('profesional', 'director', 'area') 
+        SELECT id, nombre, username, especialidad, duracion_turno, rol
+        FROM usuarios
+        WHERE rol IN ('profesional', 'director', 'area')
         AND activo = 1
     """
 
-    if especialidad:
-        cursor.execute(base_query + " AND UPPER(especialidad) = UPPER(%s) ORDER BY nombre", (especialidad,))
-    else:
-        cursor.execute(base_query + " ORDER BY nombre")
-    
-    profesionales = cursor.fetchall()
-    cursor.close()
-    conn.close()
+    with db_cursor() as (_conn, cursor):
+        if especialidad:
+            cursor.execute(base_query + " AND UPPER(especialidad) = UPPER(%s) ORDER BY nombre", (especialidad,))
+        else:
+            cursor.execute(base_query + " ORDER BY nombre")
+
+        profesionales = cursor.fetchall()
 
     # ✅ FORMATEO UNIFICADO (Sin duplicados)
     for p in profesionales:
@@ -370,11 +360,10 @@ def actualizar_duracion_turno(usuario_id):
         return jsonify({"error": "Duración inválida"}), 400
     if current_user.rol == "profesional" and current_user.id != usuario_id:
         return jsonify({"error": "No autorizado"}), 403
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("UPDATE usuarios SET duracion_turno = %s WHERE id = %s", (nueva_duracion, usuario_id))
-    conn.commit()
-    cursor.close(); conn.close()
+    with db_cursor(dictionary=False) as (conn, cursor):
+        cursor.execute("UPDATE usuarios SET duracion_turno = %s WHERE id = %s", (nueva_duracion, usuario_id))
+        conn.commit()
+
     return jsonify({"message": "Duración actualizada correctamente"})
 
 
@@ -481,11 +470,10 @@ def cambiar_password():
         return jsonify({"error": "Las contraseñas no coinciden"}), 400
 
     nuevo_hash = generate_password_hash(nueva, method="scrypt")
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("UPDATE usuarios SET password_hash=%s WHERE id=%s", (nuevo_hash, current_user.id))
-    conn.commit()
-    conn.close()
+    with db_cursor(dictionary=False) as (conn, cursor):
+        cursor.execute("UPDATE usuarios SET password_hash=%s WHERE id=%s", (nuevo_hash, current_user.id))
+        conn.commit()
+
     return jsonify({"message": "Contraseña actualizada correctamente"})
 
 
