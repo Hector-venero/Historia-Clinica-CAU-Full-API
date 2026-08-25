@@ -17,7 +17,6 @@ const handleToggleDark = () => {
 
     // Luego ajusta las clases del DOM según el nuevo estado
     const newTheme = isDarkTheme.value ? 'light' : 'dark'; // valor antes del cambio
-    const appliedTheme = newTheme === 'dark' ? 'app-dark' : '';
 
     if (newTheme === 'dark') {
         html.classList.add('app-dark');

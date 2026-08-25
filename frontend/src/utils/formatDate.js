@@ -1,12 +1,3 @@
-// Detecta formato YYYY-MM-DD
-function esFechaSimple(f) {
-    return /^\d{4}-\d{2}-\d{2}$/.test(f);
-}
-
-// Detecta formato MySQL DATETIME
-function esFechaDateTime(f) {
-    return /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(f);
-}
 // ✔ Función para fechas CLÍNICAS (sin timezone)
 export function fechaBonitaClinica(fecha) {
     if (!fecha) return '-';

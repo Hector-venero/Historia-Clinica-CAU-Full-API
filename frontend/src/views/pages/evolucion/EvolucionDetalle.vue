@@ -2,6 +2,8 @@
 import { onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import api from '@/api/axios';
+import historiaService from '@/service/historiaService';
+import { descargarPdfDesde } from '@/utils/descargas.js';
 
 const route = useRoute();
 const router = useRouter();
@@ -36,16 +38,7 @@ const fetchEvolucion = async () => {
 
 const descargarEvolucionPDF = async () => {
     try {
-        const res = await api.get(`/pacientes/${pacienteId}/evolucion/${evolucionId}/pdf`, {
-            responseType: 'blob',
-            withCredentials: true
-        });
-        const url = window.URL.createObjectURL(new Blob([res.data]));
-        const link = document.createElement('a');
-        link.href = url;
-        link.setAttribute('download', `evolucion_${evolucionId}.pdf`);
-        document.body.appendChild(link);
-        link.click();
+        await descargarPdfDesde(historiaService.descargarEvolucionPDF(pacienteId, evolucionId), `evolucion_${evolucionId}.pdf`);
     } catch (err) {
         console.error('Error al descargar PDF:', err);
     }

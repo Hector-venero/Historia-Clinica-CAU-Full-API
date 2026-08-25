@@ -37,7 +37,7 @@ const fotoUrl = computed(() => {
 const inicial = computed(() => (userStore.nombre ? userStore.nombre.charAt(0).toUpperCase() : 'U'));
 
 // Resetear el error si cambia la versión de la foto (nueva subida)
-userStore.$subscribe((mutation, state) => {
+userStore.$subscribe((mutation) => {
     if (mutation.events.key === 'fotoVersion') {
         imageError.value = false;
     }

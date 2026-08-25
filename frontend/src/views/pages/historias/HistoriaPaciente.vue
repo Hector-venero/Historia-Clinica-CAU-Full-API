@@ -9,6 +9,7 @@ import api from '@/api/axios';
 import { useRouter } from 'vue-router';
 import DatePicker from 'primevue/datepicker';
 import { fechaBonitaClinica, fechaBonitaCompleta } from '@/utils/formatDate.js';
+import { descargarPdfDesde } from '@/utils/descargas.js';
 import { nextTick } from 'vue';
 import { computed } from 'vue';
 
@@ -144,17 +145,27 @@ const guardarEvolucion = async () => {
 /**
  * Exporta toda la historia clínica en PDF
  */
-const descargarHistoriaPDF = () => {
-    const base = import.meta.env.VITE_API_URL || 'http://localhost:5000';
-    window.open(`${base}/pacientes/${pacienteId}/historia/pdf`, '_blank');
+const descargarHistoriaPDF = async () => {
+    // Antes armaba la URL a mano con fallback a http://localhost:5000, que sin
+    // VITE_API_URL apunta al puerto del backend desde el navegador del usuario
+    // y sin el prefijo /api. Se pide por la instancia `api`, que además manda
+    // la cookie de sesión.
+    try {
+        await descargarPdfDesde(historiaService.descargarPDF(pacienteId), `historia_${pacienteId}.pdf`);
+    } catch (err) {
+        console.error('Error al descargar la historia en PDF:', err);
+    }
 };
 
 /**
  * Exporta una evolución individual en PDF
  */
-const descargarEvolucionPDF = (evoId) => {
-    const base = import.meta.env.VITE_API_URL || 'http://localhost:5000';
-    window.open(`${base}/pacientes/${pacienteId}/evolucion/${evoId}/pdf`, '_blank');
+const descargarEvolucionPDF = async (evoId) => {
+    try {
+        await descargarPdfDesde(historiaService.descargarEvolucionPDF(pacienteId, evoId), `evolucion_${evoId}.pdf`);
+    } catch (err) {
+        console.error('Error al descargar la evolución en PDF:', err);
+    }
 };
 
 const normalizar = (nombre) => nombre.toLowerCase().replace(/\s+/g, '').replace(/[()]/g, '').trim();

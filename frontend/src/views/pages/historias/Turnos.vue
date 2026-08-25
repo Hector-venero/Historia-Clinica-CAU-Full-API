@@ -120,7 +120,6 @@ import api from '@/api/axios'; // Asegúrate de importar tu instancia de axios
 import Dialog from 'primevue/dialog';
 import Button from 'primevue/button';
 import InputText from 'primevue/inputtext';
-import { useToast } from 'primevue/usetoast'; // Opcional si usas Toast
 
 /* -------------------------------------------------------------------------- */
 /* LOCALE (SOLUCIÓN ERROR VITE)                                              */
@@ -377,7 +376,6 @@ async function eliminarTurno() {
         modalVisible.value = false;
 
         // Eliminar visualmente sin recargar todo (más rápido)
-        const apiCalendar = calendarOptions.events; // referencia
         eventos.value = eventos.value.filter((e) => e.id !== turnoSeleccionado.value.id);
         calendarOptions.events = eventos.value;
     } catch (err) {
