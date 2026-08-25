@@ -176,6 +176,15 @@ const router = createRouter({
                     name: 'generadorRecetas',
                     component: () => import('@/views/pages/GeneradorRecetas.vue')
                 },
+                // 💬 Posteos internos de un grupo profesional
+                {
+                    path: 'grupos/:grupoId/posteos',
+                    name: 'posteosGrupo',
+                    // El acceso real lo controla el backend: solo miembros del
+                    // grupo, mas director y administrativo.
+                    meta: { requiresAuth: true },
+                    component: () => import('@/views/pages/grupos/PosteosGrupo.vue')
+                },
                 // 📢 Comunicados internos
                 {
                     path: 'comunicados',

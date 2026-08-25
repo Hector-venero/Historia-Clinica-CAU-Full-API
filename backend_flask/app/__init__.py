@@ -1,6 +1,8 @@
 from flask import Flask, jsonify
 import json
 import os
+
+import click
 from flask_login import LoginManager
 from flask_mail import Mail
 from flask_cors import CORS
@@ -151,6 +153,7 @@ from app.routes.grupos_routes import bp_grupos
 from app.routes.health_routes import bp_health
 from app.routes.recetas_routes import bp_recetas
 from app.routes.comunicados_routes import bp_comunicados
+from app.routes.grupo_posteos_routes import bp_grupo_posteos
 
 app.register_blueprint(bp_auth)
 app.register_blueprint(bp_usuarios)
@@ -165,6 +168,7 @@ app.register_blueprint(bp_blockchain)
 app.register_blueprint(bp_health)
 app.register_blueprint(bp_recetas)
 app.register_blueprint(bp_comunicados)
+app.register_blueprint(bp_grupo_posteos)
 
 # -------------------------
 # Servir fotos de usuario
@@ -186,3 +190,29 @@ def fotos_usuarios(filename):
     print(f"📂 En carpeta: {carpeta}")
     
     return send_from_directory(carpeta, filename)
+
+
+# -------------------------
+# Comandos CLI
+# -------------------------
+@app.cli.command("enviar-alertas")
+@click.option("--dry-run", is_flag=True, help="Calcula destinatarios y agendas sin enviar correos.")
+def enviar_alertas_command(dry_run):
+    """Manda a cada profesional el resumen de su agenda de manana.
+
+    Lo dispara un cron diario (ver deploy/templates/). Con --dry-run calcula
+    todo pero no envia, para poder verificar destinatarios sin molestar a nadie.
+    """
+    from app.utils.alertas import procesar_y_enviar_alertas
+
+    resultado = procesar_y_enviar_alertas(dry_run=dry_run)
+    click.echo(
+        "Proceso finalizado. "
+        f"Profesionales: {resultado['profesionales']}. "
+        f"Enviados: {resultado['enviados']}. "
+        f"Simulados: {resultado['simulados']}. "
+        f"Errores: {resultado['errores']}."
+    )
+    # Exit code distinto de cero para que el cron detecte el fallo.
+    if resultado["errores"]:
+        raise click.ClickException("El proceso de alertas terminó con errores.")
