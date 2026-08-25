@@ -1,3 +1,81 @@
+<script setup>
+import pacienteService from '@/service/pacienteService';
+import { computed, onMounted, ref } from 'vue';
+import { useRouter } from 'vue-router';
+
+// Imports PrimeVue
+import DataTable from 'primevue/datatable';
+import Column from 'primevue/column';
+import Button from 'primevue/button';
+import Dialog from 'primevue/dialog';
+import InputText from 'primevue/inputtext';
+import IconField from 'primevue/iconfield';
+import InputIcon from 'primevue/inputicon';
+
+const pacientes = ref([]);
+const busqueda = ref('');
+const router = useRouter();
+
+const pacienteAEliminar = ref(null);
+const mostrarDialog = ref(false);
+
+const fetchPacientes = async () => {
+    try {
+        const res = await pacienteService.getPacientes();
+        pacientes.value = res.data;
+    } catch (err) {
+        console.error(err);
+    }
+};
+
+onMounted(() => {
+    fetchPacientes();
+});
+
+const filtrados = computed(() => {
+    if (!busqueda.value) return pacientes.value;
+    const q = busqueda.value.toLowerCase();
+    return pacientes.value.filter((p) => p.nombre.toLowerCase().includes(q) || p.apellido.toLowerCase().includes(q) || p.dni.includes(q));
+});
+
+const editarPaciente = (id) => {
+    router.push(`/pacientes/${id}/editar`);
+};
+
+const confirmarEliminar = (paciente) => {
+    pacienteAEliminar.value = paciente;
+    mostrarDialog.value = true;
+};
+
+const cancelarEliminar = () => {
+    pacienteAEliminar.value = null;
+    mostrarDialog.value = false;
+};
+
+const eliminarPacienteConfirmado = async () => {
+    if (!pacienteAEliminar.value) return;
+    try {
+        await pacienteService.deletePaciente(pacienteAEliminar.value.id);
+        pacientes.value = pacientes.value.filter((p) => p.id !== pacienteAEliminar.value.id);
+        mostrarDialog.value = false;
+        pacienteAEliminar.value = null;
+    } catch (error) {
+        console.error(error);
+        alert('❌ Error al eliminar paciente. Puede tener historias clínicas asociadas.');
+    }
+};
+
+const formatFecha = (fecha) => {
+    if (!fecha) return '-';
+    const d = new Date(fecha);
+    return new Intl.DateTimeFormat('es-AR', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric'
+    }).format(d);
+};
+</script>
+
 <template>
     <div class="p-6 md:p-8 w-full h-full">
         <div class="bg-white dark:bg-[#1e1e1e] shadow-xl rounded-2xl p-6 transition-colors">
@@ -76,81 +154,3 @@
         </Dialog>
     </div>
 </template>
-
-<script setup>
-import pacienteService from '@/service/pacienteService';
-import { computed, onMounted, ref } from 'vue';
-import { useRouter } from 'vue-router';
-
-// Imports PrimeVue
-import DataTable from 'primevue/datatable';
-import Column from 'primevue/column';
-import Button from 'primevue/button';
-import Dialog from 'primevue/dialog';
-import InputText from 'primevue/inputtext';
-import IconField from 'primevue/iconfield';
-import InputIcon from 'primevue/inputicon';
-
-const pacientes = ref([]);
-const busqueda = ref('');
-const router = useRouter();
-
-const pacienteAEliminar = ref(null);
-const mostrarDialog = ref(false);
-
-const fetchPacientes = async () => {
-    try {
-        const res = await pacienteService.getPacientes();
-        pacientes.value = res.data;
-    } catch (err) {
-        console.error(err);
-    }
-};
-
-onMounted(() => {
-    fetchPacientes();
-});
-
-const filtrados = computed(() => {
-    if (!busqueda.value) return pacientes.value;
-    const q = busqueda.value.toLowerCase();
-    return pacientes.value.filter((p) => p.nombre.toLowerCase().includes(q) || p.apellido.toLowerCase().includes(q) || p.dni.includes(q));
-});
-
-const editarPaciente = (id) => {
-    router.push(`/pacientes/${id}/editar`);
-};
-
-const confirmarEliminar = (paciente) => {
-    pacienteAEliminar.value = paciente;
-    mostrarDialog.value = true;
-};
-
-const cancelarEliminar = () => {
-    pacienteAEliminar.value = null;
-    mostrarDialog.value = false;
-};
-
-const eliminarPacienteConfirmado = async () => {
-    if (!pacienteAEliminar.value) return;
-    try {
-        await pacienteService.deletePaciente(pacienteAEliminar.value.id);
-        pacientes.value = pacientes.value.filter((p) => p.id !== pacienteAEliminar.value.id);
-        mostrarDialog.value = false;
-        pacienteAEliminar.value = null;
-    } catch (error) {
-        console.error(error);
-        alert('❌ Error al eliminar paciente. Puede tener historias clínicas asociadas.');
-    }
-};
-
-const formatFecha = (fecha) => {
-    if (!fecha) return '-';
-    const d = new Date(fecha);
-    return new Intl.DateTimeFormat('es-AR', {
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric'
-    }).format(d);
-};
-</script>

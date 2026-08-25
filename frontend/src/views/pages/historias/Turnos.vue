@@ -1,111 +1,3 @@
-<template>
-    <div class="p-6 h-screen flex flex-col">
-        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-4">
-            <div>
-                <h1 class="text-2xl font-bold text-gray-800 dark:text-gray-100 flex items-center gap-2">
-                    📅 Mi Agenda
-                    <span class="text-xs font-normal text-gray-500 bg-gray-200 dark:bg-gray-700 px-2 py-1 rounded">
-                        {{ nombreProfesionalLogueado || 'Cargando...' }}
-                    </span>
-                </h1>
-            </div>
-
-            <div class="flex flex-wrap items-center gap-4 text-sm">
-                <div class="flex items-center gap-2">
-                    <span class="w-3 h-3 rounded-full bg-blue-600 border border-blue-800"></span>
-                    <span class="text-gray-800 dark:text-gray-200 font-medium">Mis Turnos</span>
-                </div>
-
-                <div v-for="g in leyendaGrupos" :key="g.nombre" class="flex items-center gap-2">
-                    <span class="w-3 h-3 rounded-full border border-dashed" :style="{ backgroundColor: g.colorTransparente, borderColor: g.colorOriginal }"></span>
-                    <span class="text-gray-500 dark:text-gray-400 text-xs">
-                        {{ g.nombre }}
-                    </span>
-                </div>
-            </div>
-        </div>
-
-        <div class="flex-1 bg-white dark:bg-[#1b1b1b] rounded-2xl shadow border border-gray-200 dark:border-gray-700 p-4 overflow-hidden">
-            <FullCalendar ref="fullCalendar" :options="calendarOptions" class="h-full" />
-        </div>
-
-        <Dialog v-model:visible="modalVisible" modal :header="editando ? 'Editar Turno' : 'Detalles del Turno'" :style="{ width: '450px' }" class="p-fluid">
-            <div v-if="turnoSeleccionado" class="space-y-4">
-                <div v-if="turnoSeleccionado.tipo === 'ausencia'" class="bg-red-50 p-4 rounded border border-red-200">
-                    <p class="text-red-700 font-bold flex items-center gap-2"><i class="pi pi-ban"></i> Día Bloqueado</p>
-                    <p class="text-gray-600 mt-2">{{ turnoSeleccionado.description || 'Sin motivo especificado' }}</p>
-                </div>
-
-                <div v-else>
-                    <div v-if="editando">
-                        <div class="field mb-3">
-                            <label class="font-semibold block mb-1">Motivo / Descripción</label>
-                            <InputText v-model="turnoSeleccionado.description" class="w-full" />
-                        </div>
-
-                        <div class="grid grid-cols-2 gap-4 mb-3">
-                            <div class="field">
-                                <label class="font-semibold block mb-1">Fecha</label>
-                                <InputText type="date" v-model="fechaEdit" class="w-full" />
-                            </div>
-                            <div class="field">
-                                <label class="font-semibold block mb-1">Hora</label>
-                                <InputText type="time" v-model="horaEdit" class="w-full" />
-                            </div>
-                        </div>
-
-                        <div class="flex justify-end gap-2 mt-4">
-                            <Button label="Cancelar" severity="secondary" text @click="editando = false" />
-                            <Button label="Guardar Cambios" icon="pi pi-check" @click="guardarEdicion" />
-                        </div>
-                    </div>
-
-                    <div v-else>
-                        <div class="p-3 rounded-lg border-l-4 mb-4" :class="turnoSeleccionado.editable ? 'bg-blue-50 border-blue-500' : 'bg-gray-50 border-gray-400 border-dashed'">
-                            <p class="text-sm text-gray-500">Paciente</p>
-                            <p class="text-lg font-bold text-gray-800">{{ turnoSeleccionado.paciente }}</p>
-                            <p class="text-sm text-gray-600">DNI: {{ turnoSeleccionado.dni }}</p>
-
-                            <div v-if="!turnoSeleccionado.editable" class="mt-2 text-xs text-gray-500 flex items-center gap-1">
-                                <i class="pi pi-users"></i>
-                                Turno de: <strong>{{ turnoSeleccionado.profesional }}</strong>
-                            </div>
-                        </div>
-
-                        <div class="grid grid-cols-2 gap-4 mb-3">
-                            <div>
-                                <span class="text-xs text-gray-500 uppercase font-bold">Fecha</span>
-                                <p>{{ formatearFecha(turnoSeleccionado.start) }}</p>
-                            </div>
-                            <div>
-                                <span class="text-xs text-gray-500 uppercase font-bold">Hora</span>
-                                <p>{{ formatearHora(turnoSeleccionado.start) }}</p>
-                            </div>
-                        </div>
-
-                        <div class="mb-4">
-                            <span class="text-xs text-gray-500 uppercase font-bold">Motivo</span>
-                            <p class="italic text-gray-700 bg-gray-100 p-2 rounded text-sm">
-                                {{ turnoSeleccionado.description || 'Sin motivo' }}
-                            </p>
-                        </div>
-
-                        <div class="flex justify-between items-center pt-4 border-t border-gray-100">
-                            <div v-if="turnoSeleccionado.editable" class="flex gap-2">
-                                <Button icon="pi pi-pencil" severity="warning" text rounded v-tooltip="'Editar'" @click="iniciarEdicion" />
-                                <Button icon="pi pi-trash" severity="danger" text rounded v-tooltip="'Eliminar'" @click="eliminarTurno" />
-                            </div>
-                            <div v-else class="text-xs text-gray-400 italic">Solo lectura (Grupo)</div>
-
-                            <Button label="Cerrar" severity="secondary" text @click="modalVisible = false" />
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </Dialog>
-    </div>
-</template>
-
 <script setup>
 import { ref, onMounted, onUnmounted, reactive } from 'vue';
 import FullCalendar from '@fullcalendar/vue3';
@@ -396,6 +288,114 @@ onUnmounted(() => {
     clearInterval(intervalo);
 });
 </script>
+
+<template>
+    <div class="p-6 h-screen flex flex-col">
+        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-4">
+            <div>
+                <h1 class="text-2xl font-bold text-gray-800 dark:text-gray-100 flex items-center gap-2">
+                    📅 Mi Agenda
+                    <span class="text-xs font-normal text-gray-500 bg-gray-200 dark:bg-gray-700 px-2 py-1 rounded">
+                        {{ nombreProfesionalLogueado || 'Cargando...' }}
+                    </span>
+                </h1>
+            </div>
+
+            <div class="flex flex-wrap items-center gap-4 text-sm">
+                <div class="flex items-center gap-2">
+                    <span class="w-3 h-3 rounded-full bg-blue-600 border border-blue-800"></span>
+                    <span class="text-gray-800 dark:text-gray-200 font-medium">Mis Turnos</span>
+                </div>
+
+                <div v-for="g in leyendaGrupos" :key="g.nombre" class="flex items-center gap-2">
+                    <span class="w-3 h-3 rounded-full border border-dashed" :style="{ backgroundColor: g.colorTransparente, borderColor: g.colorOriginal }"></span>
+                    <span class="text-gray-500 dark:text-gray-400 text-xs">
+                        {{ g.nombre }}
+                    </span>
+                </div>
+            </div>
+        </div>
+
+        <div class="flex-1 bg-white dark:bg-[#1b1b1b] rounded-2xl shadow border border-gray-200 dark:border-gray-700 p-4 overflow-hidden">
+            <FullCalendar ref="fullCalendar" :options="calendarOptions" class="h-full" />
+        </div>
+
+        <Dialog v-model:visible="modalVisible" modal :header="editando ? 'Editar Turno' : 'Detalles del Turno'" :style="{ width: '450px' }" class="p-fluid">
+            <div v-if="turnoSeleccionado" class="space-y-4">
+                <div v-if="turnoSeleccionado.tipo === 'ausencia'" class="bg-red-50 p-4 rounded border border-red-200">
+                    <p class="text-red-700 font-bold flex items-center gap-2"><i class="pi pi-ban"></i> Día Bloqueado</p>
+                    <p class="text-gray-600 mt-2">{{ turnoSeleccionado.description || 'Sin motivo especificado' }}</p>
+                </div>
+
+                <div v-else>
+                    <div v-if="editando">
+                        <div class="field mb-3">
+                            <label class="font-semibold block mb-1">Motivo / Descripción</label>
+                            <InputText v-model="turnoSeleccionado.description" class="w-full" />
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-4 mb-3">
+                            <div class="field">
+                                <label class="font-semibold block mb-1">Fecha</label>
+                                <InputText type="date" v-model="fechaEdit" class="w-full" />
+                            </div>
+                            <div class="field">
+                                <label class="font-semibold block mb-1">Hora</label>
+                                <InputText type="time" v-model="horaEdit" class="w-full" />
+                            </div>
+                        </div>
+
+                        <div class="flex justify-end gap-2 mt-4">
+                            <Button label="Cancelar" severity="secondary" text @click="editando = false" />
+                            <Button label="Guardar Cambios" icon="pi pi-check" @click="guardarEdicion" />
+                        </div>
+                    </div>
+
+                    <div v-else>
+                        <div class="p-3 rounded-lg border-l-4 mb-4" :class="turnoSeleccionado.editable ? 'bg-blue-50 border-blue-500' : 'bg-gray-50 border-gray-400 border-dashed'">
+                            <p class="text-sm text-gray-500">Paciente</p>
+                            <p class="text-lg font-bold text-gray-800">{{ turnoSeleccionado.paciente }}</p>
+                            <p class="text-sm text-gray-600">DNI: {{ turnoSeleccionado.dni }}</p>
+
+                            <div v-if="!turnoSeleccionado.editable" class="mt-2 text-xs text-gray-500 flex items-center gap-1">
+                                <i class="pi pi-users"></i>
+                                Turno de: <strong>{{ turnoSeleccionado.profesional }}</strong>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-4 mb-3">
+                            <div>
+                                <span class="text-xs text-gray-500 uppercase font-bold">Fecha</span>
+                                <p>{{ formatearFecha(turnoSeleccionado.start) }}</p>
+                            </div>
+                            <div>
+                                <span class="text-xs text-gray-500 uppercase font-bold">Hora</span>
+                                <p>{{ formatearHora(turnoSeleccionado.start) }}</p>
+                            </div>
+                        </div>
+
+                        <div class="mb-4">
+                            <span class="text-xs text-gray-500 uppercase font-bold">Motivo</span>
+                            <p class="italic text-gray-700 bg-gray-100 p-2 rounded text-sm">
+                                {{ turnoSeleccionado.description || 'Sin motivo' }}
+                            </p>
+                        </div>
+
+                        <div class="flex justify-between items-center pt-4 border-t border-gray-100">
+                            <div v-if="turnoSeleccionado.editable" class="flex gap-2">
+                                <Button icon="pi pi-pencil" severity="warning" text rounded v-tooltip="'Editar'" @click="iniciarEdicion" />
+                                <Button icon="pi pi-trash" severity="danger" text rounded v-tooltip="'Eliminar'" @click="eliminarTurno" />
+                            </div>
+                            <div v-else class="text-xs text-gray-400 italic">Solo lectura (Grupo)</div>
+
+                            <Button label="Cerrar" severity="secondary" text @click="modalVisible = false" />
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </Dialog>
+    </div>
+</template>
 
 <style scoped>
 /* CLASES DINÁMICAS PARA FULLCALENDAR */

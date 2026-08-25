@@ -1,3 +1,88 @@
+<script setup>
+import { reactive, ref, onMounted } from 'vue';
+import { useRoute } from 'vue-router';
+import usuarioService from '@/service/usuarioService';
+
+const route = useRoute();
+const userId = route.params.id;
+
+const form = reactive({
+    nombre: '',
+    username: '',
+    email: '',
+    rol: '',
+    especialidad: '',
+    password: '',
+    // Datos que la receta electrónica exige del profesional que la firma.
+    apellido: '',
+    dni: '',
+    sexo: '',
+    telefono: '',
+    matricula_tipo: '',
+    matricula_numero: '',
+    matricula_provincia: '',
+    lugar_atencion_nombre: '',
+    lugar_atencion_direccion: '',
+    lugar_atencion_contacto: '',
+    lugar_atencion_email: ''
+});
+
+// 'area' faltaba: un usuario con ese rol no se podía editar sin cambiárselo.
+const ROLES = ['director', 'profesional', 'administrativo', 'area'];
+// Los cuatro valores del ENUM, incluido 'O'.
+const SEXOS = [
+    { label: 'Femenino', value: 'F' },
+    { label: 'Masculino', value: 'M' },
+    { label: 'No binario / X', value: 'X' },
+    { label: 'Otro', value: 'O' }
+];
+const TIPOS_MATRICULA = ['MN', 'MP', 'OP'];
+const rolPrescribe = () => ['profesional', 'director'].includes(form.rol);
+const showPwd = ref(false);
+const loading = ref(false);
+const error = ref('');
+const ok = ref('');
+
+// Cargar datos del usuario
+onMounted(async () => {
+    try {
+        loading.value = true;
+        const res = await usuarioService.getUsuario(userId);
+        // El detalle trae también los campos profesionales; si no vinieran,
+        // el formulario los mostraría vacíos y al guardar los borraría.
+        Object.assign(form, res.data);
+        // Los null de la base se convierten a '' para que los inputs funcionen.
+        Object.keys(form).forEach((k) => {
+            if (form[k] === null || form[k] === undefined) form[k] = '';
+        });
+    } catch (e) {
+        error.value = '❌ Error cargando usuario';
+    } finally {
+        loading.value = false;
+    }
+});
+
+async function onSubmit() {
+    error.value = '';
+    ok.value = '';
+    loading.value = true;
+
+    try {
+        // preparar payload (sin enviar password si está vacío)
+        const payload = { ...form };
+        if (!payload.password) delete payload.password;
+
+        await usuarioService.updateUsuario(userId, payload);
+        ok.value = 'Usuario actualizado ✅';
+        form.password = ''; // limpiar password
+    } catch (e) {
+        error.value = e.response?.data?.error || e.message || 'Error al actualizar usuario';
+    } finally {
+        loading.value = false;
+    }
+}
+</script>
+
 <template>
     <div class="flex justify-center items-start p-8">
         <div class="bg-white shadow-xl rounded-2xl p-8 w-full max-w-2xl">
@@ -125,88 +210,3 @@
         </div>
     </div>
 </template>
-
-<script setup>
-import { reactive, ref, onMounted } from 'vue';
-import { useRoute } from 'vue-router';
-import usuarioService from '@/service/usuarioService';
-
-const route = useRoute();
-const userId = route.params.id;
-
-const form = reactive({
-    nombre: '',
-    username: '',
-    email: '',
-    rol: '',
-    especialidad: '',
-    password: '',
-    // Datos que la receta electrónica exige del profesional que la firma.
-    apellido: '',
-    dni: '',
-    sexo: '',
-    telefono: '',
-    matricula_tipo: '',
-    matricula_numero: '',
-    matricula_provincia: '',
-    lugar_atencion_nombre: '',
-    lugar_atencion_direccion: '',
-    lugar_atencion_contacto: '',
-    lugar_atencion_email: ''
-});
-
-// 'area' faltaba: un usuario con ese rol no se podía editar sin cambiárselo.
-const ROLES = ['director', 'profesional', 'administrativo', 'area'];
-// Los cuatro valores del ENUM, incluido 'O'.
-const SEXOS = [
-    { label: 'Femenino', value: 'F' },
-    { label: 'Masculino', value: 'M' },
-    { label: 'No binario / X', value: 'X' },
-    { label: 'Otro', value: 'O' }
-];
-const TIPOS_MATRICULA = ['MN', 'MP', 'OP'];
-const rolPrescribe = () => ['profesional', 'director'].includes(form.rol);
-const showPwd = ref(false);
-const loading = ref(false);
-const error = ref('');
-const ok = ref('');
-
-// Cargar datos del usuario
-onMounted(async () => {
-    try {
-        loading.value = true;
-        const res = await usuarioService.getUsuario(userId);
-        // El detalle trae también los campos profesionales; si no vinieran,
-        // el formulario los mostraría vacíos y al guardar los borraría.
-        Object.assign(form, res.data);
-        // Los null de la base se convierten a '' para que los inputs funcionen.
-        Object.keys(form).forEach((k) => {
-            if (form[k] === null || form[k] === undefined) form[k] = '';
-        });
-    } catch (e) {
-        error.value = '❌ Error cargando usuario';
-    } finally {
-        loading.value = false;
-    }
-});
-
-async function onSubmit() {
-    error.value = '';
-    ok.value = '';
-    loading.value = true;
-
-    try {
-        // preparar payload (sin enviar password si está vacío)
-        const payload = { ...form };
-        if (!payload.password) delete payload.password;
-
-        await usuarioService.updateUsuario(userId, payload);
-        ok.value = 'Usuario actualizado ✅';
-        form.password = ''; // limpiar password
-    } catch (e) {
-        error.value = e.response?.data?.error || e.message || 'Error al actualizar usuario';
-    } finally {
-        loading.value = false;
-    }
-}
-</script>

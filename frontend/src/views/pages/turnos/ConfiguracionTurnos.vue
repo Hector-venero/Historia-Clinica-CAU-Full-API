@@ -1,19 +1,3 @@
-<template>
-    <div class="p-4">
-        <Card>
-            <template #title> Configuración de Turnos </template>
-
-            <template #content>
-                <p class="mb-3">Duración de cada turno del profesional</p>
-
-                <Dropdown v-model="duracion" :options="opciones" optionLabel="label" optionValue="value" class="w-full mt-3" />
-
-                <Button class="mt-4" label="Guardar" icon="pi pi-save" @click="guardar" />
-            </template>
-        </Card>
-    </div>
-</template>
-
 <script setup>
 import { ref } from 'vue';
 import { useUserStore } from '@/stores/user';
@@ -49,3 +33,19 @@ const guardar = async () => {
     });
 };
 </script>
+
+<template>
+    <div class="p-4">
+        <Card>
+            <template #title> Configuración de Turnos </template>
+
+            <template #content>
+                <p class="mb-3">Duración de cada turno del profesional</p>
+
+                <Dropdown v-model="duracion" :options="opciones" optionLabel="label" optionValue="value" class="w-full mt-3" />
+
+                <Button class="mt-4" label="Guardar" icon="pi pi-save" @click="guardar" />
+            </template>
+        </Card>
+    </div>
+</template>

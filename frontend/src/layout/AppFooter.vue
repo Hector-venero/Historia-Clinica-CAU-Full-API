@@ -1,3 +1,7 @@
+<script setup>
+// Footer simple — sin lógica adicional
+</script>
+
 <template>
     <footer class="app-footer">
         <div class="footer-content">
@@ -6,10 +10,6 @@
         </div>
     </footer>
 </template>
-
-<script setup>
-// Footer simple — sin lógica adicional
-</script>
 
 <style scoped>
 .app-footer {

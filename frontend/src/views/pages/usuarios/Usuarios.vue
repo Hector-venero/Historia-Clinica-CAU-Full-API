@@ -1,3 +1,72 @@
+<script setup>
+import { computed, onMounted, ref } from 'vue';
+import { useRouter } from 'vue-router';
+import usuarioService from '@/service/usuarioService';
+
+// Imports PrimeVue
+import DataTable from 'primevue/datatable';
+import Column from 'primevue/column';
+import Button from 'primevue/button';
+import Dialog from 'primevue/dialog';
+import InputText from 'primevue/inputtext';
+import IconField from 'primevue/iconfield';
+import InputIcon from 'primevue/inputicon';
+import Tag from 'primevue/tag';
+
+const usuarios = ref([]);
+const busqueda = ref('');
+const router = useRouter();
+
+const usuarioAEliminar = ref(null);
+const mostrarDialog = ref(false);
+
+const fetchUsuarios = async () => {
+    try {
+        const res = await usuarioService.getUsuarios();
+        usuarios.value = res.data;
+    } catch (err) {
+        console.error(err);
+    }
+};
+
+onMounted(fetchUsuarios);
+
+const filtrados = computed(() => {
+    if (!busqueda.value) return usuarios.value;
+    return usuarios.value.filter((u) => u.nombre.toLowerCase().includes(busqueda.value.toLowerCase()) || u.username.toLowerCase().includes(busqueda.value.toLowerCase()) || u.email.toLowerCase().includes(busqueda.value.toLowerCase()));
+});
+
+const editarUsuario = (id) => {
+    router.push(`/usuarios/${id}/editar`);
+};
+
+const confirmarEliminar = (usuario) => {
+    usuarioAEliminar.value = usuario;
+    mostrarDialog.value = true;
+};
+
+const cancelarEliminar = () => {
+    usuarioAEliminar.value = null;
+    mostrarDialog.value = false;
+};
+
+const eliminarUsuarioConfirmado = async () => {
+    if (!usuarioAEliminar.value) return;
+    try {
+        await usuarioService.deleteUsuario(usuarioAEliminar.value.id);
+        const index = usuarios.value.findIndex((u) => u.id === usuarioAEliminar.value.id);
+        if (index !== -1) {
+            usuarios.value[index].activo = 0;
+        }
+        mostrarDialog.value = false;
+        usuarioAEliminar.value = null;
+    } catch (error) {
+        console.error(error);
+        alert('❌ Error al eliminar usuario.');
+    }
+};
+</script>
+
 <template>
     <div class="p-6 md:p-8 w-full h-full">
         <div class="bg-white dark:bg-[#1e1e1e] shadow-xl rounded-2xl p-6 transition-colors">
@@ -69,72 +138,3 @@
         </Dialog>
     </div>
 </template>
-
-<script setup>
-import { computed, onMounted, ref } from 'vue';
-import { useRouter } from 'vue-router';
-import usuarioService from '@/service/usuarioService';
-
-// Imports PrimeVue
-import DataTable from 'primevue/datatable';
-import Column from 'primevue/column';
-import Button from 'primevue/button';
-import Dialog from 'primevue/dialog';
-import InputText from 'primevue/inputtext';
-import IconField from 'primevue/iconfield';
-import InputIcon from 'primevue/inputicon';
-import Tag from 'primevue/tag';
-
-const usuarios = ref([]);
-const busqueda = ref('');
-const router = useRouter();
-
-const usuarioAEliminar = ref(null);
-const mostrarDialog = ref(false);
-
-const fetchUsuarios = async () => {
-    try {
-        const res = await usuarioService.getUsuarios();
-        usuarios.value = res.data;
-    } catch (err) {
-        console.error(err);
-    }
-};
-
-onMounted(fetchUsuarios);
-
-const filtrados = computed(() => {
-    if (!busqueda.value) return usuarios.value;
-    return usuarios.value.filter((u) => u.nombre.toLowerCase().includes(busqueda.value.toLowerCase()) || u.username.toLowerCase().includes(busqueda.value.toLowerCase()) || u.email.toLowerCase().includes(busqueda.value.toLowerCase()));
-});
-
-const editarUsuario = (id) => {
-    router.push(`/usuarios/${id}/editar`);
-};
-
-const confirmarEliminar = (usuario) => {
-    usuarioAEliminar.value = usuario;
-    mostrarDialog.value = true;
-};
-
-const cancelarEliminar = () => {
-    usuarioAEliminar.value = null;
-    mostrarDialog.value = false;
-};
-
-const eliminarUsuarioConfirmado = async () => {
-    if (!usuarioAEliminar.value) return;
-    try {
-        await usuarioService.deleteUsuario(usuarioAEliminar.value.id);
-        const index = usuarios.value.findIndex((u) => u.id === usuarioAEliminar.value.id);
-        if (index !== -1) {
-            usuarios.value[index].activo = 0;
-        }
-        mostrarDialog.value = false;
-        usuarioAEliminar.value = null;
-    } catch (error) {
-        console.error(error);
-        alert('❌ Error al eliminar usuario.');
-    }
-};
-</script>

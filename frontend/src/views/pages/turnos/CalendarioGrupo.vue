@@ -1,60 +1,3 @@
-<template>
-    <div class="p-6 h-screen flex flex-col">
-        <div class="flex justify-between items-center mb-4">
-            <h1 class="text-2xl font-bold text-gray-800 dark:text-white flex items-center gap-2">
-                <span class="w-4 h-4 rounded-full" :style="{ backgroundColor: grupo?.color }"></span>
-                Agenda: {{ grupo?.nombre || 'Cargando...' }}
-            </h1>
-
-            <div class="text-sm text-gray-500"><i class="pi pi-info-circle"></i> Haz clic en un turno para ver detalles</div>
-        </div>
-
-        <div class="flex-1 bg-white dark:bg-[#1e1e1e] rounded-xl shadow-lg p-4 overflow-hidden">
-            <FullCalendar ref="fullCalendar" :options="calendarOptions" class="h-full" />
-        </div>
-
-        <Dialog v-model:visible="mostrarModal" modal header="Detalle del Turno" :style="{ width: '400px' }" class="p-fluid">
-            <div v-if="turnoSeleccionado" class="space-y-4">
-                <div class="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border-l-4 border-blue-500">
-                    <p class="text-sm text-gray-500 dark:text-gray-400">Paciente</p>
-                    <p class="text-lg font-bold text-gray-800 dark:text-white">
-                        {{ turnoSeleccionado.paciente }}
-                    </p>
-                    <p class="text-sm text-gray-600 dark:text-gray-300">DNI: {{ turnoSeleccionado.dni }}</p>
-                </div>
-
-                <div>
-                    <p class="text-sm text-gray-500 dark:text-gray-400">Profesional / Área</p>
-                    <p class="font-medium flex items-center gap-2">
-                        <i class="pi pi-user-md text-green-600"></i>
-                        {{ turnoSeleccionado.profesional }}
-                    </p>
-                </div>
-
-                <div class="grid grid-cols-2 gap-4">
-                    <div>
-                        <p class="text-sm text-gray-500">Fecha</p>
-                        <p class="font-medium">{{ formatearFecha(turnoSeleccionado.start) }}</p>
-                    </div>
-                    <div>
-                        <p class="text-sm text-gray-500">Hora</p>
-                        <p class="font-medium">{{ formatearHora(turnoSeleccionado.start) }}</p>
-                    </div>
-                </div>
-
-                <div v-if="turnoSeleccionado.description">
-                    <p class="text-sm text-gray-500">Motivo</p>
-                    <p class="italic text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 p-2 rounded">"{{ turnoSeleccionado.description }}"</p>
-                </div>
-            </div>
-
-            <template #footer>
-                <Button label="Cerrar" icon="pi pi-times" text @click="mostrarModal = false" />
-            </template>
-        </Dialog>
-    </div>
-</template>
-
 <script setup>
 import { ref, onMounted, reactive } from 'vue';
 import { useRoute } from 'vue-router';
@@ -212,6 +155,63 @@ onMounted(() => {
     cargarTurnosGrupo();
 });
 </script>
+
+<template>
+    <div class="p-6 h-screen flex flex-col">
+        <div class="flex justify-between items-center mb-4">
+            <h1 class="text-2xl font-bold text-gray-800 dark:text-white flex items-center gap-2">
+                <span class="w-4 h-4 rounded-full" :style="{ backgroundColor: grupo?.color }"></span>
+                Agenda: {{ grupo?.nombre || 'Cargando...' }}
+            </h1>
+
+            <div class="text-sm text-gray-500"><i class="pi pi-info-circle"></i> Haz clic en un turno para ver detalles</div>
+        </div>
+
+        <div class="flex-1 bg-white dark:bg-[#1e1e1e] rounded-xl shadow-lg p-4 overflow-hidden">
+            <FullCalendar ref="fullCalendar" :options="calendarOptions" class="h-full" />
+        </div>
+
+        <Dialog v-model:visible="mostrarModal" modal header="Detalle del Turno" :style="{ width: '400px' }" class="p-fluid">
+            <div v-if="turnoSeleccionado" class="space-y-4">
+                <div class="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border-l-4 border-blue-500">
+                    <p class="text-sm text-gray-500 dark:text-gray-400">Paciente</p>
+                    <p class="text-lg font-bold text-gray-800 dark:text-white">
+                        {{ turnoSeleccionado.paciente }}
+                    </p>
+                    <p class="text-sm text-gray-600 dark:text-gray-300">DNI: {{ turnoSeleccionado.dni }}</p>
+                </div>
+
+                <div>
+                    <p class="text-sm text-gray-500 dark:text-gray-400">Profesional / Área</p>
+                    <p class="font-medium flex items-center gap-2">
+                        <i class="pi pi-user-md text-green-600"></i>
+                        {{ turnoSeleccionado.profesional }}
+                    </p>
+                </div>
+
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <p class="text-sm text-gray-500">Fecha</p>
+                        <p class="font-medium">{{ formatearFecha(turnoSeleccionado.start) }}</p>
+                    </div>
+                    <div>
+                        <p class="text-sm text-gray-500">Hora</p>
+                        <p class="font-medium">{{ formatearHora(turnoSeleccionado.start) }}</p>
+                    </div>
+                </div>
+
+                <div v-if="turnoSeleccionado.description">
+                    <p class="text-sm text-gray-500">Motivo</p>
+                    <p class="italic text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 p-2 rounded">"{{ turnoSeleccionado.description }}"</p>
+                </div>
+            </div>
+
+            <template #footer>
+                <Button label="Cerrar" icon="pi pi-times" text @click="mostrarModal = false" />
+            </template>
+        </Dialog>
+    </div>
+</template>
 
 <style scoped>
 :deep(.fc) {

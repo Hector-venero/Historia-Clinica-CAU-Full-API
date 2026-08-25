@@ -1,98 +1,3 @@
-<template>
-    <div class="flex justify-center items-start p-8">
-        <div class="bg-white shadow-xl rounded-2xl p-8 w-full max-w-2xl">
-            <h1 class="text-3xl font-bold text-center mb-8 text-gray-800 dark:text-white">Nuevo Turno</h1>
-
-            <form @submit.prevent="crearTurno" class="space-y-6">
-                <!-- Paciente -->
-                <div class="relative">
-                    <label class="block mb-2 font-semibold text-gray-700">Paciente</label>
-                    <input v-model="searchPaciente" @input="buscarPacientes" type="text" placeholder="Buscar por DNI o nombre" class="w-full p-3 border rounded-xl shadow-sm focus:ring-2 focus:ring-blue-500" autocomplete="off" />
-                    <!-- Lista resultados -->
-                    <ul v-if="pacientes.length > 0" class="absolute z-20 left-0 right-0 border rounded-lg mt-2 bg-white shadow-md divide-y max-h-48 overflow-y-auto">
-                        <li v-for="p in pacientes" :key="p.id" @click="seleccionarPaciente(p)" class="px-3 py-2 hover:bg-blue-100 cursor-pointer">{{ p.apellido }} {{ p.nombre }} (DNI: {{ p.dni }})</li>
-                    </ul>
-                    <p v-if="pacienteId" class="mt-2 text-sm text-green-600 font-medium">✅ Seleccionado: {{ pacienteSeleccionado }}</p>
-                </div>
-
-                <!-- Profesional -->
-                <div>
-                    <label class="block mb-2 font-semibold text-gray-700">Profesional</label>
-                    <select v-model="usuarioId" class="w-full p-3 border rounded-xl shadow-sm focus:ring-2 focus:ring-blue-500" required>
-                        <option value="" disabled>Seleccione un profesional</option>
-                        <option v-for="p in profesionales" :key="p.id" :value="p.id">{{ p.nombre }} ({{ p.especialidad || 'Sin especialidad' }})</option>
-                    </select>
-                </div>
-
-                <!-- Fecha -->
-                <div>
-                    <label class="block mb-2 font-semibold text-gray-700">Fecha y hora</label>
-                    <DatePicker v-model="fecha" showTime hourFormat="24" :stepMinute="5" iconDisplay="input" placeholder="Seleccionar fecha y hora" fluid class="w-full" inputClass="w-full p-3 border rounded-xl shadow-sm" required />
-                </div>
-
-                <!-- Motivo -->
-                <div>
-                    <label class="block mb-2 font-semibold text-gray-700">Motivo</label>
-                    <textarea v-model="motivo" rows="3" placeholder="Motivo del turno" class="w-full p-3 border rounded-xl shadow-sm focus:ring-2 focus:ring-blue-500"></textarea>
-                </div>
-
-                <!-- 🔹 Tanda de turnos -->
-                <div class="mt-6 border-t pt-4">
-                    <label class="flex items-center gap-2 text-gray-700 font-semibold cursor-pointer">
-                        <input type="checkbox" v-model="esTanda" class="accent-blue-600 w-5 h-5" />
-                        Crear tanda de turnos (kinesiología, rehabilitación, etc.)
-                    </label>
-
-                    <transition name="fade">
-                        <div v-if="esTanda" class="mt-4 space-y-4 bg-blue-50 p-4 rounded-xl border border-blue-100">
-                            <div>
-                                <label class="block mb-2 font-semibold text-gray-700">Cantidad de turnos</label>
-                                <input v-model.number="cantidad" type="number" min="1" class="w-full p-3 border rounded-xl shadow-sm focus:ring-2 focus:ring-blue-500" placeholder="Ejemplo: 10" />
-                            </div>
-
-                            <div>
-                                <label class="block mb-2 font-semibold text-gray-700">Días de la semana</label>
-                                <div class="grid grid-cols-3 gap-2">
-                                    <label v-for="(dia, idx) in diasSemana" :key="idx" class="flex items-center space-x-2">
-                                        <input type="checkbox" v-model="diasSeleccionados" :value="dia" class="accent-blue-600 w-5 h-5" />
-                                        <span>{{ dia }}</span>
-                                    </label>
-                                </div>
-                                <p class="text-gray-500 text-sm mt-1">Seleccioná los días en que se repetirá el turno</p>
-                            </div>
-                        </div>
-                    </transition>
-                </div>
-
-                <!-- Botón -->
-                <div class="flex justify-center">
-                    <Button type="submit" label="Guardar Turno" class="w-full md:w-auto px-6 py-3 font-semibold shadow-lg" />
-                </div>
-            </form>
-
-            <!-- Mensajes -->
-            <p v-if="mensaje" class="mt-6 text-green-600 font-semibold text-center">
-                {{ mensaje }}
-            </p>
-            <!-- El backend puede correr el turno al siguiente slot libre.
-                 Se avisa para que no se le confirme al paciente un horario distinto. -->
-            <div v-if="avisoAjuste" class="mt-4 p-3 rounded-lg bg-amber-50 border border-amber-300 text-amber-800 text-sm text-center"><i class="pi pi-clock mr-1"></i> {{ avisoAjuste }}</div>
-            <p v-if="error" class="mt-6 text-red-600 font-semibold text-center">
-                {{ error }}
-            </p>
-            <!-- Alternativas del mismo día, para no tener que probar a ciegas -->
-            <div v-if="horariosSugeridos.length" class="mt-3 text-center">
-                <p class="text-sm text-gray-600 mb-2">Horarios disponibles ese día:</p>
-                <div class="flex flex-wrap gap-2 justify-center">
-                    <button v-for="h in horariosSugeridos" :key="h" type="button" class="px-3 py-1 rounded-lg border border-blue-300 bg-blue-50 text-blue-700 text-sm hover:bg-blue-100 transition" @click="usarHorario(h)">
-                        {{ soloHora(h) }}
-                    </button>
-                </div>
-            </div>
-        </div>
-    </div>
-</template>
-
 <script setup>
 import { ref, onMounted } from 'vue';
 import { useUserStore } from '@/stores/user';
@@ -271,6 +176,101 @@ function soloHora(iso) {
     return new Date(iso).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
 }
 </script>
+
+<template>
+    <div class="flex justify-center items-start p-8">
+        <div class="bg-white shadow-xl rounded-2xl p-8 w-full max-w-2xl">
+            <h1 class="text-3xl font-bold text-center mb-8 text-gray-800 dark:text-white">Nuevo Turno</h1>
+
+            <form @submit.prevent="crearTurno" class="space-y-6">
+                <!-- Paciente -->
+                <div class="relative">
+                    <label class="block mb-2 font-semibold text-gray-700">Paciente</label>
+                    <input v-model="searchPaciente" @input="buscarPacientes" type="text" placeholder="Buscar por DNI o nombre" class="w-full p-3 border rounded-xl shadow-sm focus:ring-2 focus:ring-blue-500" autocomplete="off" />
+                    <!-- Lista resultados -->
+                    <ul v-if="pacientes.length > 0" class="absolute z-20 left-0 right-0 border rounded-lg mt-2 bg-white shadow-md divide-y max-h-48 overflow-y-auto">
+                        <li v-for="p in pacientes" :key="p.id" @click="seleccionarPaciente(p)" class="px-3 py-2 hover:bg-blue-100 cursor-pointer">{{ p.apellido }} {{ p.nombre }} (DNI: {{ p.dni }})</li>
+                    </ul>
+                    <p v-if="pacienteId" class="mt-2 text-sm text-green-600 font-medium">✅ Seleccionado: {{ pacienteSeleccionado }}</p>
+                </div>
+
+                <!-- Profesional -->
+                <div>
+                    <label class="block mb-2 font-semibold text-gray-700">Profesional</label>
+                    <select v-model="usuarioId" class="w-full p-3 border rounded-xl shadow-sm focus:ring-2 focus:ring-blue-500" required>
+                        <option value="" disabled>Seleccione un profesional</option>
+                        <option v-for="p in profesionales" :key="p.id" :value="p.id">{{ p.nombre }} ({{ p.especialidad || 'Sin especialidad' }})</option>
+                    </select>
+                </div>
+
+                <!-- Fecha -->
+                <div>
+                    <label class="block mb-2 font-semibold text-gray-700">Fecha y hora</label>
+                    <DatePicker v-model="fecha" showTime hourFormat="24" :stepMinute="5" iconDisplay="input" placeholder="Seleccionar fecha y hora" fluid class="w-full" inputClass="w-full p-3 border rounded-xl shadow-sm" required />
+                </div>
+
+                <!-- Motivo -->
+                <div>
+                    <label class="block mb-2 font-semibold text-gray-700">Motivo</label>
+                    <textarea v-model="motivo" rows="3" placeholder="Motivo del turno" class="w-full p-3 border rounded-xl shadow-sm focus:ring-2 focus:ring-blue-500"></textarea>
+                </div>
+
+                <!-- 🔹 Tanda de turnos -->
+                <div class="mt-6 border-t pt-4">
+                    <label class="flex items-center gap-2 text-gray-700 font-semibold cursor-pointer">
+                        <input type="checkbox" v-model="esTanda" class="accent-blue-600 w-5 h-5" />
+                        Crear tanda de turnos (kinesiología, rehabilitación, etc.)
+                    </label>
+
+                    <transition name="fade">
+                        <div v-if="esTanda" class="mt-4 space-y-4 bg-blue-50 p-4 rounded-xl border border-blue-100">
+                            <div>
+                                <label class="block mb-2 font-semibold text-gray-700">Cantidad de turnos</label>
+                                <input v-model.number="cantidad" type="number" min="1" class="w-full p-3 border rounded-xl shadow-sm focus:ring-2 focus:ring-blue-500" placeholder="Ejemplo: 10" />
+                            </div>
+
+                            <div>
+                                <label class="block mb-2 font-semibold text-gray-700">Días de la semana</label>
+                                <div class="grid grid-cols-3 gap-2">
+                                    <label v-for="(dia, idx) in diasSemana" :key="idx" class="flex items-center space-x-2">
+                                        <input type="checkbox" v-model="diasSeleccionados" :value="dia" class="accent-blue-600 w-5 h-5" />
+                                        <span>{{ dia }}</span>
+                                    </label>
+                                </div>
+                                <p class="text-gray-500 text-sm mt-1">Seleccioná los días en que se repetirá el turno</p>
+                            </div>
+                        </div>
+                    </transition>
+                </div>
+
+                <!-- Botón -->
+                <div class="flex justify-center">
+                    <Button type="submit" label="Guardar Turno" class="w-full md:w-auto px-6 py-3 font-semibold shadow-lg" />
+                </div>
+            </form>
+
+            <!-- Mensajes -->
+            <p v-if="mensaje" class="mt-6 text-green-600 font-semibold text-center">
+                {{ mensaje }}
+            </p>
+            <!-- El backend puede correr el turno al siguiente slot libre.
+                 Se avisa para que no se le confirme al paciente un horario distinto. -->
+            <div v-if="avisoAjuste" class="mt-4 p-3 rounded-lg bg-amber-50 border border-amber-300 text-amber-800 text-sm text-center"><i class="pi pi-clock mr-1"></i> {{ avisoAjuste }}</div>
+            <p v-if="error" class="mt-6 text-red-600 font-semibold text-center">
+                {{ error }}
+            </p>
+            <!-- Alternativas del mismo día, para no tener que probar a ciegas -->
+            <div v-if="horariosSugeridos.length" class="mt-3 text-center">
+                <p class="text-sm text-gray-600 mb-2">Horarios disponibles ese día:</p>
+                <div class="flex flex-wrap gap-2 justify-center">
+                    <button v-for="h in horariosSugeridos" :key="h" type="button" class="px-3 py-1 rounded-lg border border-blue-300 bg-blue-50 text-blue-700 text-sm hover:bg-blue-100 transition" @click="usarHorario(h)">
+                        {{ soloHora(h) }}
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</template>
 
 <style scoped>
 .fade-enter-active,

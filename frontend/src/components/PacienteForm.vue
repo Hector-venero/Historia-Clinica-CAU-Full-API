@@ -1,3 +1,142 @@
+<script setup>
+import DatePicker from 'primevue/datepicker';
+import { ref, watch, onMounted } from 'vue';
+import pacienteService from '@/service/pacienteService';
+
+// Props
+const props = defineProps({
+    paciente: {
+        type: Object,
+        default: () => ({})
+    },
+    onSubmit: {
+        type: Function,
+        required: false
+    },
+    submitText: {
+        type: String,
+        default: 'Registrar'
+    }
+});
+
+const paciente = ref({ ...props.paciente }); // copiamos para mantener reactividad
+const mensaje = ref('');
+const tipoMensaje = ref('');
+const intentadoEnviar = ref(false);
+const proximoNroHc = ref('');
+
+onMounted(async () => {
+    // Solo en el alta: al editar, el número ya está asignado y no se toca.
+    if (paciente.value.id) return;
+
+    try {
+        const { data } = await pacienteService.getProximoNroHc();
+        if (!data?.proximo_nro_hc) return;
+
+        proximoNroHc.value = data.proximo_nro_hc;
+        // Se precarga, pero el campo sigue siendo editable: es una sugerencia,
+        // no una reserva. El alta valida duplicados igual.
+        if (!paciente.value.nro_hc) {
+            paciente.value.nro_hc = data.proximo_nro_hc;
+        }
+    } catch (err) {
+        // Que falle la sugerencia no debe impedir cargar el paciente a mano.
+        console.error('No se pudo obtener el próximo Nº de H.C.:', err);
+    }
+});
+
+// Si las props cambian (por ejemplo, al montar EditarPaciente.vue), actualizamos los campos
+watch(
+    () => props.paciente,
+    (nuevo) => {
+        paciente.value = { ...nuevo };
+    },
+    { deep: true }
+);
+
+function normalizarFechaISO(fecha) {
+    if (!fecha) return null;
+
+    // Caso 1: Si es un objeto Date (lo que devuelve PrimeVue)
+    if (fecha instanceof Date) {
+        const year = fecha.getFullYear();
+        const month = String(fecha.getMonth() + 1).padStart(2, '0');
+        const day = String(fecha.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`; // → "2000-08-29"
+    }
+
+    // Caso 2: Si viene como string ISO con zona horaria
+    if (typeof fecha === 'string' && fecha.includes('T')) {
+        return fecha.split('T')[0];
+    }
+
+    // Caso 3: Si viene como dd/mm/yyyy
+    if (typeof fecha === 'string' && fecha.includes('/')) {
+        const [dia, mes, ano] = fecha.split('/');
+        return `${ano}-${mes}-${dia}`;
+    }
+
+    return fecha;
+}
+
+// Función principal: o registrar o actualizar
+const registrar = async () => {
+    intentadoEnviar.value = true;
+
+    if (
+        !paciente.value.nro_hc ||
+        !paciente.value.nombre ||
+        !paciente.value.apellido ||
+        !paciente.value.dni ||
+        !paciente.value.fecha_nacimiento ||
+        !paciente.value.sexo ||
+        !paciente.value.email ||
+        (!paciente.value.telefono && !paciente.value.celular)
+    ) {
+        mensaje.value = '⚠️ Completá todos los campos obligatorios.';
+        tipoMensaje.value = 'error';
+        return;
+    }
+
+    try {
+        // Normalizar fecha antes de enviar al backend
+        paciente.value.fecha_nacimiento = normalizarFechaISO(paciente.value.fecha_nacimiento);
+
+        const formData = new FormData();
+        for (const key in paciente.value) {
+            formData.append(key, paciente.value[key]);
+        }
+
+        // Si hay función onSubmit, la usamos (caso editar)
+        if (props.onSubmit) {
+            await props.onSubmit(paciente.value);
+            mensaje.value = '✅ Paciente actualizado correctamente.';
+            tipoMensaje.value = 'success';
+        } else {
+            // Si no hay onSubmit, registramos nuevo paciente
+            const response = await pacienteService.crearPaciente(formData);
+
+            if (response.data && response.data.message) {
+                mensaje.value = response.data.message;
+                tipoMensaje.value = 'success';
+                paciente.value = {};
+                intentadoEnviar.value = false;
+            } else if (response.data && response.data.error) {
+                mensaje.value = response.data.error;
+                tipoMensaje.value = 'error';
+            } else {
+                mensaje.value = '⚠️ Error inesperado al registrar paciente.';
+                tipoMensaje.value = 'error';
+            }
+        }
+    } catch (error) {
+        console.error(error);
+        mensaje.value = '❌ Error de red o servidor.';
+        tipoMensaje.value = 'error';
+    }
+};
+</script>
+
 <template>
     <div class="p-4">
         <h1 class="text-2xl font-bold mb-4">Registrar Paciente</h1>
@@ -174,144 +313,5 @@
         </p>
     </div>
 </template>
-
-<script setup>
-import DatePicker from 'primevue/datepicker';
-import { ref, watch, onMounted } from 'vue';
-import pacienteService from '@/service/pacienteService';
-
-// Props
-const props = defineProps({
-    paciente: {
-        type: Object,
-        default: () => ({})
-    },
-    onSubmit: {
-        type: Function,
-        required: false
-    },
-    submitText: {
-        type: String,
-        default: 'Registrar'
-    }
-});
-
-const paciente = ref({ ...props.paciente }); // copiamos para mantener reactividad
-const mensaje = ref('');
-const tipoMensaje = ref('');
-const intentadoEnviar = ref(false);
-const proximoNroHc = ref('');
-
-onMounted(async () => {
-    // Solo en el alta: al editar, el número ya está asignado y no se toca.
-    if (paciente.value.id) return;
-
-    try {
-        const { data } = await pacienteService.getProximoNroHc();
-        if (!data?.proximo_nro_hc) return;
-
-        proximoNroHc.value = data.proximo_nro_hc;
-        // Se precarga, pero el campo sigue siendo editable: es una sugerencia,
-        // no una reserva. El alta valida duplicados igual.
-        if (!paciente.value.nro_hc) {
-            paciente.value.nro_hc = data.proximo_nro_hc;
-        }
-    } catch (err) {
-        // Que falle la sugerencia no debe impedir cargar el paciente a mano.
-        console.error('No se pudo obtener el próximo Nº de H.C.:', err);
-    }
-});
-
-// Si las props cambian (por ejemplo, al montar EditarPaciente.vue), actualizamos los campos
-watch(
-    () => props.paciente,
-    (nuevo) => {
-        paciente.value = { ...nuevo };
-    },
-    { deep: true }
-);
-
-function normalizarFechaISO(fecha) {
-    if (!fecha) return null;
-
-    // Caso 1: Si es un objeto Date (lo que devuelve PrimeVue)
-    if (fecha instanceof Date) {
-        const year = fecha.getFullYear();
-        const month = String(fecha.getMonth() + 1).padStart(2, '0');
-        const day = String(fecha.getDate()).padStart(2, '0');
-        return `${year}-${month}-${day}`; // → "2000-08-29"
-    }
-
-    // Caso 2: Si viene como string ISO con zona horaria
-    if (typeof fecha === 'string' && fecha.includes('T')) {
-        return fecha.split('T')[0];
-    }
-
-    // Caso 3: Si viene como dd/mm/yyyy
-    if (typeof fecha === 'string' && fecha.includes('/')) {
-        const [dia, mes, ano] = fecha.split('/');
-        return `${ano}-${mes}-${dia}`;
-    }
-
-    return fecha;
-}
-
-// Función principal: o registrar o actualizar
-const registrar = async () => {
-    intentadoEnviar.value = true;
-
-    if (
-        !paciente.value.nro_hc ||
-        !paciente.value.nombre ||
-        !paciente.value.apellido ||
-        !paciente.value.dni ||
-        !paciente.value.fecha_nacimiento ||
-        !paciente.value.sexo ||
-        !paciente.value.email ||
-        (!paciente.value.telefono && !paciente.value.celular)
-    ) {
-        mensaje.value = '⚠️ Completá todos los campos obligatorios.';
-        tipoMensaje.value = 'error';
-        return;
-    }
-
-    try {
-        // Normalizar fecha antes de enviar al backend
-        paciente.value.fecha_nacimiento = normalizarFechaISO(paciente.value.fecha_nacimiento);
-
-        const formData = new FormData();
-        for (const key in paciente.value) {
-            formData.append(key, paciente.value[key]);
-        }
-
-        // Si hay función onSubmit, la usamos (caso editar)
-        if (props.onSubmit) {
-            await props.onSubmit(paciente.value);
-            mensaje.value = '✅ Paciente actualizado correctamente.';
-            tipoMensaje.value = 'success';
-        } else {
-            // Si no hay onSubmit, registramos nuevo paciente
-            const response = await pacienteService.crearPaciente(formData);
-
-            if (response.data && response.data.message) {
-                mensaje.value = response.data.message;
-                tipoMensaje.value = 'success';
-                paciente.value = {};
-                intentadoEnviar.value = false;
-            } else if (response.data && response.data.error) {
-                mensaje.value = response.data.error;
-                tipoMensaje.value = 'error';
-            } else {
-                mensaje.value = '⚠️ Error inesperado al registrar paciente.';
-                tipoMensaje.value = 'error';
-            }
-        }
-    } catch (error) {
-        console.error(error);
-        mensaje.value = '❌ Error de red o servidor.';
-        tipoMensaje.value = 'error';
-    }
-};
-</script>
 
 <style scoped></style>
