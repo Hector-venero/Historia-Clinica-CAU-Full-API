@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify
 from flask_login import login_required, current_user
-from app.database import get_connection
+from app.database import get_connection, db_cursor
 from app.utils.permisos import requiere_rol
 from datetime import datetime, timedelta
 
@@ -10,9 +10,15 @@ bp_disponibilidades = Blueprint("disponibilidades", __name__)
 # 📅 CRUD de Disponibilidades de los Médicos
 # ==========================================================
 
+# Sin tildes, igual que el ENUM de la columna `dia_semana`.
+#
+# Antes esta lista y normalizar_dia devolvían "Miércoles" y "Sábado" con tilde,
+# valores que no existen en el ENUM: guardar disponibilidad para esos dos días
+# fallaba con error 1265 "Data truncated". La entrada sí se acepta con o sin
+# tilde; lo que se canonicaliza es lo que va a la base.
 DIAS_ORDENADOS = [
-    "Lunes", "Martes", "Miércoles",
-    "Jueves", "Viernes", "Sábado", "Domingo"
+    "Lunes", "Martes", "Miercoles",
+    "Jueves", "Viernes", "Sabado", "Domingo"
 ]
 orden_sql = ",".join([f"'{d}'" for d in DIAS_ORDENADOS])
 
@@ -21,14 +27,16 @@ def normalizar_dia(dia):
     mapa = {
         "lunes": "Lunes",
         "martes": "Martes",
-        "miercoles": "Miércoles",
-        "miércoles": "Miércoles",
+        "miercoles": "Miercoles",
+        "miércoles": "Miercoles",
         "jueves": "Jueves",
         "viernes": "Viernes",
-        "sabado": "Sábado",
-        "sábado": "Sábado",
+        "sabado": "Sabado",
+        "sábado": "Sabado",
         "domingo": "Domingo"
     }
+    if not dia:
+        return None
     return mapa.get(dia.lower().strip())
 
 
@@ -81,9 +89,9 @@ def listar_disponibilidades():
 
     # 🟢 Normalizar resultados
     for d in disponibilidades:
-        # Esto asegura que si en la DB quedó alguno viejo sin tilde, se muestre bien
-        if d["dia_semana"] in ["Miercoles", "Sabado"]:
-             d["dia_semana"] = normalizar_dia(d["dia_semana"])
+        # Canonicalizar siempre: si quedó alguna fila vieja con tilde, sale igual
+        # que el resto y el frontend no tiene que contemplar dos formatos.
+        d["dia_semana"] = normalizar_dia(d["dia_semana"]) or d["dia_semana"]
 
         # convertir TIME → string
         if isinstance(d.get("hora_inicio"), timedelta):
@@ -100,10 +108,10 @@ def listar_disponibilidades():
 
 @bp_disponibilidades.route('/api/disponibilidades', methods=['POST'])
 @login_required
-@requiere_rol('director', 'profesional', 'area')
+@requiere_rol('director', 'profesional', 'administrativo', 'area')
 def crear_disponibilidad():
 
-    data = request.get_json()
+    data = request.get_json(silent=True) or {}
     if not data:
         return jsonify({"error": "Faltan datos"}), 400
 
@@ -151,10 +159,10 @@ def crear_disponibilidad():
 
 @bp_disponibilidades.route('/api/disponibilidades/<int:id>', methods=['PUT'])
 @login_required
-@requiere_rol('director', 'profesional', 'area')
+@requiere_rol('director', 'profesional', 'administrativo', 'area')
 def editar_disponibilidad(id):
 
-    data = request.get_json()
+    data = request.get_json(silent=True) or {}
     if not data:
         return jsonify({"error": "Faltan datos"}), 400
 
@@ -196,7 +204,7 @@ def editar_disponibilidad(id):
 
 @bp_disponibilidades.route('/api/disponibilidades/<int:id>', methods=['DELETE'])
 @login_required
-@requiere_rol('director', 'profesional', 'area')
+@requiere_rol('director', 'profesional', 'administrativo', 'area')
 def eliminar_disponibilidad(id):
 
     conn = get_connection()
@@ -220,3 +228,87 @@ def eliminar_disponibilidad(id):
     cursor.close()
     conn.close()
     return jsonify({"message": "Disponibilidad eliminada correctamente"})
+
+
+# ==========================================================
+# POST — Validar una disponibilidad propuesta contra los turnos ya dados
+# ==========================================================
+
+DIAS_EN_A_ES = {
+    "Monday": "Lunes",
+    "Tuesday": "Martes",
+    "Wednesday": "Miercoles",
+    "Thursday": "Jueves",
+    "Friday": "Viernes",
+    "Saturday": "Sabado",
+    "Sunday": "Domingo",
+}
+
+
+def _a_hhmmss(hora):
+    """'09:00' -> '09:00:00'. Permite comparar horas como texto."""
+    if not hora:
+        return None
+    return f"{hora}:00" if len(hora) == 5 else hora
+
+
+@bp_disponibilidades.route('/api/disponibilidades/validar', methods=['POST'])
+@login_required
+@requiere_rol('director', 'profesional', 'administrativo', 'area')
+def validar_disponibilidad():
+    """Devuelve los turnos futuros que quedarian fuera de la disponibilidad propuesta.
+
+    Reducir o mover una franja no cancela los turnos ya asignados: quedan
+    agendados en un horario en el que el profesional ya no atiende, y nadie se
+    entera hasta que el paciente se presenta. Esto permite avisar antes de
+    guardar.
+    """
+    data = request.get_json(silent=True) or {}
+
+    # Un profesional solo puede validar su propia agenda.
+    if current_user.rol in ('profesional', 'area'):
+        usuario_id = current_user.id
+    else:
+        usuario_id = data.get("usuario_id") or current_user.id
+
+    franjas = []
+    for propuesta in data.get("disponibilidades", []):
+        if not propuesta.get("activo"):
+            continue
+        dia = normalizar_dia(propuesta.get("dia_semana", ""))
+        inicio = _a_hhmmss(propuesta.get("hora_inicio"))
+        fin = _a_hhmmss(propuesta.get("hora_fin"))
+        if dia and inicio and fin:
+            franjas.append({"dia": dia, "inicio": inicio, "fin": fin})
+
+    with db_cursor() as (_conn, cursor):
+        cursor.execute("""
+            SELECT t.id, t.fecha_inicio, t.fecha_fin, t.motivo, p.nombre AS paciente
+            FROM turnos t
+            JOIN pacientes p ON t.paciente_id = p.id
+            WHERE t.usuario_id = %s AND t.fecha_inicio >= NOW()
+            ORDER BY t.fecha_inicio ASC
+        """, (usuario_id,))
+        turnos_futuros = cursor.fetchall()
+
+    fuera_de_rango = []
+    for turno in turnos_futuros:
+        inicio = turno["fecha_inicio"]
+        dia_es = DIAS_EN_A_ES.get(inicio.strftime("%A"))
+        desde = inicio.time().strftime("%H:%M:%S")
+        hasta = turno["fecha_fin"].time().strftime("%H:%M:%S")
+
+        cubierto = any(
+            f["dia"] == dia_es and desde >= f["inicio"] and hasta <= f["fin"]
+            for f in franjas
+        )
+
+        if not cubierto:
+            fuera_de_rango.append({
+                "id": turno["id"],
+                "paciente": turno["paciente"],
+                "fecha": inicio.strftime("%d/%m/%Y %H:%M"),
+                "motivo": turno["motivo"],
+            })
+
+    return jsonify(fuera_de_rango)

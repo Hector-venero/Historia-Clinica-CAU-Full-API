@@ -203,6 +203,31 @@ def api_eliminar_paciente(id):
     return jsonify({'message': 'Paciente eliminado correctamente ✅'})
 
 
+@bp_pacientes.route('/api/pacientes/proximo-nro-hc', methods=['GET'])
+@login_required
+def proximo_nro_hc():
+    """Sugiere el próximo número de historia clínica libre.
+
+    Se toma el máximo de los nro_hc puramente numéricos y se le suma uno. El
+    REGEXP es necesario porque la columna es VARCHAR y puede tener valores con
+    letras o guiones de cargas viejas: un CAST directo los convertiría en 0 y
+    además haría un full scan comparando basura.
+
+    Es una sugerencia, no una reserva: el alta sigue validando duplicados, que
+    es lo que resuelve dos usuarios cargando al mismo tiempo.
+    """
+    with db_cursor() as (_conn, cursor):
+        cursor.execute("""
+            SELECT MAX(CAST(nro_hc AS UNSIGNED)) AS max_hc
+            FROM pacientes
+            WHERE nro_hc REGEXP '^[0-9]+$'
+        """)
+        fila = cursor.fetchone()
+
+    max_hc = (fila or {}).get('max_hc') or 0
+    return jsonify({'proximo_nro_hc': str(max_hc + 1)})
+
+
 @bp_pacientes.route('/api/pacientes/buscar', methods=['GET'])
 @login_required
 def buscar_pacientes():

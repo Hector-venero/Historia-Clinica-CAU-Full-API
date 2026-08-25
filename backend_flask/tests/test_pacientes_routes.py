@@ -164,3 +164,37 @@ def test_buscar_pacientes_pagina_y_cierra(client, monkeypatch):
 
 def test_buscar_pacientes_requiere_login(client):
     assert client.get("/api/pacientes/buscar?q=x").status_code == 401
+
+
+# ------------------------------------------------------------- nro de H.C.
+
+
+def test_proximo_nro_hc_sugiere_el_siguiente(client, monkeypatch):
+    _director(client)
+    make_db(monkeypatch, pacientes_routes, fetchone_results=[{"max_hc": 1042}])
+
+    respuesta = client.get("/api/pacientes/proximo-nro-hc")
+
+    assert respuesta.status_code == 200
+    assert respuesta.get_json()["proximo_nro_hc"] == "1043"
+
+
+def test_proximo_nro_hc_arranca_en_uno_sin_pacientes(client, monkeypatch):
+    _director(client)
+    make_db(monkeypatch, pacientes_routes, fetchone_results=[{"max_hc": None}])
+
+    assert client.get("/api/pacientes/proximo-nro-hc").get_json()["proximo_nro_hc"] == "1"
+
+
+def test_proximo_nro_hc_ignora_los_no_numericos(client, monkeypatch):
+    """La columna es VARCHAR: un CAST sobre 'HC-2024-A' daría 0 y sugeriría un número ya usado."""
+    _director(client)
+    _, cursor = make_db(monkeypatch, pacientes_routes, fetchone_results=[{"max_hc": 7}])
+
+    client.get("/api/pacientes/proximo-nro-hc")
+
+    assert any("REGEXP '^[0-9]+$'" in q for q in cursor.queries)
+
+
+def test_proximo_nro_hc_requiere_login(client):
+    assert client.get("/api/pacientes/proximo-nro-hc").status_code == 401

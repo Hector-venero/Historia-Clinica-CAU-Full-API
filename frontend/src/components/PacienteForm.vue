@@ -7,7 +7,13 @@
                 <div>
                     <label class="block mb-1">Nº de H.C. <span class="text-red-500">*</span></label>
                     <input v-model="paciente.nro_hc" type="text" class="p-inputtext p-component w-full h-12" />
-                    <span v-if="intentadoEnviar && !paciente.nro_hc" class="text-red-500 text-sm">Campo obligatorio</span>
+                    <span v-if="intentadoEnviar && !paciente.nro_hc" class="text-red-500 text-sm block">Campo obligatorio</span>
+                    <small v-if="proximoNroHc && !paciente.id" class="text-muted-color mt-1 block">
+                        Próximo sugerido:
+                        <button type="button" class="text-primary underline" @click="paciente.nro_hc = proximoNroHc">
+                            {{ proximoNroHc }}
+                        </button>
+                    </small>
                 </div>
                 <!-- Nombre -->
                 <div>
@@ -171,7 +177,7 @@
 
 <script setup>
 import DatePicker from 'primevue/datepicker';
-import { ref, watch } from 'vue';
+import { ref, watch, onMounted } from 'vue';
 import pacienteService from '@/service/pacienteService';
 
 // Props
@@ -194,6 +200,27 @@ const paciente = ref({ ...props.paciente }); // copiamos para mantener reactivid
 const mensaje = ref('');
 const tipoMensaje = ref('');
 const intentadoEnviar = ref(false);
+const proximoNroHc = ref('');
+
+onMounted(async () => {
+    // Solo en el alta: al editar, el número ya está asignado y no se toca.
+    if (paciente.value.id) return;
+
+    try {
+        const { data } = await pacienteService.getProximoNroHc();
+        if (!data?.proximo_nro_hc) return;
+
+        proximoNroHc.value = data.proximo_nro_hc;
+        // Se precarga, pero el campo sigue siendo editable: es una sugerencia,
+        // no una reserva. El alta valida duplicados igual.
+        if (!paciente.value.nro_hc) {
+            paciente.value.nro_hc = data.proximo_nro_hc;
+        }
+    } catch (err) {
+        // Que falle la sugerencia no debe impedir cargar el paciente a mano.
+        console.error('No se pudo obtener el próximo Nº de H.C.:', err);
+    }
+});
 
 // Si las props cambian (por ejemplo, al montar EditarPaciente.vue), actualizamos los campos
 watch(

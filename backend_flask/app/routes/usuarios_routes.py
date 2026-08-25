@@ -2,7 +2,7 @@ from flask import Blueprint, request, jsonify, current_app as app
 from flask_login import login_required, current_user
 from werkzeug.utils import secure_filename
 from werkzeug.security import check_password_hash, generate_password_hash
-from app.database import get_connection
+from app.database import get_connection, db_cursor
 from app.utils.permisos import requiere_rol
 import os
 from PIL import Image
@@ -334,16 +334,14 @@ def obtener_perfil():
 @bp_usuarios.route('/api/usuario/perfil', methods=['POST'])
 @login_required
 def actualizar_perfil():
-    print("🔵 INICIO actualizar_perfil()")
-    conn = get_connection()
-    cursor = conn.cursor()
     nuevo_nombre = request.form.get('nombre')
     nuevo_email = request.form.get('email')
-    
-    # IMPORTANTE: Ruta absoluta para Docker
-    carpeta_fotos = "/app/static/fotos_usuarios" 
-    if not os.path.exists(carpeta_fotos):
-        os.makedirs(carpeta_fotos, exist_ok=True)
+
+    # Se resuelve desde el root_path de Flask en vez de "/app/static/...": la
+    # ruta absoluta solo existe dentro del contenedor, asi que correr el backend
+    # fuera de Docker rompia la subida de fotos.
+    carpeta_fotos = os.path.join(app.root_path, 'static', 'fotos_usuarios')
+    os.makedirs(carpeta_fotos, exist_ok=True)
 
     foto_anterior = current_user.foto
     nueva_foto = foto_anterior
@@ -351,32 +349,37 @@ def actualizar_perfil():
     if "foto" in request.files:
         archivo = request.files["foto"]
         if archivo.filename:
-            print("📁 Nueva foto:", archivo.filename)
             # Borrar anterior
             if foto_anterior:
                 path_anterior = os.path.join(carpeta_fotos, foto_anterior)
                 if os.path.exists(path_anterior):
                     os.remove(path_anterior)
-            
+
             # Guardar nueva
             extension = archivo.filename.rsplit(".", 1)[-1].lower()
             filename = f"user_{current_user.id}.{extension}"
             nueva_foto = filename
             path_nuevo = os.path.join(carpeta_fotos, filename)
-            
+
             try:
                 image = Image.open(archivo)
-                if image.mode in ("RGBA", "P", "LA"): image = image.convert("RGB")
+                if image.mode in ("RGBA", "P", "LA"):
+                    image = image.convert("RGB")
                 image.save(path_nuevo, optimize=True, quality=85)
-                print(f"✅ Foto guardada en: {path_nuevo}")
             except Exception as e:
-                print("⚠ Error procesando imagen, guardando directo:", e)
+                app.logger.warning("No se pudo procesar la imagen, se guarda cruda: %s", e)
+                # Image.open() ya consumio el stream: sin volver al inicio, el
+                # archivo guardado quedaba en 0 bytes y la foto salia rota.
+                archivo.seek(0)
                 archivo.save(path_nuevo)
 
-    cursor.execute("UPDATE usuarios SET nombre=%s, email=%s, foto=%s WHERE id=%s", 
-                   (nuevo_nombre, nuevo_email, nueva_foto, current_user.id))
-    conn.commit()
-    conn.close()
+    with db_cursor(dictionary=False) as (conn, cursor):
+        cursor.execute(
+            "UPDATE usuarios SET nombre=%s, email=%s, foto=%s WHERE id=%s",
+            (nuevo_nombre, nuevo_email, nueva_foto, current_user.id),
+        )
+        conn.commit()
+
     return jsonify({"message": "Perfil actualizado correctamente.", "foto": nueva_foto})
 
 
@@ -412,22 +415,21 @@ def cambiar_password():
 @login_required
 def borrar_foto():
     user_id = current_user.id
-    conn = get_connection()
-    cursor = conn.cursor(dictionary=True)
-    cursor.execute("SELECT foto FROM usuarios WHERE id=%s", (user_id,))
-    data = cursor.fetchone()
 
-    if not data or not data.get("foto"):
-        return jsonify({"message": "No hay foto", "foto": None}), 200
+    with db_cursor() as (conn, cursor):
+        cursor.execute("SELECT foto FROM usuarios WHERE id=%s", (user_id,))
+        data = cursor.fetchone()
 
-    foto = data["foto"]
-    ruta_foto = os.path.join("/app/static/fotos_usuarios", foto)
+        if not data or not data.get("foto"):
+            # El return temprano dejaba la conexion abierta.
+            return jsonify({"message": "No hay foto", "foto": None}), 200
 
-    if os.path.exists(ruta_foto):
-        os.remove(ruta_foto)
-        print(f"🗑 Foto eliminada: {ruta_foto}")
+        # Misma ruta dinamica que al subir: la absoluta solo existe en Docker.
+        ruta_foto = os.path.join(app.root_path, 'static', 'fotos_usuarios', data["foto"])
+        if os.path.exists(ruta_foto):
+            os.remove(ruta_foto)
 
-    cursor.execute("UPDATE usuarios SET foto=NULL WHERE id=%s", (user_id,))
-    conn.commit()
-    conn.close()
+        cursor.execute("UPDATE usuarios SET foto=NULL WHERE id=%s", (user_id,))
+        conn.commit()
+
     return jsonify({"message": "Foto eliminada", "foto": None}), 200
