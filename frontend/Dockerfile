@@ -5,7 +5,10 @@ FROM node:20-alpine AS build
 
 WORKDIR /app
 COPY package*.json ./
-RUN npm install
+# npm ci y no npm install: instala exactamente lo que fija el package-lock.json
+# y falla si el lockfile no coincide con package.json, en vez de resolver
+# versiones nuevas en silencio.
+RUN npm ci
 
 # Copiamos el código fuente
 COPY . .

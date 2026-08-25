@@ -1,0 +1,16 @@
+# Sin este archivo, el `COPY . .` del Dockerfile copiaba el node_modules local
+# DENTRO de la imagen, pisando lo que acababa de instalar npm. El build usaba
+# las dependencias de la maquina de quien construia en vez de las del
+# package-lock.json: dos personas con distinto estado local producian imagenes
+# distintas, y una version nueva en el lockfile no llegaba nunca a la imagen.
+node_modules
+dist
+.vite
+
+# Nada de esto hace falta para construir
+.git
+.gitignore
+*.md
+tests
+.vscode
+.eslintrc.cjs
