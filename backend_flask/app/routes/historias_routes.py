@@ -1,61 +1,73 @@
 # app/routes/historias_routes.py
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, jsonify
 from flask_login import login_required, current_user
-from datetime import datetime
-from app.database import get_connection
+from app.database import db_cursor
 from app.utils.permisos import requiere_rol
-import hashlib, json
+from app.utils.hashing import (
+    PAYLOAD_VERSION_ACTUAL,
+    campos_payload,
+    filtra_activas,
+    generar_hash_historia,
+)
 
 bp_historias = Blueprint("historias", __name__)
+
+
+# =========================================================
+#  Lectura canónica de evoluciones para el hash
+# =========================================================
+def leer_evoluciones(cursor, paciente_id, version=PAYLOAD_VERSION_ACTUAL):
+    """Trae las evoluciones que entran al payload de la versión indicada.
+
+    La query se arma desde la definición del payload (utils/hashing.py) y no a
+    mano: si el SELECT y el payload se definen por separado, se van
+    desincronizando y el hash deja de ser reproducible sin que nada avise.
+    """
+    columnas = ", ".join(campos_payload(version))
+    where = "paciente_id = %s"
+    if filtra_activas(version):
+        # Las evoluciones dadas de baja no forman parte de la historia vigente.
+        where += " AND activo = 1"
+
+    cursor.execute(
+        f"SELECT {columnas} FROM evoluciones WHERE {where} ORDER BY fecha ASC",
+        (paciente_id,),
+    )
+    return cursor.fetchall()
+
 
 # =========================================================
 #  Función auxiliar: Actualizar historia consolidada
 # =========================================================
-def actualizar_historia(paciente_id, usuario_id):
+def actualizar_historia(paciente_id, usuario_id, version=PAYLOAD_VERSION_ACTUAL):
+    """Regenera la historia consolidada del paciente y su hash local.
+
+    No toca `tx_hash`: el recibo de la TSA es la prueba de un sellado que
+    efectivamente ocurrió, y borrarlo porque el contenido cambió destruiría esa
+    evidencia. El histórico de sellados vive en `anclajes_historia`, y ahí cada
+    anclaje conserva el hash con el que se sello.
     """
-    Genera o actualiza la historia consolidada del paciente
-    sumando todas sus evoluciones y recalculando el hash local.
-    """
-    conn = get_connection()
-    cursor = conn.cursor(dictionary=True)
+    with db_cursor() as (conn, cursor):
+        evoluciones = leer_evoluciones(cursor, paciente_id, version)
 
-    # 1️⃣ Obtener todas las evoluciones del paciente
-    cursor.execute("""
-        SELECT id, fecha, contenido, usuario_id
-        FROM evoluciones
-        WHERE paciente_id = %s
-        ORDER BY fecha ASC
-    """, (paciente_id,))
-    evoluciones = cursor.fetchall()
+        if not evoluciones:
+            return None  # no hay evoluciones todavía
 
-    if not evoluciones:
-        cursor.close()
-        conn.close()
-        return None  # no hay evoluciones todavía
+        hash_local, resumen_json = generar_hash_historia(evoluciones, version)
 
-    # 🧩 Convertir fechas a string (date o datetime) para evitar error JSON
-    for evo in evoluciones:
-        fecha_val = evo.get("fecha")
-        evo["fecha"] = fecha_val.isoformat() if hasattr(fecha_val, "isoformat") else str(fecha_val)
+        cursor.execute("""
+            INSERT INTO historias (paciente_id, usuario_id, resumen, hash_local, hash_version)
+            VALUES (%s, %s, %s, %s, %s)
+            ON DUPLICATE KEY UPDATE
+                usuario_id = VALUES(usuario_id),
+                resumen = VALUES(resumen),
+                hash_local = VALUES(hash_local),
+                hash_version = VALUES(hash_version),
+                fecha = NOW();
+        """, (paciente_id, usuario_id, resumen_json, hash_local, version))
 
-    # 2️⃣ Generar resumen y hash
-    resumen_json = json.dumps(evoluciones, sort_keys=True, ensure_ascii=False)
-    hash_local = hashlib.sha256(resumen_json.encode()).hexdigest()
+        conn.commit()
 
-    # 3️⃣ Insertar o actualizar historia consolidada
-    cursor.execute("""
-        INSERT INTO historias (paciente_id, usuario_id, resumen, hash_local)
-        VALUES (%s, %s, %s, %s)
-        ON DUPLICATE KEY UPDATE
-            usuario_id = VALUES(usuario_id),
-            resumen = VALUES(resumen),
-            hash_local = VALUES(hash_local),
-            fecha = NOW();
-    """, (paciente_id, usuario_id, resumen_json, hash_local))
-
-    conn.commit()
-    cursor.close()
-    conn.close()
     return hash_local
 
 
@@ -89,16 +101,14 @@ def api_get_historias(paciente_id):
     """
     Retorna todas las versiones de historia clínica de un paciente.
     """
-    conn = get_connection()
-    cursor = conn.cursor(dictionary=True)
-    cursor.execute("""
-        SELECT h.*, u.nombre AS nombre_usuario
-        FROM historias h
-        JOIN usuarios u ON h.usuario_id = u.id
-        WHERE h.paciente_id = %s
-        ORDER BY h.fecha DESC
-    """, (paciente_id,))
-    historias = cursor.fetchall()
-    cursor.close()
-    conn.close()
+    with db_cursor() as (_conn, cursor):
+        cursor.execute("""
+            SELECT h.*, u.nombre AS nombre_usuario
+            FROM historias h
+            JOIN usuarios u ON h.usuario_id = u.id
+            WHERE h.paciente_id = %s
+            ORDER BY h.fecha DESC
+        """, (paciente_id,))
+        historias = cursor.fetchall()
+
     return jsonify(historias)

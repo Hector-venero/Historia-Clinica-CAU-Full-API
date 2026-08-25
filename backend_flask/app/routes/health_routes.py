@@ -2,9 +2,9 @@
 from flask import Blueprint, jsonify
 import mysql.connector
 import smtplib
-import requests
 from flask_login import current_user, login_required
 from app.config import Config
+from app.utils.bfa_client import get_bfa_status
 
 bp_health = Blueprint("bp_health", __name__, url_prefix="/api/health")
 
@@ -35,7 +35,7 @@ def secure_health():
     status = {
         "status": "ok",
         "database": "unknown",
-        "bfa_node": "unknown",
+        "bfa_tsa": "unknown",
         "mail": "unknown"
     }
 
@@ -53,21 +53,19 @@ def secure_health():
         status["database"] = f"error: {str(e)}"
         status["status"] = "degraded"
 
-    # ✅ Verificar nodo BFA (Geth)
+    # ✅ Verificar la TSA de BFA
+    # Antes esto le pegaba al nodo Geth local (http://bfa-node:8545), que dejo
+    # de existir al migrar a la API oficial: el health quedaba degradado
+    # permanentemente por un servicio que ya no forma parte del stack.
     try:
-        bfa_url = "http://bfa-node:8545"
-        response = requests.post(
-            bfa_url,
-            json={"jsonrpc": "2.0", "method": "eth_blockNumber", "params": [], "id": 1},
-            timeout=3
-        )
-        if response.ok and "result" in response.json():
-            status["bfa_node"] = "reachable"
+        bfa = get_bfa_status()
+        if bfa.get("connected"):
+            status["bfa_tsa"] = f"reachable ({bfa.get('tsa_url')})"
         else:
-            status["bfa_node"] = "no response"
+            status["bfa_tsa"] = f"error: {bfa.get('error', 'sin respuesta')}"
             status["status"] = "degraded"
     except Exception as e:
-        status["bfa_node"] = f"error: {str(e)}"
+        status["bfa_tsa"] = f"error: {str(e)}"
         status["status"] = "degraded"
 
     # ✅ Verificar servidor de correo SMTP

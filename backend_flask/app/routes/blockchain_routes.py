@@ -1,339 +1,421 @@
 # app/routes/blockchain_routes.py
-from flask import Blueprint, jsonify
-from flask_login import login_required, current_user
-from app.utils.bfa_client import registrar_hash_en_bfa, verificar_hash_en_bfa, parse_permanent_rd
-from app.database import get_connection
-import hashlib
-import json
+"""Anclaje y verificacion de historias clinicas en BFA (via la API TSA).
+
+Dos decisiones centrales:
+
+1. La verificacion distingue tres estados. La TSA agrupa hashes en lotes y los
+   ancla cada varios minutos: entre el sellado y su confirmacion responde
+   `pending`, que no significa adulteracion. Tratar `pending` (o un timeout de
+   red) como "invalido" mostraba "la historia fue modificada" sobre una
+   historia intacta, y ademas dejaba esa conclusion escrita en la tabla de
+   auditoria. Solo se audita cuando hay un veredicto real.
+
+2. Cada sellado se registra en `anclajes_historia`, que es append-only. La
+   historia consolidada se recalcula cada vez que se carga una evolucion, asi
+   que su `hash_local` cambia; si el recibo viviera solo en `historias`,
+   quedaria apuntando a un hash inexistente y se perderia la prueba. Verificar
+   usa el hash y el recibo del anclaje, no el estado actual de la historia.
+"""
+
+from flask import Blueprint, current_app, jsonify
+from flask_login import current_user, login_required
+import requests
+
+from app.database import db_cursor
+from app.utils.bfa_client import (
+    ESTADO_OK,
+    ESTADO_PENDIENTE,
+    get_bfa_status,
+    parse_permanent_rd,
+    registrar_hash_en_bfa,
+    verificar_hash_en_bfa,
+)
+from app.utils.hashing import PAYLOAD_VERSION_ACTUAL, generar_hash
+from app.utils.permisos import requiere_rol
 
 bp_blockchain = Blueprint("blockchain", __name__)
 
+
 # =============================================================
-# 1️⃣ REGISTRAR HISTORIA EN LA BLOCKCHAIN BFA (vía TSA)
+#  Helpers
+# =============================================================
+def _verificar_en_tsa(hash_local, rd):
+    """Consulta la TSA y traduce su respuesta.
+
+    Devuelve (resultado, error_de_red). Exactamente uno de los dos es None:
+    un problema de conectividad no es un veredicto sobre la integridad y no
+    debe registrarse como tal.
+    """
+    try:
+        data = verificar_hash_en_bfa(hash_local, rd)
+    except requests.RequestException as exc:
+        return None, str(exc)
+
+    estado = data.get("status")
+    decoded = parse_permanent_rd(data.get("permanent_rd", ""))
+
+    if estado == ESTADO_OK:
+        return {
+            "estado": "confirmado",
+            "valido": True,
+            "block_number": decoded.get("block_number"),
+            "attestation_time": data.get("attestation_time"),
+            "permanent_rd": data.get("permanent_rd"),
+            "attestation": data,
+            "mensaje": "✅ Integridad verificada en blockchain",
+        }, None
+
+    if estado == ESTADO_PENDIENTE:
+        return {
+            "estado": "pendiente",
+            "valido": None,
+            "block_number": None,
+            "attestation_time": None,
+            "permanent_rd": None,
+            "attestation": data,
+            "mensaje": "⏳ Sellado registrado, esperando confirmación en blockchain",
+        }, None
+
+    return {
+        "estado": "error",
+        "valido": False,
+        "block_number": None,
+        "attestation_time": None,
+        "permanent_rd": None,
+        "attestation": data,
+        "mensaje": "❌ El contenido no coincide con lo sellado en blockchain",
+    }, None
+
+
+def _registrar_auditoria(cursor, historia_id, hash_local, hash_bfa, valido, usuario):
+    """Deja constancia de una verificacion con veredicto.
+
+    No se llama para `pendiente` ni ante errores de red: la auditoria registra
+    conclusiones, no intentos.
+    """
+    cursor.execute(
+        """
+        INSERT INTO auditorias_blockchain (historia_id, hash_local, hash_bfa, valido, usuario)
+        VALUES (%s, %s, %s, %s, %s)
+        """,
+        (historia_id, hash_local, str(hash_bfa) if hash_bfa else None, int(valido), usuario),
+    )
+
+
+def _actualizar_anclaje(cursor, anclaje_id, resultado):
+    cursor.execute(
+        """
+        UPDATE anclajes_historia
+        SET estado = %s,
+            permanent_rd = COALESCE(%s, permanent_rd),
+            block_number = COALESCE(%s, block_number),
+            attestation_time = COALESCE(%s, attestation_time),
+            verificado_en = NOW()
+        WHERE id = %s
+        """,
+        (
+            resultado["estado"],
+            resultado.get("permanent_rd"),
+            resultado.get("block_number"),
+            resultado.get("attestation_time"),
+            anclaje_id,
+        ),
+    )
+
+
+def _ultimo_anclaje(cursor, paciente_id):
+    cursor.execute(
+        """
+        SELECT id, historia_id, hash_local, hash_version, recibo_tsa, estado
+        FROM anclajes_historia
+        WHERE paciente_id = %s
+        ORDER BY creado_en DESC, id DESC
+        LIMIT 1
+        """,
+        (paciente_id,),
+    )
+    return cursor.fetchone()
+
+
+def _historia_por_id_o_paciente(cursor, identificador):
+    """La ruta historica acepta tanto un historia_id como un paciente_id."""
+    cursor.execute("SELECT * FROM historias WHERE id = %s", (identificador,))
+    historia = cursor.fetchone()
+    if historia:
+        return historia
+    cursor.execute(
+        "SELECT * FROM historias WHERE paciente_id = %s ORDER BY fecha DESC LIMIT 1",
+        (identificador,),
+    )
+    return cursor.fetchone()
+
+
+# =============================================================
+# 1) SELLAR UNA HISTORIA EN BFA
 # =============================================================
 @bp_blockchain.route("/api/blockchain/registrar/<int:historia_id>", methods=["POST"])
 @login_required
+@requiere_rol("director", "profesional")
 def registrar_en_bfa(historia_id):
-    """
-    Genera el hash de una historia clínica consolidada y lo sella en BFA vía la TSA oficial.
-    Guarda el hash y el recibo (rd) en la base de datos en la columna `tx_hash`.
-    """
-    conn = get_connection()
-    cursor = conn.cursor(dictionary=True)
-    cursor.execute("SELECT * FROM historias WHERE id = %s", (historia_id,))
-    historia = cursor.fetchone()
-
-    if not historia:
-        cursor.execute("""
-            SELECT * FROM historias
-            WHERE paciente_id = %s
-            ORDER BY fecha DESC
-            LIMIT 1
-        """, (historia_id,))
-        historia = cursor.fetchone()
-
+    """Sella el hash de una historia consolidada y registra el anclaje."""
+    with db_cursor() as (conn, cursor):
+        historia = _historia_por_id_o_paciente(cursor, historia_id)
         if not historia:
-            cursor.close()
-            conn.close()
             return jsonify({"error": "Historia no encontrada"}), 404
 
-        historia_id = historia["id"]
+        hash_local = historia.get("hash_local")
+        if not hash_local:
+            return jsonify({
+                "error": "La historia no tiene hash_local calculado. "
+                         "Actualizá la historia consolidada primero."
+            }), 400
 
-    hash_local = historia.get("hash_local")
-    if not hash_local:
-        cursor.close()
-        conn.close()
-        return jsonify({"error": "La historia no tiene hash_local calculado. Actualizá la historia consolidada primero."}), 400
+        hash_version = historia.get("hash_version") or PAYLOAD_VERSION_ACTUAL
 
-    try:
-        rd = registrar_hash_en_bfa(hash_local)
-    except Exception as e:
-        cursor.close()
-        conn.close()
-        return jsonify({"error": f"No se pudo sellar en la BFA: {str(e)}"}), 500
+        try:
+            rd = registrar_hash_en_bfa(hash_local)
+        except Exception as exc:
+            current_app.logger.exception("Fallo el sellado en la TSA")
+            return jsonify({"error": f"No se pudo sellar en la BFA: {exc}"}), 502
 
-    cursor.execute("""
-        UPDATE historias
-        SET hash_local = %s, tx_hash = %s, fecha = NOW()
-        WHERE id = %s
-    """, (hash_local, rd, historia_id))
-    conn.commit()
-    cursor.close()
-    conn.close()
+        # Append-only: cada sellado es una fila nueva, nunca pisa a la anterior.
+        cursor.execute(
+            """
+            INSERT INTO anclajes_historia
+                (paciente_id, historia_id, hash_local, hash_version, recibo_tsa, estado, usuario)
+            VALUES (%s, %s, %s, %s, %s, 'pendiente', %s)
+            """,
+            (
+                historia["paciente_id"],
+                historia["id"],
+                hash_local,
+                hash_version,
+                rd,
+                current_user.username,
+            ),
+        )
+
+        # `historias.tx_hash` queda como puntero al ultimo recibo, por
+        # comodidad de lectura. La fuente de verdad es anclajes_historia.
+        cursor.execute(
+            "UPDATE historias SET tx_hash = %s, fecha_anclaje_bfa = NOW(), estado_bfa = 'pendiente' WHERE id = %s",
+            (rd, historia["id"]),
+        )
+        conn.commit()
 
     return jsonify({
-        "historia_id": historia_id,
+        "historia_id": historia["id"],
+        "paciente_id": historia["paciente_id"],
         "hash": hash_local,
+        "hash_version": hash_version,
         "recibo_tsa": rd,
         "tx_hash": rd,  # alias por compat
-        "mensaje": "✅ Hash sellado correctamente en la Blockchain BFA (TSA). La confirmación en blockchain puede demorar unos segundos."
+        "estado": "pendiente",
+        "mensaje": "✅ Hash sellado en BFA. La confirmación en blockchain puede demorar unos minutos.",
     }), 201
 
 
 # =============================================================
-# 2️⃣ VERIFICAR INTEGRIDAD DE UNA HISTORIA (vía TSA)
+# 2) VERIFICAR UNA HISTORIA (por historia_id)
 # =============================================================
 @bp_blockchain.route("/api/blockchain/verificar/<int:historia_id>", methods=["GET"])
 @login_required
 def verificar_historia(historia_id):
-    conn = get_connection()
-    cursor = conn.cursor(dictionary=True)
-    cursor.execute("SELECT * FROM historias WHERE id = %s", (historia_id,))
-    historia = cursor.fetchone()
-    cursor.close()
-    conn.close()
+    with db_cursor() as (conn, cursor):
+        historia = _historia_por_id_o_paciente(cursor, historia_id)
+        if not historia:
+            return jsonify({"error": "Historia no encontrada"}), 404
 
-    if not historia:
-        return jsonify({"error": "Historia no encontrada"}), 404
+        respuesta, codigo = _verificar_paciente(conn, cursor, historia["paciente_id"])
 
-    if not historia.get("tx_hash"):
-        return jsonify({"error": "La historia no tiene sellado registrado en BFA"}), 400
-
-    hash_local = historia.get("hash_local") or ""
-    rd = historia["tx_hash"]
-
-    try:
-        attestation = verificar_hash_en_bfa(hash_local, rd)
-        valido = True
-    except Exception as e:
-        attestation = {"messages": str(e)}
-        valido = False
-
-    _registrar_auditoria(historia_id, hash_local, rd, valido, current_user.username)
-
-    decoded = parse_permanent_rd(attestation.get("permanent_rd", "")) if valido else {}
-
-    return jsonify({
-        "historia_id": historia_id,
-        "hash_local": hash_local,
-        "recibo_tsa": rd,
-        "tx_hash": rd,  # alias por compat
-        "valido": valido,
-        "bloque": decoded.get("block_number"),
-        "attestation_time": attestation.get("attestation_time"),
-        "permanent_rd": attestation.get("permanent_rd"),
-        "attestation": attestation,
-        "mensaje": "✅ Integridad verificada" if valido else "❌ La historia fue modificada"
-    })
+    return jsonify(respuesta), codigo
 
 
 # =============================================================
-# 3️⃣ LISTAR AUDITORÍAS
+# 3) VERIFICAR LA HISTORIA CONSOLIDADA DE UN PACIENTE
+# =============================================================
+@bp_blockchain.route("/api/blockchain/verificar/historia/<int:paciente_id>", methods=["GET"])
+@login_required
+def verificar_historia_blockchain(paciente_id):
+    with db_cursor() as (conn, cursor):
+        respuesta, codigo = _verificar_paciente(conn, cursor, paciente_id)
+    return jsonify(respuesta), codigo
+
+
+def _verificar_paciente(conn, cursor, paciente_id):
+    """Verifica el ultimo anclaje del paciente. Devuelve (payload, http_status)."""
+    anclaje = _ultimo_anclaje(cursor, paciente_id)
+    if not anclaje:
+        return {"error": "La historia no tiene sellado registrado en BFA"}, 400
+
+    resultado, error_red = _verificar_en_tsa(anclaje["hash_local"], anclaje["recibo_tsa"])
+
+    if error_red is not None:
+        # No se pudo consultar la TSA. No se audita ni se concluye nada.
+        return {
+            "paciente_id": paciente_id,
+            "estado": "indeterminado",
+            "valido": None,
+            "mensaje": "⚠️ No se pudo contactar a la TSA de BFA. Reintentá en unos minutos.",
+            "detalle": error_red,
+        }, 503
+
+    _actualizar_anclaje(cursor, anclaje["id"], resultado)
+
+    # Solo se audita cuando hay veredicto: 'pendiente' no lo es.
+    if resultado["valido"] is not None:
+        _registrar_auditoria(
+            cursor,
+            anclaje["historia_id"],
+            anclaje["hash_local"],
+            anclaje["recibo_tsa"],
+            resultado["valido"],
+            current_user.username,
+        )
+
+    cursor.execute(
+        "UPDATE historias SET estado_bfa = %s WHERE id = %s",
+        (resultado["estado"], anclaje["historia_id"]),
+    )
+    conn.commit()
+
+    return {
+        "paciente_id": paciente_id,
+        "historia_id": anclaje["historia_id"],
+        "hash_local": anclaje["hash_local"],
+        "hash_version": anclaje["hash_version"],
+        "recibo_tsa": anclaje["recibo_tsa"],
+        "tx_hash": anclaje["recibo_tsa"],  # alias por compat
+        "estado": resultado["estado"],
+        "valido": resultado["valido"],
+        "bloque": resultado["block_number"],
+        "attestation_time": resultado["attestation_time"],
+        "permanent_rd": resultado["permanent_rd"],
+        "attestation": resultado["attestation"],
+        "mensaje": resultado["mensaje"],
+    }, 200
+
+
+# =============================================================
+# 4) HISTORIAL DE ANCLAJES DE UN PACIENTE
+# =============================================================
+@bp_blockchain.route("/api/blockchain/anclajes/<int:paciente_id>", methods=["GET"])
+@login_required
+def listar_anclajes(paciente_id):
+    """Todos los sellados del paciente, del mas reciente al mas viejo.
+
+    Cada fila es una prueba independiente: que en tal momento el contenido
+    resumido por ese hash existia y se anclo.
+    """
+    with db_cursor() as (_conn, cursor):
+        cursor.execute(
+            """
+            SELECT id, historia_id, hash_local, hash_version, recibo_tsa, permanent_rd,
+                   estado, block_number, attestation_time, usuario, creado_en, verificado_en
+            FROM anclajes_historia
+            WHERE paciente_id = %s
+            ORDER BY creado_en DESC, id DESC
+            """,
+            (paciente_id,),
+        )
+        anclajes = cursor.fetchall()
+    return jsonify(anclajes)
+
+
+# =============================================================
+# 5) VERIFICAR UNA EVOLUCIÓN INDIVIDUAL — no implementado
+# =============================================================
+@bp_blockchain.route("/api/blockchain/verificar/evolucion/<int:evolucion_id>", methods=["GET"])
+@login_required
+def verificar_evolucion_blockchain(evolucion_id):
+    """Todavia no se anclan evoluciones sueltas.
+
+    La version anterior calculaba el hash de la evolucion y lo verificaba
+    contra el recibo de la historia consolidada. Son dos hashes distintos, asi
+    que la TSA respondia failure siempre: la ruta no podia dar valido nunca, y
+    mostraba "evolucion modificada" sobre evoluciones intactas.
+
+    Se responde 501 en vez de un falso negativo. Anclar evoluciones
+    individuales requiere sellarlas por separado y guardar su propio recibo.
+    """
+    return jsonify({
+        "evolucion_id": evolucion_id,
+        "estado": "no_implementado",
+        "valido": None,
+        "mensaje": "El anclaje por evolución individual todavía no está disponible. "
+                   "Verificá la historia consolidada del paciente.",
+    }), 501
+
+
+# =============================================================
+# 6) AUDITORÍAS
 # =============================================================
 @bp_blockchain.route("/api/blockchain/auditorias", methods=["GET"])
 @login_required
+@requiere_rol("director")
 def listar_auditorias():
-    conn = get_connection()
-    cursor = conn.cursor(dictionary=True)
-    cursor.execute("SELECT * FROM auditorias_blockchain ORDER BY fecha DESC")
-    registros = cursor.fetchall()
-    cursor.close()
-    conn.close()
+    with db_cursor() as (_conn, cursor):
+        cursor.execute("SELECT * FROM auditorias_blockchain ORDER BY fecha DESC")
+        registros = cursor.fetchall()
     return jsonify(registros)
-
-
-# =============================================================
-# 🔧 GUARDAR AUDITORÍA
-# =============================================================
-def _registrar_auditoria(historia_id, hash_local, hash_bfa, valido, usuario):
-    print(f"🧾 Intentando registrar auditoría → historia_id={historia_id}, usuario={usuario}")
-
-    try:
-        conn = get_connection()
-        cursor = conn.cursor(dictionary=True)
-
-        cursor.execute("SELECT id FROM historias WHERE id = %s", (historia_id,))
-        historia = cursor.fetchone()
-
-        if not historia:
-            cursor.execute("SELECT id FROM historias WHERE paciente_id = %s ORDER BY fecha DESC LIMIT 1", (historia_id,))
-            historia = cursor.fetchone()
-
-            if not historia:
-                print(f"⚠️ No se encontró historia para id/paciente_id {historia_id}, no se guarda auditoría.")
-                return
-
-            historia_id = historia["id"]
-
-        sql = """
-            INSERT INTO auditorias_blockchain (historia_id, hash_local, hash_bfa, valido, usuario)
-            VALUES (%s, %s, %s, %s, %s)
-        """
-        hash_bfa_str = str(hash_bfa) if hash_bfa is not None else None
-        values = (historia_id, hash_local, hash_bfa_str, int(valido), usuario)
-
-        cursor.execute(sql, values)
-        conn.commit()
-        print(f"✅ Auditoría registrada correctamente para historia {historia_id}")
-
-    except Exception:
-        import traceback
-        print("❌ Error al registrar auditoría:")
-        traceback.print_exc()
-    finally:
-        try:
-            cursor.close()
-            conn.close()
-        except Exception:
-            pass
-
-
-# =============================================================
-# 4️⃣ TEST: SELLAR HASH DE PRUEBA EN LA BLOCKCHAIN
-# =============================================================
-@bp_blockchain.route("/api/blockchain/test_tx", methods=["GET"])
-def test_tx():
-    mensaje = "Prueba de conexión Flask → BFA (TSA)"
-    hash_local = hashlib.sha256(mensaje.encode("utf-8")).hexdigest()
-
-    try:
-        rd = registrar_hash_en_bfa(hash_local)
-    except Exception as e:
-        return jsonify({"estado": "error", "detalle": str(e)}), 500
-
-    return jsonify({
-        "estado": "ok",
-        "mensaje": "✅ Hash sellado correctamente en la Blockchain BFA (TSA)",
-        "hash_local": hash_local,
-        "tx_hash": rd
-    }), 200
-
-
-# =============================================================
-# 5️⃣ VERIFICAR INTEGRIDAD DE HISTORIA CLÍNICA CONSOLIDADA POR PACIENTE
-# =============================================================
-@bp_blockchain.route('/api/blockchain/verificar/historia/<int:paciente_id>', methods=['GET'])
-@login_required
-def verificar_historia_blockchain(paciente_id):
-    conn = get_connection()
-    cursor = conn.cursor(dictionary=True)
-    cursor.execute("""
-        SELECT id, hash_local, tx_hash, fecha
-        FROM historias
-        WHERE paciente_id = %s
-        ORDER BY fecha DESC
-        LIMIT 1
-    """, (paciente_id,))
-    historia = cursor.fetchone()
-    cursor.close()
-    conn.close()
-
-    if not historia:
-        return jsonify({"error": "No existe historia consolidada para este paciente"}), 404
-
-    if not historia.get("tx_hash"):
-        return jsonify({"error": "La historia no tiene sellado registrado en BFA"}), 400
-
-    try:
-        attestation = verificar_hash_en_bfa(historia["hash_local"], historia["tx_hash"])
-        valido = True
-    except Exception as e:
-        attestation = {"messages": str(e)}
-        valido = False
-
-    _registrar_auditoria(historia["id"], historia["hash_local"], historia["tx_hash"], valido, current_user.username)
-
-    decoded = parse_permanent_rd(attestation.get("permanent_rd", "")) if valido else {}
-
-    return jsonify({
-        "paciente_id": paciente_id,
-        "hash_local": historia["hash_local"],
-        "recibo_tsa": historia["tx_hash"],
-        "tx_hash": historia["tx_hash"],  # alias por compat
-        "valido": valido,
-        "bloque": decoded.get("block_number"),
-        "attestation_time": attestation.get("attestation_time"),
-        "permanent_rd": attestation.get("permanent_rd"),
-        "attestation": attestation,
-        "mensaje": "✅ Integridad verificada" if valido else "❌ La historia fue modificada",
-        "fecha": str(historia["fecha"])
-    })
-
-
-# =============================================================
-# 6️⃣ VERIFICAR INTEGRIDAD DE UNA EVOLUCIÓN INDIVIDUAL
-# =============================================================
-@bp_blockchain.route('/api/blockchain/verificar/evolucion/<int:evolucion_id>', methods=['GET'])
-@login_required
-def verificar_evolucion_blockchain(evolucion_id):
-    """
-    Verifica la integridad de una evolución individual contra la TSA.
-    Requiere que la evolución (o su historia) tenga un `tx_hash` (rd) almacenado.
-    """
-    conn = get_connection()
-    cursor = conn.cursor(dictionary=True)
-    cursor.execute("SELECT * FROM evoluciones WHERE id = %s", (evolucion_id,))
-    evolucion = cursor.fetchone()
-
-    if not evolucion:
-        cursor.close()
-        conn.close()
-        return jsonify({"error": "Evolución no encontrada"}), 404
-
-    cursor.execute("""
-        SELECT tx_hash FROM historias
-        WHERE paciente_id = %s AND tx_hash IS NOT NULL
-        ORDER BY fecha DESC LIMIT 1
-    """, (evolucion["paciente_id"],))
-    historia = cursor.fetchone()
-    cursor.close()
-    conn.close()
-
-    data = {
-        "id": evolucion["id"],
-        "paciente_id": evolucion["paciente_id"],
-        "fecha": str(evolucion["fecha"]),
-        "contenido": evolucion["contenido"],
-        "usuario_id": evolucion["usuario_id"],
-    }
-    resumen_json = json.dumps(data, sort_keys=True, ensure_ascii=False)
-    hash_local = hashlib.sha256(resumen_json.encode()).hexdigest()
-
-    if not historia or not historia.get("tx_hash"):
-        return jsonify({
-            "evolucion_id": evolucion_id,
-            "hash_local": hash_local,
-            "valido": False,
-            "mensaje": "❌ La historia del paciente no tiene sellado en BFA"
-        }), 400
-
-    rd = historia["tx_hash"]
-    try:
-        attestation = verificar_hash_en_bfa(hash_local, rd)
-        valido = True
-    except Exception as e:
-        attestation = {"messages": str(e)}
-        valido = False
-
-    decoded = parse_permanent_rd(attestation.get("permanent_rd", "")) if valido else {}
-
-    return jsonify({
-        "evolucion_id": evolucion_id,
-        "hash_local": hash_local,
-        "recibo_tsa": rd,
-        "tx_hash": rd,  # alias por compat
-        "valido": valido,
-        "bloque": decoded.get("block_number"),
-        "attestation_time": attestation.get("attestation_time"),
-        "permanent_rd": attestation.get("permanent_rd"),
-        "attestation": attestation,
-        "mensaje": "✅ Integridad verificada" if valido else "❌ Evolución modificada"
-    })
 
 
 @bp_blockchain.route("/api/blockchain/auditorias/<int:paciente_id>", methods=["GET"])
 @login_required
 def listar_auditorias_paciente(paciente_id):
-    conn = get_connection()
-    cursor = conn.cursor(dictionary=True)
-    cursor.execute("""
-        SELECT a.*, h.paciente_id
-        FROM auditorias_blockchain a
-        JOIN historias h ON a.historia_id = h.id
-        WHERE h.paciente_id = %s
-        ORDER BY a.fecha DESC
-    """, (paciente_id,))
-    registros = cursor.fetchall()
-    cursor.close()
-    conn.close()
+    with db_cursor() as (_conn, cursor):
+        cursor.execute(
+            """
+            SELECT a.*, h.paciente_id
+            FROM auditorias_blockchain a
+            JOIN historias h ON a.historia_id = h.id
+            WHERE h.paciente_id = %s
+            ORDER BY a.fecha DESC
+            """,
+            (paciente_id,),
+        )
+        registros = cursor.fetchall()
     return jsonify(registros)
+
+
+# =============================================================
+# 7) DIAGNÓSTICO
+# =============================================================
+@bp_blockchain.route("/api/blockchain/estado", methods=["GET"])
+@login_required
+@requiere_rol("director")
+def estado_bfa():
+    """Disponibilidad de la TSA."""
+    return jsonify(get_bfa_status())
+
+
+@bp_blockchain.route("/api/blockchain/test_tx", methods=["GET"])
+@login_required
+@requiere_rol("director")
+def test_tx():
+    """Sella un hash de prueba. Consume cuota real de la TSA.
+
+    Antes no pedia autenticacion: cualquiera podia sellar contra la identidad
+    BFA de la institucion. Ahora requiere rol director y esta apagado en
+    produccion salvo que se habilite explicitamente.
+    """
+    if not current_app.config.get("ENABLE_BLOCKCHAIN_TEST_ENDPOINTS", False):
+        return jsonify({
+            "error": "Endpoint de prueba deshabilitado. "
+                     "Habilitalo con ENABLE_BLOCKCHAIN_TEST_ENDPOINTS=true."
+        }), 403
+
+    hash_local = generar_hash("Prueba de conexión Flask → BFA (TSA)")
+    try:
+        rd = registrar_hash_en_bfa(hash_local)
+    except Exception as exc:
+        current_app.logger.exception("Fallo el test de sellado")
+        return jsonify({"estado": "error", "detalle": str(exc)}), 502
+
+    return jsonify({
+        "estado": "ok",
+        "mensaje": "✅ Hash de prueba sellado en BFA (TSA)",
+        "hash_local": hash_local,
+        "recibo_tsa": rd,
+        "tx_hash": rd,
+    }), 200
