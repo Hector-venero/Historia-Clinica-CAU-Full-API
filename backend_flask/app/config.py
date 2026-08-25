@@ -42,3 +42,22 @@ class Config:
     }
     UPLOAD_FOLDER = os.getenv("UPLOAD_FOLDER", "/app/uploads")
     MAX_CONTENT_LENGTH = 20 * 1024 * 1024  # Limite de 20MB también en Flask (por seguridad)
+
+    # 💊 Recetas electrónicas (Qbitos / QBI2)
+    # Deliberadamente SIN default: el default apuntaba al ambiente de
+    # homologación (apirecipe.hml.qbitos.com), asi que olvidarse de definir la
+    # variable en produccion hacia que las recetas se emitieran contra el
+    # ambiente de pruebas sin que nadie se enterara. Sin valor, el modulo se
+    # reporta como no configurado y responde 503.
+    QBI_BASE_URL = (os.getenv("QBI_BASE_URL") or "").rstrip("/")
+    QBI_TOKEN = os.getenv("QBI_TOKEN")
+    QBI_CLIENT_ID = os.getenv("QBI_CLIENT_ID")
+    QBI_TIMEOUT = int(os.getenv("QBI_TIMEOUT", "30") or 30)
+
+    # Diagnóstico y observación por defecto de una receta sin diagnóstico explícito.
+    RECETA_DIAGNOSTICO_CODIGO = os.getenv("RECETA_DIAGNOSTICO_CODIGO", "Z769")
+    RECETA_DIAGNOSTICO_TEXTO = os.getenv(
+        "RECETA_DIAGNOSTICO_TEXTO",
+        "Z76.9 - Persona en contacto con los servicios de salud en circunstancias no especificadas",
+    )
+    RECETA_OBSERVACION = os.getenv("RECETA_OBSERVACION", "Tratamiento prolongado")

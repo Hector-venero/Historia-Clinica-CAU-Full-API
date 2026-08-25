@@ -105,7 +105,9 @@ function seleccionarPaciente(event) {
 // ---------------------------------------------------------------------------
 
 async function buscarMedicamento(event) {
-    if (!event.query.trim()) {
+    // El backend exige 2 caracteres y devuelve 400 con menos: se corta acá
+    // para no mostrar un error mientras el usuario todavía está tipeando.
+    if (event.query.trim().length < 2) {
         sugerenciasMed.value = [];
         return;
     }
@@ -118,6 +120,11 @@ async function buscarMedicamento(event) {
 }
 
 async function buscarDiagnostico(event) {
+    // El backend exige 3 caracteres para diagnósticos.
+    if (event.query.trim().length < 3) {
+        sugerenciasDiag.value = [];
+        return;
+    }
     try {
         const { data } = await api.get('/recetas/buscar_diagnostico', { params: { q: event.query } });
         sugerenciasDiag.value = data.diagnosticos || [];
@@ -130,43 +137,49 @@ async function buscarDiagnostico(event) {
 // Emisión y acciones
 // ---------------------------------------------------------------------------
 
-function formatearFecha(date) {
-    if (!date) return '';
-    const d = String(date.getDate()).padStart(2, '0');
-    const m = String(date.getMonth() + 1).padStart(2, '0');
-    return `${d}/${m}/${date.getFullYear()}`;
-}
-
 async function emitirReceta() {
     errorEmision.value = '';
     mensajeExito.value = '';
+
+    if (!pacienteId.value) {
+        errorEmision.value = 'Seleccioná un paciente de la lista antes de emitir.';
+        return;
+    }
+
     emitiendo.value = true;
     try {
+        // El backend toma los datos del paciente y del profesional de la base,
+        // no del formulario: la receta tiene que declarar lo que figura en la
+        // historia clínica, no lo que se haya tipeado en pantalla.
         const payload = {
-            paciente: {
-                nombre: nombre.value,
-                apellido: apellido.value,
-                nroDni: nroDni.value,
-                sexo: sexo.value,
-                fechaNacimiento: formatearFecha(fechaNacimiento.value),
-                idFinanciador: financiadorSeleccionado.value,
-                nroAfiliado: nroAfiliado.value,
-                paciente_id: pacienteId.value,
-                email_paciente: emailPaciente.value
-            },
-            medicamento: {
-                regNo: medicamentoSeleccionado.value?.regNo,
-                nombre: medicamentoSeleccionado.value?.nombreProducto,
-                cantidad: cantidad.value,
-                posologia: posologia.value
-            },
-            diagnostico: {
-                codigo: diagnosticoSeleccionado.value?.coddiagnostico
-            }
+            paciente_id: pacienteId.value,
+            tipo: 'receta',
+            email_paciente: emailPaciente.value,
+            medicamentos: [
+                {
+                    regNo: medicamentoSeleccionado.value?.regNo,
+                    nombreProducto: medicamentoSeleccionado.value?.nombreProducto,
+                    cantidad: cantidad.value,
+                    posologia: posologia.value
+                }
+            ]
         };
+
+        if (diagnosticoSeleccionado.value?.coddiagnostico) {
+            payload.codigoDiagnostico = diagnosticoSeleccionado.value.coddiagnostico;
+            payload.diagnostico = diagnosticoSeleccionado.value.diagnostico || '';
+        }
+
+        if (financiadorSeleccionado.value && nroAfiliado.value) {
+            payload.cobertura = {
+                idFinanciador: String(financiadorSeleccionado.value),
+                numero: String(nroAfiliado.value)
+            };
+        }
+
         const { data } = await api.post('/recetas/emitir', payload);
         recetaEmitidaHash.value = data.receta_hash || '';
-        recetaLink.value = data.recetas?.[0]?.s3Link || '';
+        recetaLink.value = data.link_pdf || '';
     } catch (e) {
         errorEmision.value = e?.response?.data?.error || 'Error al emitir la receta.';
     } finally {

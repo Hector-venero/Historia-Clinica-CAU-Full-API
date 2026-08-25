@@ -1,54 +1,158 @@
-import os
+"""Cliente HTTP de la API de recetas electronicas (Qbitos / QBI2).
+
+Toda la comunicacion con el proveedor vive aca y no en las rutas: eso permite
+mockear una sola cosa en los tests, y evita que cada endpoint arme headers y
+maneje errores a su manera.
+
+La configuracion se lee de la config de Flask, no de os.getenv a nivel de
+modulo: leerla al importar congelaba los valores del arranque y hacia imposible
+cambiarlos en tests.
+"""
+
+from urllib.parse import quote
+
 import requests
+from flask import current_app
 
-_BASE_URL  = os.getenv("QBI_BASE_URL", "https://apirecipe.hml.qbitos.com").rstrip("/")
-_TOKEN     = os.getenv("QBI_TOKEN", "")
-_CLIENT_ID = os.getenv("QBI_CLIENT_ID", "")
+RECETA_ENDPOINT = "/apirecipe/Receta"
+PRACTICA_ENDPOINT = "/apirecipe/prescribirPractica"
 
 
-def _headers():
+class QbiNoConfigurado(RuntimeError):
+    """Faltan credenciales o URL: el modulo de recetas no puede operar."""
+
+
+class QbiError(RuntimeError):
+    """El proveedor respondio con error. `status` y `detalle` traen el contexto."""
+
+    def __init__(self, mensaje, status=502, detalle=None):
+        super().__init__(mensaje)
+        self.status = status
+        self.detalle = detalle
+
+
+def get_config():
+    """Config vigente. Lanza QbiNoConfigurado si falta algo esencial."""
+    cfg = current_app.config
+    base_url = (cfg.get("QBI_BASE_URL") or "").rstrip("/")
+    token = cfg.get("QBI_TOKEN")
+    client_id = cfg.get("QBI_CLIENT_ID")
+
+    faltantes = [
+        nombre
+        for nombre, valor in (
+            ("QBI_BASE_URL", base_url),
+            ("QBI_TOKEN", token),
+            ("QBI_CLIENT_ID", client_id),
+        )
+        if not valor
+    ]
+    if faltantes:
+        raise QbiNoConfigurado(
+            "Integración de recetas no configurada. Faltan: " + ", ".join(faltantes)
+        )
+
     return {
-        "Authorization": f"Bearer {_TOKEN}",
-        "clienteAppId": _CLIENT_ID,
+        "base_url": base_url,
+        "token": token,
+        "client_id": client_id,
+        "timeout": cfg.get("QBI_TIMEOUT", 30),
+    }
+
+
+def esta_configurado():
+    try:
+        get_config()
+        return True
+    except QbiNoConfigurado:
+        return False
+
+
+def _headers(config):
+    return {
+        "Accept": "application/json",
+        "Authorization": f"Bearer {config['token']}",
         "Content-Type": "application/json",
     }
 
 
-def buscar_medicamento(search: str) -> list:
-    url = f"{_BASE_URL}/apirecipe/GetMedicamento/{search}"
-    resp = requests.get(url, headers=_headers(), timeout=10)
-    resp.raise_for_status()
-    return resp.json()
-
-
-def buscar_diagnostico(search: str = "") -> list:
-    url = f"{_BASE_URL}/apirecipe/GetDiagnostico"
-    params = {"text": search} if search else {}
-    resp = requests.get(url, headers=_headers(), params=params, timeout=10)
-    resp.raise_for_status()
-    return resp.json()
-
-
-def emitir_receta(payload: dict) -> dict:
-    url = f"{_BASE_URL}/apirecipe/Receta"
-    resp = requests.post(url, headers=_headers(), json=payload, timeout=15)
+def _request(method, path, *, params=None, json_body=None):
+    """Hace la llamada y normaliza los errores a QbiError."""
+    config = get_config()
     try:
-        resp.raise_for_status()
-    except requests.exceptions.HTTPError:
-        print(f"ERROR DE QBI2: {resp.text}")
-        raise Exception(f"Qbi2 Error: {resp.text}")
-    return resp.json()
+        resp = requests.request(
+            method,
+            f"{config['base_url']}{path}",
+            headers=_headers(config),
+            params=params,
+            json=json_body,
+            timeout=config["timeout"],
+        )
+    except requests.RequestException as exc:
+        current_app.logger.exception("Error conectando con la API de recetas")
+        raise QbiError(
+            "No se pudo conectar con el servicio de recetas", status=502, detalle=str(exc)
+        ) from exc
+
+    try:
+        payload = resp.json()
+    except ValueError:
+        payload = {"raw": resp.text}
+
+    if resp.status_code >= 400:
+        # Se conserva el status del proveedor: un 400 suyo es un dato del
+        # pedido, no una falla nuestra, y colapsarlo a 502 lo ocultaria.
+        raise QbiError(
+            "El servicio de recetas rechazó la solicitud",
+            status=resp.status_code,
+            detalle=payload,
+        )
+
+    return payload
 
 
-def get_financiadores() -> list:
-    url = f"{_BASE_URL}/apirecipe/GetFinanciadores?clienteAppId=554"
-    resp = requests.get(url, headers=_headers(), timeout=10)
-    resp.raise_for_status()
-    return resp.json()
+# --------------------------------------------------------------- catalogos
 
 
-def anular_receta(hash_receta: str) -> dict:
-    url = f"{_BASE_URL}/apirecipe/Receta/{hash_receta}"
-    resp = requests.delete(url, headers=_headers(), json={"clienteAppId": 554}, timeout=10)
-    resp.raise_for_status()
-    return resp.json()
+def buscar_medicamento(search: str, **filtros):
+    config = get_config()
+    params = {"clienteAppId": config["client_id"]}
+    params.update({k: v for k, v in filtros.items() if v})
+    return _request("GET", f"/apirecipe/GetMedicamento/{quote(search)}", params=params)
+
+
+def buscar_diagnostico(search: str = ""):
+    config = get_config()
+    params = {"clienteAppId": config["client_id"]}
+    if search:
+        params["text"] = search
+    return _request("GET", "/apirecipe/GetDiagnostico", params=params)
+
+
+def get_financiadores():
+    config = get_config()
+    # Antes el clienteAppId iba fijo en la URL (554), ignorando la config.
+    return _request(
+        "GET", "/apirecipe/GetFinanciadores", params={"clienteAppId": config["client_id"]}
+    )
+
+
+# --------------------------------------------------------------- emision
+
+
+def emitir_receta(payload: dict):
+    return _request("POST", RECETA_ENDPOINT, json_body=payload)
+
+
+def emitir_practica(payload: dict):
+    """Prescripcion de estudios: texto libre en vez de medicamento."""
+    return _request("POST", PRACTICA_ENDPOINT, json_body=payload)
+
+
+def anular_receta(hash_receta: str):
+    config = get_config()
+    return _request(
+        "DELETE",
+        f"{RECETA_ENDPOINT}/{quote(str(hash_receta))}",
+        json_body={"clienteAppId": config["client_id"]},
+    )
