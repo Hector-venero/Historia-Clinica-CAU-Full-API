@@ -191,6 +191,8 @@ CREATE TABLE grupos_profesionales (
     nombre VARCHAR(100) NOT NULL,
     descripcion TEXT,
     color VARCHAR(20) DEFAULT '#00936B',
+    -- Los grupos de rehabilitación se muestran en su propio módulo de agenda.
+    es_rehabilitacion TINYINT(1) NOT NULL DEFAULT 0,
     creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB
   DEFAULT CHARSET=utf8mb4
