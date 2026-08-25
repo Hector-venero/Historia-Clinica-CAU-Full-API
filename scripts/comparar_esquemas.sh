@@ -89,6 +89,10 @@ restricciones_de() {
     " 2>/dev/null
 }
 
+# Contenedores de una corrida anterior interrumpida darian un resultado
+# equivocado: la base ya tendria datos y el diff mostraria diferencias falsas.
+docker rm -f esquema_nuevo esquema_migrado >/dev/null 2>&1 || true
+
 echo "==> Levantando las dos bases"
 levantar esquema_nuevo 13401
 levantar esquema_migrado 13402

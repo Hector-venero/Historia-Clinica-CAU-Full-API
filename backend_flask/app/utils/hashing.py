@@ -86,6 +86,42 @@ def generar_hash_historia(evoluciones, version=PAYLOAD_VERSION_ACTUAL):
     return hashlib.sha256(resumen.encode("utf-8")).hexdigest(), resumen
 
 
+# Campos de una evolucion que entran a su propio payload, por version.
+# Se versiona por lo mismo que el de la historia: agregar un campo cambia el
+# hash de todas las evoluciones y las ya ancladas dejarian de verificar.
+CAMPOS_EVOLUCION_POR_VERSION = {
+    1: ("id", "paciente_id", "fecha", "contenido", "usuario_id"),
+    2: ("id", "paciente_id", "fecha", "contenido", "indicaciones", "usuario_id"),
+}
+
+
+def campos_payload_evolucion(version=PAYLOAD_VERSION_ACTUAL):
+    try:
+        return CAMPOS_EVOLUCION_POR_VERSION[version]
+    except KeyError:
+        raise ValueError(f"Version de payload desconocida: {version}") from None
+
+
+def payload_evolucion(evolucion, version=PAYLOAD_VERSION_ACTUAL):
+    """Payload canonico de una evolucion individual."""
+    fila = {}
+    for campo in campos_payload_evolucion(version):
+        valor = evolucion.get(campo)
+        fila[campo] = _serializar_fecha(valor) if campo == "fecha" else valor
+    return fila
+
+
+def generar_hash_evolucion(evolucion, version=PAYLOAD_VERSION_ACTUAL):
+    """Devuelve (hash_local, payload_json) de una evolucion individual.
+
+    Es un hash propio, distinto del de la historia consolidada. Mezclarlos fue
+    justamente el bug de la implementacion anterior: verificaba el hash de la
+    evolucion contra el recibo de la historia, dos cosas que nunca coinciden.
+    """
+    payload = serializar_payload(payload_evolucion(evolucion, version))
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest(), payload
+
+
 def generar_hash(contenido: str) -> str:
     """Hash SHA-256 de un string suelto.
 

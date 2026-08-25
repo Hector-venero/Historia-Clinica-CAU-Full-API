@@ -135,7 +135,7 @@ def test_error_de_red_no_toca_el_anclaje(client, monkeypatch):
 
     client.get("/api/blockchain/verificar/historia/7")
 
-    assert not any("UPDATE anclajes_historia" in q for q in cursor.queries)
+    assert not any("UPDATE anclajes_blockchain" in q for q in cursor.queries)
 
 
 # ----------------------------------------------------------- sin anclaje
@@ -165,9 +165,9 @@ def test_sellar_registra_un_anclaje_nuevo(client, monkeypatch):
 
     assert respuesta.status_code == 201
     assert respuesta.get_json()["recibo_tsa"] == RECIBO
-    assert any("INSERT INTO anclajes_historia" in q for q in cursor.queries)
+    assert any("INSERT INTO anclajes_blockchain" in q for q in cursor.queries)
     # Nunca un UPDATE que pise el recibo anterior
-    assert not any("UPDATE anclajes_historia SET recibo_tsa" in q for q in cursor.queries)
+    assert not any("UPDATE anclajes_blockchain SET recibo_tsa" in q for q in cursor.queries)
 
 
 def test_sellar_sin_hash_local_no_llama_a_la_tsa(client, monkeypatch):
@@ -196,20 +196,103 @@ def test_sellar_requiere_rol(client, monkeypatch):
 # ----------------------------------------------------------- evolucion
 
 
-def test_verificar_evolucion_devuelve_501_en_vez_de_un_falso_negativo(client):
-    """Antes verificaba el hash de la evolucion contra el recibo de la historia.
+def test_verificar_evolucion_sin_anclaje_no_dice_que_fue_modificada(client, monkeypatch):
+    """Una evolucion sin sellar no es una evolucion adulterada.
 
-    Son dos hashes distintos, asi que la TSA respondia failure siempre y la
-    ruta mostraba "evolucion modificada" sobre evoluciones intactas.
+    La implementacion original comparaba el hash de la evolucion contra el
+    recibo de la historia consolidada: dos hashes distintos, asi que la TSA
+    respondia failure siempre y la pantalla decia "evolucion modificada" sobre
+    evoluciones intactas.
     """
     _login(client)
+    # 1) la evolucion existe  2) no tiene anclaje propio
+    make_db(monkeypatch, blockchain_routes, fetchone_results=[{"id": 3}, None])
 
     respuesta = client.get("/api/blockchain/verificar/evolucion/3")
     datos = respuesta.get_json()
 
-    assert respuesta.status_code == 501
+    assert respuesta.status_code == 400
+    assert datos["estado"] == "sin_anclaje"
     assert datos["valido"] is None
-    assert datos["estado"] == "no_implementado"
+    assert "modificada" not in str(datos).lower()
+
+
+def test_verificar_evolucion_inexistente_devuelve_404(client, monkeypatch):
+    _login(client)
+    make_db(monkeypatch, blockchain_routes, fetchone_results=[None])
+
+    assert client.get("/api/blockchain/verificar/evolucion/999").status_code == 404
+
+
+def test_verificar_evolucion_usa_su_propio_recibo(client, monkeypatch):
+    """El bug original: usaba el recibo de la historia, que es de otro hash."""
+    _login(client)
+    anclaje_evo = {
+        "id": 20,
+        "evolucion_id": 3,
+        "hash_local": "b" * 64,
+        "hash_version": 2,
+        "recibo_tsa": "RECIBO-DE-LA-EVOLUCION",
+        "estado": "pendiente",
+    }
+    make_db(monkeypatch, blockchain_routes, fetchone_results=[{"id": 3}, anclaje_evo])
+
+    verificados = []
+    monkeypatch.setattr(
+        blockchain_routes,
+        "verificar_hash_en_bfa",
+        lambda h, rd: verificados.append((h, rd)) or {"status": "pending"},
+    )
+
+    datos = client.get("/api/blockchain/verificar/evolucion/3").get_json()
+
+    assert verificados == [("b" * 64, "RECIBO-DE-LA-EVOLUCION")]
+    assert datos["estado"] == "pendiente"
+    assert datos["valido"] is None
+
+
+def test_sellar_evolucion_registra_su_propio_anclaje(client, monkeypatch):
+    _login(client)
+    evolucion = {
+        "id": 3,
+        "paciente_id": 7,
+        "fecha": "2026-08-25",
+        "contenido": "control",
+        "indicaciones": "reposo",
+        "usuario_id": 1,
+    }
+    _, cursor = make_db(monkeypatch, blockchain_routes, fetchone_results=[evolucion])
+    monkeypatch.setattr(blockchain_routes, "registrar_hash_en_bfa", lambda h: RECIBO)
+
+    respuesta = client.post("/api/blockchain/registrar/evolucion/3")
+
+    assert respuesta.status_code == 201
+    insert = next(e for e in cursor.executed if "INSERT INTO anclajes_blockchain" in e[0])
+    assert "'evolucion'" in insert[0]
+    assert RECIBO in insert[1]
+
+
+def test_el_hash_de_la_evolucion_no_es_el_de_la_historia(client, monkeypatch):
+    """Justifica que la evolucion tenga anclaje propio."""
+    from app.utils.hashing import generar_hash_evolucion, generar_hash_historia
+
+    evolucion = {
+        "id": 3,
+        "paciente_id": 7,
+        "fecha": "2026-08-25",
+        "contenido": "control",
+        "indicaciones": "reposo",
+        "usuario_id": 1,
+    }
+
+    assert generar_hash_evolucion(evolucion)[0] != generar_hash_historia([evolucion])[0]
+
+
+def test_sellar_evolucion_requiere_rol(client, monkeypatch):
+    _login(client, rol="administrativo")
+    make_db(monkeypatch, blockchain_routes)
+
+    assert client.post("/api/blockchain/registrar/evolucion/3").status_code == 403
 
 
 # ----------------------------------------------------------- test_tx

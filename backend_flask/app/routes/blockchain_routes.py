@@ -10,7 +10,7 @@ Dos decisiones centrales:
    historia intacta, y ademas dejaba esa conclusion escrita en la tabla de
    auditoria. Solo se audita cuando hay un veredicto real.
 
-2. Cada sellado se registra en `anclajes_historia`, que es append-only. La
+2. Cada sellado se registra en `anclajes_blockchain`, que es append-only. La
    historia consolidada se recalcula cada vez que se carga una evolucion, asi
    que su `hash_local` cambia; si el recibo viviera solo en `historias`,
    quedaria apuntando a un hash inexistente y se perderia la prueba. Verificar
@@ -30,7 +30,7 @@ from app.utils.bfa_client import (
     registrar_hash_en_bfa,
     verificar_hash_en_bfa,
 )
-from app.utils.hashing import PAYLOAD_VERSION_ACTUAL, generar_hash
+from app.utils.hashing import PAYLOAD_VERSION_ACTUAL, generar_hash, generar_hash_evolucion
 from app.utils.permisos import requiere_rol
 
 bp_blockchain = Blueprint("blockchain", __name__)
@@ -105,7 +105,7 @@ def _registrar_auditoria(cursor, historia_id, hash_local, hash_bfa, valido, usua
 def _actualizar_anclaje(cursor, anclaje_id, resultado):
     cursor.execute(
         """
-        UPDATE anclajes_historia
+        UPDATE anclajes_blockchain
         SET estado = %s,
             permanent_rd = COALESCE(%s, permanent_rd),
             block_number = COALESCE(%s, block_number),
@@ -124,15 +124,35 @@ def _actualizar_anclaje(cursor, anclaje_id, resultado):
 
 
 def _ultimo_anclaje(cursor, paciente_id):
+    """Ultimo sellado de la historia consolidada de un paciente."""
     cursor.execute(
         """
         SELECT id, historia_id, hash_local, hash_version, recibo_tsa, estado
-        FROM anclajes_historia
-        WHERE paciente_id = %s
+        FROM anclajes_blockchain
+        WHERE paciente_id = %s AND entidad_tipo = 'historia'
         ORDER BY creado_en DESC, id DESC
         LIMIT 1
         """,
         (paciente_id,),
+    )
+    return cursor.fetchone()
+
+
+def _ultimo_anclaje_evolucion(cursor, evolucion_id):
+    """Ultimo sellado de una evolucion puntual.
+
+    Es un anclaje propio, no el de la historia: mezclarlos fue el bug de la
+    implementacion anterior.
+    """
+    cursor.execute(
+        """
+        SELECT id, evolucion_id, hash_local, hash_version, recibo_tsa, estado
+        FROM anclajes_blockchain
+        WHERE evolucion_id = %s AND entidad_tipo = 'evolucion'
+        ORDER BY creado_en DESC, id DESC
+        LIMIT 1
+        """,
+        (evolucion_id,),
     )
     return cursor.fetchone()
 
@@ -181,9 +201,9 @@ def registrar_en_bfa(historia_id):
         # Append-only: cada sellado es una fila nueva, nunca pisa a la anterior.
         cursor.execute(
             """
-            INSERT INTO anclajes_historia
-                (paciente_id, historia_id, hash_local, hash_version, recibo_tsa, estado, usuario)
-            VALUES (%s, %s, %s, %s, %s, 'pendiente', %s)
+            INSERT INTO anclajes_blockchain
+                (paciente_id, historia_id, entidad_tipo, hash_local, hash_version, recibo_tsa, estado, usuario)
+            VALUES (%s, %s, 'historia', %s, %s, %s, 'pendiente', %s)
             """,
             (
                 historia["paciente_id"],
@@ -196,7 +216,7 @@ def registrar_en_bfa(historia_id):
         )
 
         # `historias.tx_hash` queda como puntero al ultimo recibo, por
-        # comodidad de lectura. La fuente de verdad es anclajes_historia.
+        # comodidad de lectura. La fuente de verdad es anclajes_blockchain.
         cursor.execute(
             "UPDATE historias SET tx_hash = %s, fecha_anclaje_bfa = NOW(), estado_bfa = 'pendiente' WHERE id = %s",
             (rd, historia["id"]),
@@ -312,7 +332,7 @@ def listar_anclajes(paciente_id):
             """
             SELECT id, historia_id, hash_local, hash_version, recibo_tsa, permanent_rd,
                    estado, block_number, attestation_time, usuario, creado_en, verificado_en
-            FROM anclajes_historia
+            FROM anclajes_blockchain
             WHERE paciente_id = %s
             ORDER BY creado_en DESC, id DESC
             """,
@@ -323,28 +343,138 @@ def listar_anclajes(paciente_id):
 
 
 # =============================================================
-# 5) VERIFICAR UNA EVOLUCIÓN INDIVIDUAL — no implementado
+# 5) ANCLAJE Y VERIFICACIÓN DE EVOLUCIONES INDIVIDUALES
 # =============================================================
+@bp_blockchain.route("/api/blockchain/registrar/evolucion/<int:evolucion_id>", methods=["POST"])
+@login_required
+@requiere_rol("director", "profesional")
+def registrar_evolucion_en_bfa(evolucion_id):
+    """Sella una evolucion puntual, con su propio hash y su propio recibo.
+
+    Sirve para probar la integridad de un acto medico concreto sin depender de
+    la historia consolidada, que cambia cada vez que se carga una evolucion
+    nueva y por lo tanto necesita reanclarse.
+    """
+    with db_cursor() as (conn, cursor):
+        cursor.execute("SELECT * FROM evoluciones WHERE id = %s", (evolucion_id,))
+        evolucion = cursor.fetchone()
+        if not evolucion:
+            return jsonify({"error": "Evolución no encontrada"}), 404
+
+        hash_local, _payload = generar_hash_evolucion(evolucion, PAYLOAD_VERSION_ACTUAL)
+
+        try:
+            rd = registrar_hash_en_bfa(hash_local)
+        except Exception as exc:
+            current_app.logger.exception("Fallo el sellado de la evolución en la TSA")
+            return jsonify({"error": f"No se pudo sellar en la BFA: {exc}"}), 502
+
+        cursor.execute(
+            """
+            INSERT INTO anclajes_blockchain
+                (paciente_id, evolucion_id, entidad_tipo, hash_local, hash_version,
+                 recibo_tsa, estado, usuario)
+            VALUES (%s, %s, 'evolucion', %s, %s, %s, 'pendiente', %s)
+            """,
+            (
+                evolucion["paciente_id"],
+                evolucion_id,
+                hash_local,
+                PAYLOAD_VERSION_ACTUAL,
+                rd,
+                current_user.username,
+            ),
+        )
+
+        # Punteros de conveniencia en la propia evolución; la fuente de verdad
+        # sigue siendo anclajes_blockchain.
+        cursor.execute(
+            """
+            UPDATE evoluciones
+            SET hash_local = %s, tx_hash = %s, fecha_anclaje_bfa = NOW(), estado_bfa = 'pendiente'
+            WHERE id = %s
+            """,
+            (hash_local, rd, evolucion_id),
+        )
+        conn.commit()
+
+    return jsonify({
+        "evolucion_id": evolucion_id,
+        "paciente_id": evolucion["paciente_id"],
+        "hash": hash_local,
+        "hash_version": PAYLOAD_VERSION_ACTUAL,
+        "recibo_tsa": rd,
+        "estado": "pendiente",
+        "mensaje": "✅ Evolución sellada en BFA. La confirmación puede demorar unos minutos.",
+    }), 201
+
+
 @bp_blockchain.route("/api/blockchain/verificar/evolucion/<int:evolucion_id>", methods=["GET"])
 @login_required
 def verificar_evolucion_blockchain(evolucion_id):
-    """Todavia no se anclan evoluciones sueltas.
+    """Verifica una evolucion contra SU PROPIO recibo.
 
-    La version anterior calculaba el hash de la evolucion y lo verificaba
+    La implementacion anterior calculaba el hash de la evolucion y lo verificaba
     contra el recibo de la historia consolidada. Son dos hashes distintos, asi
-    que la TSA respondia failure siempre: la ruta no podia dar valido nunca, y
-    mostraba "evolucion modificada" sobre evoluciones intactas.
-
-    Se responde 501 en vez de un falso negativo. Anclar evoluciones
-    individuales requiere sellarlas por separado y guardar su propio recibo.
+    que la TSA respondia failure siempre: mostraba "evolucion modificada" sobre
+    evoluciones intactas.
     """
+    with db_cursor() as (conn, cursor):
+        cursor.execute("SELECT id FROM evoluciones WHERE id = %s", (evolucion_id,))
+        if not cursor.fetchone():
+            return jsonify({"error": "Evolución no encontrada"}), 404
+
+        anclaje = _ultimo_anclaje_evolucion(cursor, evolucion_id)
+        if not anclaje:
+            return jsonify({
+                "evolucion_id": evolucion_id,
+                "estado": "sin_anclaje",
+                "valido": None,
+                "error": "Esta evolución todavía no fue sellada en BFA",
+            }), 400
+
+        resultado, error_red = _verificar_en_tsa(anclaje["hash_local"], anclaje["recibo_tsa"])
+
+        if error_red is not None:
+            return jsonify({
+                "evolucion_id": evolucion_id,
+                "estado": "indeterminado",
+                "valido": None,
+                "mensaje": "⚠️ No se pudo contactar a la TSA de BFA. Reintentá en unos minutos.",
+                "detalle": error_red,
+            }), 503
+
+        _actualizar_anclaje(cursor, anclaje["id"], resultado)
+
+        # Solo se audita cuando hay veredicto: 'pendiente' no lo es.
+        if resultado["valido"] is not None:
+            _registrar_auditoria(
+                cursor,
+                None,
+                anclaje["hash_local"],
+                anclaje["recibo_tsa"],
+                resultado["valido"],
+                current_user.username,
+            )
+
+        cursor.execute(
+            "UPDATE evoluciones SET estado_bfa = %s WHERE id = %s",
+            (resultado["estado"], evolucion_id),
+        )
+        conn.commit()
+
     return jsonify({
         "evolucion_id": evolucion_id,
-        "estado": "no_implementado",
-        "valido": None,
-        "mensaje": "El anclaje por evolución individual todavía no está disponible. "
-                   "Verificá la historia consolidada del paciente.",
-    }), 501
+        "hash_local": anclaje["hash_local"],
+        "hash_version": anclaje["hash_version"],
+        "recibo_tsa": anclaje["recibo_tsa"],
+        "estado": resultado["estado"],
+        "valido": resultado["valido"],
+        "bloque": resultado["block_number"],
+        "attestation_time": resultado["attestation_time"],
+        "permanent_rd": resultado["permanent_rd"],
+        "mensaje": resultado["mensaje"],
+    }), 200
 
 
 # =============================================================
