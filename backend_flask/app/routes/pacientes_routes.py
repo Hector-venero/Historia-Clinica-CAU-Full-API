@@ -475,7 +475,7 @@ def exportar_historia_pdf(id):
     datos_paciente = f"""
         <b>Paciente:</b> {paciente['apellido'].upper()} {paciente['nombre'].upper()}<br/>
         <b>DNI:</b> {paciente['dni']}<br/>
-        <b>Cobertura:</b> {paciente.get('cobertura', '-')}<br/>
+        <b>Cobertura:</b> {paciente.get('cobertura') or '-'}<br/>
         <b>N° HC:</b> {paciente['nro_hc']}<br/>
         <b>Fecha de nacimiento:</b> {paciente.get('fecha_nacimiento', '-') or '-'}<br/>
         <b>Sexo:</b> {paciente.get('sexo', '-') or '-'}
@@ -720,7 +720,7 @@ def exportar_evolucion_pdf(paciente_id, evo_id):
         <b>Paciente:</b> {paciente['apellido']} {paciente['nombre']}<br/>
         <b>DNI:</b> {paciente['dni']}<br/>
         <b>N° HC:</b> {paciente['nro_hc']}<br/>
-        <b>Cobertura:</b> {paciente.get('cobertura', '-')}
+        <b>Cobertura:</b> {paciente.get('cobertura') or '-'}
     """
     elements.append(Paragraph(datos_paciente, styles["Normal"]))
     elements.append(Spacer(1, 0.5*cm))
