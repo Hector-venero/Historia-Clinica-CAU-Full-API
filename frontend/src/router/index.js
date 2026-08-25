@@ -175,6 +175,15 @@ const router = createRouter({
                     path: 'recetas',
                     name: 'generadorRecetas',
                     component: () => import('@/views/pages/GeneradorRecetas.vue')
+                },
+                // 📢 Comunicados internos
+                {
+                    path: 'comunicados',
+                    name: 'comunicados',
+                    // Los lee todo el equipo; publicar y borrar lo restringe el
+                    // backend a director y administrativo.
+                    meta: { requiresAuth: true },
+                    component: () => import('@/views/pages/comunicados/Comunicados.vue')
                 }
             ]
         },

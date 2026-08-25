@@ -50,6 +50,10 @@ const model = computed(() => {
             items: [{ label: 'Generar Receta', icon: 'pi pi-file-edit', to: '/recetas' }]
         },
         {
+            label: 'Comunicados',
+            items: [{ label: 'Ver Comunicados', icon: 'pi pi-fw pi-megaphone', to: '/comunicados' }]
+        },
+        {
             label: 'Turnos',
             items: [
                 { label: 'Agenda', icon: 'pi pi-fw pi-calendar', to: '/turnos' },
