@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone, time
+from datetime import datetime, timedelta, time
 import math
 
 from flask import Blueprint, jsonify, request
@@ -7,9 +7,12 @@ from app.database import get_connection, db_cursor
 from app.utils.permisos import requiere_rol
 from app.utils.mails_turnos import enviar_cancelacion, enviar_confirmacion
 
-bp_turnos = Blueprint("turnos", __name__)
+# Compartidos con grupos_routes, que sirve el calendario de grupos y necesita la
+# misma conversion. Se conserva el nombre `_to_iso_arg` para no tocar los ocho
+# lugares que ya lo usan.
+from app.utils.fechas import TZ_ARG, a_iso_arg as _to_iso_arg
 
-TZ_ARG = timezone(timedelta(hours=-3))
+bp_turnos = Blueprint("turnos", __name__)
 ROLES_TURNOS = ("director", "profesional", "administrativo", "area")
 ROLES_TURNOS_GRUPALES = ("director", "administrativo", "area")
 GROUP_SLOT_MINUTES = 20
@@ -68,16 +71,6 @@ def _normalize_datetime(dt):
     if dt.tzinfo is None:
         return dt
     return dt.astimezone(TZ_ARG).replace(tzinfo=None)
-
-
-def _to_iso_arg(dt):
-    if not isinstance(dt, datetime):
-        return dt
-    if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=TZ_ARG)
-    else:
-        dt = dt.astimezone(TZ_ARG)
-    return dt.isoformat()
 
 
 def _to_db_iso(dt):

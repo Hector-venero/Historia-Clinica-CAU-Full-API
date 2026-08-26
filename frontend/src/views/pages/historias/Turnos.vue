@@ -1,287 +1,710 @@
 <script setup>
-import { ref, onMounted, onUnmounted, reactive } from 'vue';
+import { ref, onMounted, onUnmounted, reactive, computed, watch } from 'vue';
 import FullCalendar from '@fullcalendar/vue3';
 import dayGridPlugin from '@fullcalendar/daygrid';
 import timeGridPlugin from '@fullcalendar/timegrid';
 import interactionPlugin from '@fullcalendar/interaction';
 import tippy from 'tippy.js';
 import 'tippy.js/dist/tippy.css';
-import api from '@/api/axios'; // Asegúrate de importar tu instancia de axios
+import api from '@/api/axios';
+import { fechaBonitaCompleta } from '@/utils/formatDate';
+import '@/assets/calendar-medical.css';
 
-// PrimeVue Imports
 import Dialog from 'primevue/dialog';
 import Button from 'primevue/button';
 import InputText from 'primevue/inputtext';
+import Select from 'primevue/select';
+import Checkbox from 'primevue/checkbox';
+import Textarea from 'primevue/textarea';
+import Tag from 'primevue/tag';
+import Toast from 'primevue/toast';
+import { useToast } from 'primevue/usetoast';
 
-/* -------------------------------------------------------------------------- */
-/* LOCALE (SOLUCIÓN ERROR VITE)                                              */
-/* -------------------------------------------------------------------------- */
+const toast = useToast();
+
 const esLocale = {
     code: 'es',
     week: { dow: 1, doy: 4 },
-    buttonText: {
-        prev: 'Ant',
-        next: 'Sig',
-        today: 'Hoy',
-        month: 'Mes',
-        week: 'Semana',
-        day: 'Día',
-        list: 'Agenda'
-    },
+    buttonText: { prev: 'Ant', next: 'Sig', today: 'Hoy', month: 'Mes', week: 'Semana', day: 'Dia', list: 'Agenda' },
     weekText: 'Sm',
-    allDayText: 'Todo el día',
-    moreLinkText: 'más',
+    allDayText: 'Todo el dia',
+    moreLinkText: 'mas',
     noEventsText: 'No hay eventos para mostrar'
 };
 
-/* -------------------------------------------------------------------------- */
-/* VARIABLES                                                                 */
-/* -------------------------------------------------------------------------- */
+const DIAS_INDEX = { Lunes: 1, Martes: 2, Miercoles: 3, Jueves: 4, Viernes: 5, Sabado: 6, Domingo: 0 };
+const TIPOS_EVENTO_AGENDA = [
+    { label: 'Reunion', value: 'Reunion' },
+    { label: 'Turno', value: 'Turno' },
+    { label: 'Bloqueo', value: 'Bloqueo' },
+    { label: 'Ausencia', value: 'Ausencia' }
+];
+
 const eventos = ref([]);
-const leyendaGrupos = ref([]);
 const turnoSeleccionado = ref(null);
 const modalVisible = ref(false);
 const editando = ref(false);
+
+const ausenciasConteoNuevoTurno = ref(null);
+const ausenciasConteoDetalle = ref(null);
+const guardandoAusencia = ref(false);
+
+async function fetchAusenciasConteo(pacienteId) {
+    ausenciasConteoNuevoTurno.value = null;
+    try {
+        const res = await api.get(`/pacientes/${pacienteId}/ausencias`, { withCredentials: true });
+        ausenciasConteoNuevoTurno.value = res.data;
+        if (res.data && res.data.sin_aviso >= 3) {
+            toast.add({
+                severity: 'warn',
+                summary: 'Alerta de Ausencias',
+                detail: `El paciente seleccionado tiene ${res.data.sin_aviso} ausencias sin aviso.`,
+                life: 6000
+            });
+        }
+    } catch (e) {
+        console.error(e);
+    }
+}
+
+async function guardarAusenciaTurno(ausencia) {
+    if (!turnoSeleccionado.value) return;
+    guardandoAusencia.value = true;
+    try {
+        const url = `/turnos/${turnoSeleccionado.value.turnoId}/ausencia`;
+        await api.patch(url, { ausencia }, { withCredentials: true });
+        turnoSeleccionado.value.ausencia = ausencia;
+
+        // Recargar agenda para refrescar color
+        await cargarAgenda();
+
+        // Volver a buscar conteo para actualizar el detalle
+        if (turnoSeleccionado.value.paciente_id) {
+            const res = await api.get(`/pacientes/${turnoSeleccionado.value.paciente_id}/ausencias`, { withCredentials: true });
+            ausenciasConteoDetalle.value = res.data;
+        }
+        toast.add({ severity: 'success', summary: 'Estado de asistencia', detail: 'Se actualizó el estado de ausencia correctamente.', life: 3000 });
+    } catch (e) {
+        console.error(e);
+        toast.add({ severity: 'error', summary: 'Error', detail: 'No se pudo actualizar el estado de ausencia.', life: 3500 });
+    } finally {
+        guardandoAusencia.value = false;
+    }
+}
 const fechaEdit = ref('');
 const horaEdit = ref('');
-const duracionTurno = ref(30);
-const nombreProfesionalLogueado = ref('');
+const duracionTurno = ref(20);
 
-/* -------------------------------------------------------------------------- */
-/* CONFIG CALENDARIO                                                         */
-/* -------------------------------------------------------------------------- */
+const rolUsuario = ref('');
+const usuarioLogueadoId = ref(null);
+const nombreUsuarioLogueado = ref('');
+
+const sujetos = ref([]);
+const sujetoSeleccionadoId = ref(null);
+
+const bloqueoModalVisible = ref(false);
+const bloqueoGuardando = ref(false);
+const bloqueoForm = reactive({
+    fecha: '',
+    todoDia: false,
+    horaInicio: '08:00',
+    horaFin: '09:00',
+    tipo_evento: 'Bloqueo',
+    motivo: '',
+    usuario_id: ''
+});
+
+const nuevoTurnoModalVisible = ref(false);
+const pacienteBusqueda = ref('');
+const pacientes = ref([]);
+const pacienteSeleccionado = ref(null);
+const nuevoTurnoTipoEvento = ref('Turno');
+const nuevoTurnoMotivo = ref('');
+const nuevoTurnoObservaciones = ref('');
+const nuevoTurnoFecha = ref('');
+const nuevoTurnoGuardando = ref(false);
+
+const canSelectSubject = computed(() => ['director', 'administrativo'].includes((rolUsuario.value || '').toLowerCase().trim()));
+const canDeleteAusencia = computed(() => {
+    if (!turnoSeleccionado.value || turnoSeleccionado.value.tipo !== 'ausencia') return false;
+    if (['director', 'administrativo'].includes((rolUsuario.value || '').toLowerCase().trim())) return true;
+    return Number(turnoSeleccionado.value.usuarioId) === Number(usuarioLogueadoId.value);
+});
+const sujetoActualNombre = computed(() => sujetos.value.find((s) => Number(s.id) === Number(sujetoSeleccionadoId.value))?.nombre || nombreUsuarioLogueado.value || 'Cargando...');
+
+function pad(n) {
+    return String(n).padStart(2, '0');
+}
+
+function toDateInput(date) {
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+function toTimeInput(date) {
+    return `${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function toLocalDateTimeString(date, withSeconds = true) {
+    const base = `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+    return withSeconds ? `${base}:${pad(date.getSeconds())}` : base;
+}
+
+function parseDateSafe(value) {
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return null;
+    return d;
+}
+
+function esDiaCompletoAusencia(ausencia, inicio, fin) {
+    if (typeof ausencia?.es_dia_completo === 'boolean') return ausencia.es_dia_completo;
+    if (!inicio || !fin) return false;
+    return inicio.getHours() === 0 && inicio.getMinutes() === 0 && fin.getHours() === 23 && fin.getMinutes() === 59 && inicio.toDateString() === fin.toDateString();
+}
+
+function normalizarHHMM(v, fallback = '00:00') {
+    if (!v || typeof v !== 'string') return fallback;
+    const clean = v.trim().slice(0, 5);
+    return /^\d{2}:\d{2}$/.test(clean) ? clean : fallback;
+}
+function minutosDesdeHHMM(hhmm) {
+    const val = normalizarHHMM(hhmm, '00:00');
+    const [h, m] = val.split(':').map(Number);
+    return h * 60 + m;
+}
+function minutosATiempo(minutos, forEnd = false) {
+    if (forEnd && minutos >= 24 * 60) return '23:59:59';
+    const total = Math.max(0, Math.min(minutos, 24 * 60 - 1));
+    const h = Math.floor(total / 60);
+    const m = total % 60;
+    return `${pad(h)}:${pad(m)}:00`;
+}
+
+function normalizarTipoEvento(tipo) {
+    const limpio = String(tipo || '')
+        .trim()
+        .toLowerCase();
+    const match = TIPOS_EVENTO_AGENDA.find((opt) => opt.value.toLowerCase() === limpio);
+    return match ? match.value : 'Bloqueo';
+}
+
+function extraerTipoEventoYMotivo(motivo) {
+    const texto = String(motivo || '').trim();
+    const match = texto.match(/^\[(Reunion|Turno|Bloqueo|Ausencia)\]\s*(.*)$/i);
+    if (!match) {
+        return {
+            tipoEvento: 'Bloqueo',
+            motivoLimpio: texto
+        };
+    }
+    return {
+        tipoEvento: normalizarTipoEvento(match[1]),
+        motivoLimpio: match[2] || ''
+    };
+}
+
+function construirMotivoEvento(tipoEvento, motivoLibre) {
+    const tipo = normalizarTipoEvento(tipoEvento);
+    const detalle = String(motivoLibre || '').trim();
+    return detalle ? `[${tipo}] ${detalle}` : `[${tipo}]`;
+}
+
+function esTurnoAgenda(tipoEvento) {
+    return normalizarTipoEvento(tipoEvento) === 'Turno';
+}
+
+function limpiarPacienteSeleccionado() {
+    pacienteBusqueda.value = '';
+    pacientes.value = [];
+    pacienteSeleccionado.value = null;
+}
+
+function crearEventosNoDisponibilidad(disponibilidades) {
+    const disponiblesPorDia = {};
+    const eventos = [];
+    const inicioDia = 0;
+    const finDia = 24 * 60;
+
+    for (const d of disponibilidades || []) {
+        if (!d.activo) continue;
+        const idx = DIAS_INDEX[d.dia_semana];
+        if (idx === undefined) continue;
+        const inicio = minutosDesdeHHMM(d.hora_inicio);
+        const fin = minutosDesdeHHMM(d.hora_fin);
+        if (fin <= inicio) continue;
+        if (!disponiblesPorDia[idx]) disponiblesPorDia[idx] = [];
+        disponiblesPorDia[idx].push({ inicio, fin });
+    }
+
+    for (const idx of [0, 1, 2, 3, 4, 5, 6]) {
+        const rangos = (disponiblesPorDia[idx] || []).slice().sort((a, b) => a.inicio - b.inicio);
+
+        if (!rangos.length) {
+            eventos.push({
+                daysOfWeek: [idx],
+                startTime: '00:00:00',
+                endTime: '23:59:59',
+                display: 'background',
+                classNames: ['no-disponible-background'],
+                backgroundColor: 'rgba(107, 114, 128, 0.22)',
+                extendedProps: { tipo: 'indisponible_bg' }
+            });
+            continue;
+        }
+
+        const merged = [];
+        for (const r of rangos) {
+            if (!merged.length || r.inicio > merged[merged.length - 1].fin) {
+                merged.push({ ...r });
+            } else {
+                merged[merged.length - 1].fin = Math.max(merged[merged.length - 1].fin, r.fin);
+            }
+        }
+
+        let cursor = inicioDia;
+        for (const r of merged) {
+            if (r.inicio > cursor) {
+                eventos.push({
+                    daysOfWeek: [idx],
+                    startTime: minutosATiempo(cursor),
+                    endTime: minutosATiempo(r.inicio, true),
+                    display: 'background',
+                    classNames: ['no-disponible-background'],
+                    backgroundColor: 'rgba(107, 114, 128, 0.22)',
+                    extendedProps: { tipo: 'indisponible_bg' }
+                });
+            }
+            cursor = Math.max(cursor, r.fin);
+        }
+
+        if (cursor < finDia) {
+            eventos.push({
+                daysOfWeek: [idx],
+                startTime: minutosATiempo(cursor),
+                endTime: minutosATiempo(finDia, true),
+                display: 'background',
+                classNames: ['no-disponible-background'],
+                backgroundColor: 'rgba(107, 114, 128, 0.22)',
+                extendedProps: { tipo: 'indisponible_bg' }
+            });
+        }
+    }
+
+    return eventos;
+}
+
 const calendarOptions = reactive({
     plugins: [dayGridPlugin, timeGridPlugin, interactionPlugin],
     initialView: 'timeGridWeek',
     locale: esLocale,
-    headerToolbar: {
-        left: 'prev,next today',
-        center: 'title',
-        right: 'dayGridMonth,timeGridWeek,timeGridDay'
-    },
-    slotMinTime: '08:00:00',
-    slotMaxTime: '21:00:00',
+    headerToolbar: { left: 'prev,next today', center: 'title', right: 'dayGridMonth,timeGridWeek,timeGridDay' },
+    slotMinTime: '07:00:00',
+    slotMaxTime: '22:00:00',
+    slotDuration: '00:20:00',
+    snapDuration: '00:20:00',
+    slotLabelInterval: '00:20:00',
     allDaySlot: false,
     height: '100%',
-
-    // Lógica de superposición
-    slotEventOverlap: true, // Permitir que se monten para ver conflictos
+    slotEventOverlap: true,
     eventOverlap: true,
-    eventOrder: 'order', // Ordenar por prioridad (Mis turnos arriba)
-
     events: eventos,
-
+    dateClick(info) {
+        abrirModalNuevoTurno(info.date);
+    },
     eventClick(info) {
         const e = info.event;
+        const tipo = e.extendedProps.tipo;
+        if (tipo === 'ausencia_bg' || tipo === 'indisponible_bg') return;
+
         turnoSeleccionado.value = {
-            id: e.id, // ID del turno en BD
-            turnoId: e.extendedProps.turnoId,
-            tipo: e.extendedProps.tipo,
-            editable: e.extendedProps.editable,
+            id: e.id,
+            turnoId: e.extendedProps.turnoId || e.id,
+            tipo,
+            editable: Boolean(e.extendedProps.editable),
             paciente: e.extendedProps.paciente,
             dni: e.extendedProps.dni,
             profesional: e.extendedProps.profesional,
             description: e.extendedProps.description,
+            observaciones: e.extendedProps.observaciones,
+            ausencia: e.extendedProps.ausencia,
+            paciente_id: e.extendedProps.paciente_id,
+            tipoEvento: e.extendedProps.tipoEvento || 'Bloqueo',
+            ausenciaId: e.extendedProps.ausenciaId,
+            usuarioId: e.extendedProps.usuarioId,
+            grupoId: e.extendedProps.grupoId,
+            creadoPorNombre: e.extendedProps.creadoPorNombre ?? e.extendedProps.creado_por_nombre,
+            creadoEn: e.extendedProps.creadoEn ?? e.extendedProps.creado_en,
             start: e.start,
             end: e.end
         };
+
+        // Fetch absence counts for the detail view
+        ausenciasConteoDetalle.value = null;
+        if (e.extendedProps.paciente_id) {
+            api.get(`/pacientes/${e.extendedProps.paciente_id}/ausencias`, { withCredentials: true })
+                .then((res) => {
+                    ausenciasConteoDetalle.value = res.data;
+                })
+                .catch((err) => console.error(err));
+        }
+
         editando.value = false;
         modalVisible.value = true;
     },
-
     eventDidMount(info) {
-        if (info.event.extendedProps.tipo === 'ausencia') return;
+        const tipo = info.event.extendedProps.tipo;
+        if (tipo === 'ausencia_bg' || tipo === 'indisponible_bg') return;
 
-        const desc = info.event.extendedProps.description || 'Sin motivo';
-        const paciente = info.event.extendedProps.paciente;
-        const profesional = info.event.extendedProps.profesional;
-        const esGrupal = info.event.extendedProps.tipo === 'grupal';
+        if (tipo === 'ausencia') {
+            const tipoEvento = info.event.extendedProps.tipoEvento || 'Bloqueo';
+            tippy(info.el, {
+                content: `<strong>${tipoEvento}</strong><br>${info.event.extendedProps.profesional || 'Profesional'}<br><span style="opacity:0.7">${info.event.extendedProps.description || ''}</span>`,
+                allowHTML: true,
+                placement: 'top',
+                theme: 'medical'
+            });
+            return;
+        }
 
-        // Tooltip diferente si es mi turno o de un colega
-        const tituloTooltip = esGrupal ? `<strong style="color: #ffcc80">${profesional}</strong><br>Paciente: ${paciente}` : `<strong>${paciente}</strong>`;
+        const ausencia = info.event.extendedProps.ausencia;
+        if (ausencia === 'sin_aviso') {
+            info.el.style.setProperty('background-color', '#C0392B', 'important');
+            info.el.style.setProperty('border-color', '#C0392B', 'important');
+            info.el.style.setProperty('color', '#ffffff', 'important');
+        } else if (ausencia === 'con_aviso') {
+            info.el.style.setProperty('background-color', '#E67E22', 'important');
+            info.el.style.setProperty('border-color', '#E67E22', 'important');
+            info.el.style.setProperty('color', '#ffffff', 'important');
+        }
+
+        const pacNombre = info.event.extendedProps.paciente || '';
+        const profNombre = info.event.extendedProps.profesional || '';
+        const motivo = info.event.extendedProps.description || '';
+        let prefix = '';
+        if (ausencia === 'sin_aviso') prefix = '[Falta Sin Aviso] ';
+        else if (ausencia === 'con_aviso') prefix = '[Falta Con Aviso] ';
 
         tippy(info.el, {
-            content: `${tituloTooltip}<br><span style="font-size:0.8em; opacity:0.8">${desc}</span>`,
+            content: `<strong>${prefix}${pacNombre}</strong><br>${profNombre}${motivo ? '<br><span style="opacity:0.7">' + motivo + '</span>' : ''}`,
             allowHTML: true,
-            placement: 'top'
+            placement: 'top',
+            theme: 'medical'
         });
     }
 });
 
-/* -------------------------------------------------------------------------- */
-/* HELPERS                                                                   */
-/* -------------------------------------------------------------------------- */
-function stringToColor(str) {
-    let hash = 0;
-    for (let i = 0; i < str.length; i++) hash = str.charCodeAt(i) + ((hash << 5) - hash);
-    const c = (hash & 0x00ffffff).toString(16).toUpperCase();
-    return '#' + '00000'.substring(0, 6 - c.length) + c;
-}
+watch(duracionTurno, (d) => {
+    const dur = Number(d) > 0 ? Number(d) : 20;
+    const hh = `00:${pad(dur)}:00`;
+    calendarOptions.slotDuration = hh;
+    calendarOptions.snapDuration = hh;
+    calendarOptions.slotLabelInterval = hh;
+});
 
-function hexToRgba(hex, alpha) {
-    if (!hex) return 'rgba(59, 130, 246, 1)';
-    let c;
-    if (/^#([A-Fa-f0-9]{3}){1,2}$/.test(hex)) {
-        c = hex.substring(1).split('');
-        if (c.length == 3) c = [c[0], c[0], c[1], c[1], c[2], c[2]];
-        c = '0x' + c.join('');
-        return 'rgba(' + [(c >> 16) & 255, (c >> 8) & 255, c & 255].join(',') + ',' + alpha + ')';
-    }
-    return hex;
-}
-
-const formatearFecha = (date) => new Date(date).toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' });
-const formatearHora = (date) => new Date(date).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
-
-/* -------------------------------------------------------------------------- */
-/* LÓGICA DE DATOS                                                           */
-/* -------------------------------------------------------------------------- */
 async function cargarDatosUsuario() {
-    try {
-        const resp = await api.get('/usuarios/me', { withCredentials: true });
-        const data = resp.data;
-        duracionTurno.value = data.duracion_turno || 30;
-        nombreProfesionalLogueado.value = data.nombre || data.email;
-    } catch (e) {
-        console.error('Error cargando usuario', e);
+    const resp = await api.get('/usuarios/me', { withCredentials: true });
+    const data = resp.data || {};
+    nombreUsuarioLogueado.value = data.nombre || data.email || '';
+    rolUsuario.value = (data.rol || '').toLowerCase().trim();
+    usuarioLogueadoId.value = data.id;
+    duracionTurno.value = data.duracion_turno || 20;
+    bloqueoForm.usuario_id = data.id;
+}
+
+async function cargarSujetos() {
+    if (canSelectSubject.value) {
+        const resp = await api.get('/agenda/sujetos', { withCredentials: true });
+        sujetos.value = resp.data || [];
+
+        const sujetoActualExiste = sujetos.value.some((s) => Number(s.id) === Number(sujetoSeleccionadoId.value));
+        const propio = sujetos.value.find((s) => Number(s.id) === Number(usuarioLogueadoId.value));
+
+        if (!sujetoActualExiste) {
+            // Por defecto mostramos la agenda propia; si no aparece en lista, usamos el primer sujeto disponible.
+            sujetoSeleccionadoId.value = propio?.id ?? sujetos.value[0]?.id ?? null;
+        }
+    } else {
+        sujetos.value = [{ id: usuarioLogueadoId.value, nombre: nombreUsuarioLogueado.value, rol: rolUsuario.value, duracion_turno: duracionTurno.value }];
+        sujetoSeleccionadoId.value = usuarioLogueadoId.value;
     }
 }
 
-async function cargarTurnosProfesional() {
-    try {
-        const resp = await api.get('/turnos/profesional/completo', { withCredentials: true });
-        const data = resp.data;
+function crearEventosAusencia(ausencia) {
+    const inicio = parseDateSafe(ausencia.fecha_inicio);
+    const fin = parseDateSafe(ausencia.fecha_fin);
+    if (!inicio || !fin) return [];
+    const { tipoEvento, motivoLimpio } = extraerTipoEventoYMotivo(ausencia.motivo);
 
-        const mapaTurnos = new Map();
-        const gruposDetectados = {};
-
-        // Normalizar nombres para comparación
-        const miNombre = (nombreProfesionalLogueado.value || '').toLowerCase().trim();
-
-        data.forEach((t) => {
-            const profNombre = (t.profesional || '').toLowerCase().trim();
-
-            // Lógica de propiedad: ¿Es mi turno o de un grupo?
-            const esPropio = miNombre && profNombre.includes(miNombre);
-            const esGrupal = !esPropio;
-
-            // Colores
-            let colorFinal = esPropio ? '#1976D2' : stringToColor(t.profesional || 'Desconocido');
-
-            if (!mapaTurnos.has(t.id)) {
-                mapaTurnos.set(t.id, {
-                    id: t.id,
-                    title: esGrupal ? `${t.profesional} (${t.paciente})` : t.paciente,
-                    start: t.start,
-                    end: t.end,
-
-                    // Estilos visuales
-                    backgroundColor: esGrupal ? hexToRgba(colorFinal, 0.1) : colorFinal, // Fondo suave si es grupal
-                    borderColor: colorFinal,
-                    textColor: esGrupal ? '#333' : '#ffffff', // Texto oscuro si fondo es claro
-                    classNames: esGrupal ? ['evento-grupal'] : ['evento-propio'],
-
-                    extendedProps: {
-                        order: esGrupal ? 0 : 10,
-                        tipo: esGrupal ? 'grupal' : 'individual',
-                        editable: esPropio ? t.editable === 1 || t.editable === true : false,
-                        turnoId: t.id,
-                        paciente: t.paciente,
-                        dni: t.dni,
-                        profesional: t.profesional,
-                        description: t.description
-                    }
-                });
+    const rows = [
+        {
+            id: `ausencia-${ausencia.id}`,
+            title: `${tipoEvento}: ${ausencia.nombre_usuario || 'Profesional'}`,
+            start: ausencia.fecha_inicio,
+            end: ausencia.fecha_fin,
+            backgroundColor: 'rgba(239,68,68,0.12)',
+            borderColor: '#EF4444',
+            textColor: '#991B1B',
+            classNames: ['evento-ausencia'],
+            extendedProps: {
+                tipo: 'ausencia',
+                tipoEvento,
+                ausenciaId: ausencia.id,
+                usuarioId: ausencia.usuario_id,
+                profesional: ausencia.nombre_usuario,
+                description: motivoLimpio,
+                creadoPorNombre: ausencia.creado_por_nombre,
+                creadoEn: ausencia.creado_en
             }
+        }
+    ];
 
-            if (esGrupal) {
-                gruposDetectados[t.profesional] = colorFinal;
-            }
+    if (esDiaCompletoAusencia(ausencia, inicio, fin)) {
+        const inicioDia = new Date(inicio);
+        inicioDia.setHours(0, 0, 0, 0);
+        const finDia = new Date(inicioDia);
+        finDia.setDate(finDia.getDate() + 1);
+        rows.push({
+            id: `ausencia-bg-${ausencia.id}`,
+            display: 'background',
+            start: toLocalDateTimeString(inicioDia),
+            end: toLocalDateTimeString(finDia),
+            classNames: ['ausencia-background'],
+            backgroundColor: 'rgba(248, 113, 113, 0.15)',
+            extendedProps: { tipo: 'ausencia_bg' }
         });
+    }
+    return rows;
+}
 
-        eventos.value = Array.from(mapaTurnos.values());
-        calendarOptions.events = eventos.value;
+function adaptarEventoTurno(t) {
+    const tipo = t.tipo || 'individual';
+    const esGrupal = tipo === 'grupal';
+    let title = esGrupal ? `${t.grupo_nombre || t.profesional} (${t.paciente})` : t.paciente;
+    if (t.ausencia === 'sin_aviso') {
+        title = `[Falta Sin Aviso] ${title}`;
+    } else if (t.ausencia === 'con_aviso') {
+        title = `[Falta Con Aviso] ${title}`;
+    }
+    return {
+        id: t.id,
+        title,
+        start: t.start,
+        end: t.end,
+        backgroundColor: esGrupal ? 'rgba(8,145,178,0.1)' : '#0891B2',
+        borderColor: esGrupal ? '#0891B2' : '#0E7490',
+        textColor: esGrupal ? '#134E4A' : '#ffffff',
+        classNames: esGrupal ? ['evento-grupal'] : ['evento-propio'],
+        extendedProps: {
+            tipo,
+            turnoId: t.turnoId || t.id,
+            paciente: t.paciente,
+            dni: t.dni,
+            profesional: t.profesional,
+            description: t.description,
+            observaciones: t.observaciones,
+            ausencia: t.ausencia,
+            paciente_id: t.paciente_id,
+            creadoPorNombre: t.creado_por_nombre,
+            creadoEn: t.creado_en,
+            editable: Boolean(t.editable) && !esGrupal,
+            grupoId: t.grupo_id
+        }
+    };
+}
 
-        // Actualizar leyenda
-        leyendaGrupos.value = Object.keys(gruposDetectados).map((nombre) => ({
-            nombre,
-            colorOriginal: gruposDetectados[nombre],
-            colorTransparente: hexToRgba(gruposDetectados[nombre], 0.7)
-        }));
-    } catch (error) {
-        console.error('Error cargando turnos:', error);
+async function cargarAgenda() {
+    if (!sujetoSeleccionadoId.value) return;
+    const params = { usuario_id: sujetoSeleccionadoId.value };
+    const [resTurnos, resAusencias, resDisponibilidades] = await Promise.all([
+        api.get('/turnos/profesional/completo', { params, withCredentials: true }),
+        api.get('/ausencias', { params, withCredentials: true }),
+        api.get('/disponibilidades', { params, withCredentials: true })
+    ]);
+
+    const turnos = (resTurnos.data || []).map(adaptarEventoTurno);
+    const ausencias = (resAusencias.data || []).flatMap(crearEventosAusencia);
+    const disponibilidadBg = crearEventosNoDisponibilidad(resDisponibilidades.data || []);
+    eventos.value = [...disponibilidadBg, ...turnos, ...ausencias];
+    calendarOptions.events = eventos.value;
+
+    const sujeto = sujetos.value.find((s) => Number(s.id) === Number(sujetoSeleccionadoId.value));
+    if (sujeto?.duracion_turno) duracionTurno.value = sujeto.duracion_turno;
+}
+
+function abrirModalBloqueo(fechaBase = new Date()) {
+    const inicio = new Date(fechaBase);
+    const fin = new Date(fechaBase);
+    fin.setMinutes(fin.getMinutes() + (duracionTurno.value || 20));
+    bloqueoForm.fecha = toDateInput(inicio);
+    bloqueoForm.horaInicio = toTimeInput(inicio);
+    bloqueoForm.horaFin = toTimeInput(fin);
+    bloqueoForm.todoDia = false;
+    bloqueoForm.tipo_evento = 'Bloqueo';
+    bloqueoForm.motivo = '';
+    bloqueoForm.usuario_id = sujetoSeleccionadoId.value;
+    limpiarPacienteSeleccionado();
+    bloqueoModalVisible.value = true;
+}
+
+async function guardarBloqueo() {
+    if (!bloqueoForm.fecha) return;
+    const tipoEvento = normalizarTipoEvento(bloqueoForm.tipo_evento);
+    if (tipoEvento !== 'Turno' && !bloqueoForm.todoDia) {
+        const inicioMin = minutosDesdeHHMM(bloqueoForm.horaInicio);
+        const finMin = minutosDesdeHHMM(bloqueoForm.horaFin);
+        if (finMin <= inicioMin) {
+            toast.add({ severity: 'warn', summary: 'Rango invalido', detail: 'La hora de fin debe ser mayor a la hora de inicio.', life: 4000 });
+            return;
+        }
+    }
+    const fechaInicio = bloqueoForm.todoDia ? `${bloqueoForm.fecha}T00:00:00` : `${bloqueoForm.fecha}T${bloqueoForm.horaInicio}:00`;
+    const fechaFin = bloqueoForm.todoDia ? `${bloqueoForm.fecha}T23:59:59` : `${bloqueoForm.fecha}T${bloqueoForm.horaFin}:00`;
+    const motivo = construirMotivoEvento(bloqueoForm.tipo_evento, bloqueoForm.motivo);
+    bloqueoGuardando.value = true;
+    try {
+        if (tipoEvento === 'Turno') {
+            if (!pacienteSeleccionado.value) {
+                toast.add({ severity: 'warn', summary: 'Paciente requerido', detail: 'Selecciona un paciente para crear un turno.', life: 3500 });
+                return;
+            }
+            const resp = await api.post('/turnos', { paciente_id: pacienteSeleccionado.value.id, usuario_id: Number(bloqueoForm.usuario_id), fecha_inicio: fechaInicio, motivo: bloqueoForm.motivo }, { withCredentials: true });
+            if (resp.data?.ajuste_horario?.aplicado) {
+                toast.add({ severity: 'info', summary: 'Horario ajustado', detail: `Inicio ajustado a ${resp.data.ajuste_horario.inicio_ajustado}`, life: 4500 });
+            }
+        } else {
+            await api.post('/ausencias', { fecha_inicio: fechaInicio, fecha_fin: fechaFin, motivo, usuario_id: Number(bloqueoForm.usuario_id) }, { withCredentials: true });
+        }
+        bloqueoModalVisible.value = false;
+        await cargarAgenda();
+    } finally {
+        bloqueoGuardando.value = false;
     }
 }
 
-/* -------------------------------------------------------------------------- */
-/* OPERACIONES CRUD (Las que faltaban)                                       */
-/* -------------------------------------------------------------------------- */
+function abrirModalNuevoTurno(date) {
+    nuevoTurnoFecha.value = toLocalDateTimeString(date);
+    nuevoTurnoTipoEvento.value = 'Turno';
+    limpiarPacienteSeleccionado();
+    nuevoTurnoMotivo.value = '';
+    nuevoTurnoObservaciones.value = '';
+    nuevoTurnoModalVisible.value = true;
+}
+
+async function buscarPacientes() {
+    if (!pacienteBusqueda.value || pacienteBusqueda.value.length < 2) {
+        pacientes.value = [];
+        return;
+    }
+    const resp = await api.get(`/pacientes/buscar?q=${encodeURIComponent(pacienteBusqueda.value)}`, { withCredentials: true });
+    pacientes.value = resp.data?.pacientes || [];
+}
+
+function seleccionarPaciente(p) {
+    pacienteSeleccionado.value = p;
+    pacienteBusqueda.value = `${p.apellido} ${p.nombre} (DNI: ${p.dni})`;
+    pacientes.value = [];
+    fetchAusenciasConteo(p.id);
+}
+
+async function guardarNuevoTurno() {
+    if (!sujetoSeleccionadoId.value || !nuevoTurnoFecha.value) return;
+    const tipoEvento = normalizarTipoEvento(nuevoTurnoTipoEvento.value);
+    nuevoTurnoGuardando.value = true;
+    try {
+        if (tipoEvento === 'Turno') {
+            if (!pacienteSeleccionado.value) {
+                toast.add({ severity: 'warn', summary: 'Paciente requerido', detail: 'Selecciona un paciente para crear un turno.', life: 3500 });
+                return;
+            }
+            const resp = await api.post(
+                '/turnos',
+                { paciente_id: pacienteSeleccionado.value.id, usuario_id: Number(sujetoSeleccionadoId.value), fecha_inicio: nuevoTurnoFecha.value, motivo: nuevoTurnoMotivo.value, observaciones: nuevoTurnoObservaciones.value },
+                { withCredentials: true }
+            );
+            if (resp.data?.ajuste_horario?.aplicado) {
+                toast.add({ severity: 'info', summary: 'Horario ajustado', detail: `Inicio ajustado a ${resp.data.ajuste_horario.inicio_ajustado}`, life: 4500 });
+            }
+        } else {
+            const inicio = parseDateSafe(nuevoTurnoFecha.value);
+            if (!inicio) {
+                toast.add({ severity: 'warn', summary: 'Fecha invalida', detail: 'No se pudo interpretar la fecha del evento.', life: 3500 });
+                return;
+            }
+            const fin = new Date(inicio);
+            fin.setMinutes(fin.getMinutes() + (duracionTurno.value || 20));
+            const motivo = construirMotivoEvento(tipoEvento, nuevoTurnoMotivo.value);
+            await api.post(
+                '/ausencias',
+                {
+                    fecha_inicio: toLocalDateTimeString(inicio),
+                    fecha_fin: toLocalDateTimeString(fin),
+                    motivo,
+                    usuario_id: Number(sujetoSeleccionadoId.value)
+                },
+                { withCredentials: true }
+            );
+        }
+        nuevoTurnoModalVisible.value = false;
+        await cargarAgenda();
+    } finally {
+        nuevoTurnoGuardando.value = false;
+    }
+}
+
+async function eliminarAusencia() {
+    if (!turnoSeleccionado.value?.ausenciaId) return;
+    await api.delete(`/ausencias/${turnoSeleccionado.value.ausenciaId}`, { withCredentials: true });
+    modalVisible.value = false;
+    await cargarAgenda();
+}
+
 function iniciarEdicion() {
-    const fechaObj = new Date(turnoSeleccionado.value.start);
-
-    // Ajuste para input date/time (YYYY-MM-DD y HH:MM)
-    // Nota: toISOString usa UTC, cuidado con la zona horaria. Mejor hacerlo manual.
-    const anio = fechaObj.getFullYear();
-    const mes = String(fechaObj.getMonth() + 1).padStart(2, '0');
-    const dia = String(fechaObj.getDate()).padStart(2, '0');
-
-    const hora = String(fechaObj.getHours()).padStart(2, '0');
-    const min = String(fechaObj.getMinutes()).padStart(2, '0');
-
-    fechaEdit.value = `${anio}-${mes}-${dia}`;
-    horaEdit.value = `${hora}:${min}`;
+    const f = new Date(turnoSeleccionado.value.start);
+    fechaEdit.value = toDateInput(f);
+    horaEdit.value = toTimeInput(f);
     editando.value = true;
 }
 
 async function guardarEdicion() {
-    if (!fechaEdit.value || !horaEdit.value) {
-        alert('Fecha y hora son obligatorias');
-        return;
+    const resp = await api.put(
+        `/turnos/${turnoSeleccionado.value.turnoId}`,
+        { fecha_inicio: `${fechaEdit.value}T${horaEdit.value}:00`, motivo: turnoSeleccionado.value.description, observaciones: turnoSeleccionado.value.observaciones },
+        { withCredentials: true }
+    );
+    if (resp.data?.ajuste_horario?.aplicado) {
+        toast.add({ severity: 'info', summary: 'Horario ajustado', detail: `Inicio ajustado a ${resp.data.ajuste_horario.inicio_ajustado}`, life: 4500 });
     }
-
-    try {
-        const fechaHoraInicio = `${fechaEdit.value}T${horaEdit.value}:00`;
-
-        await api.put(
-            `/turnos/${turnoSeleccionado.value.id}`,
-            {
-                fecha: fechaHoraInicio,
-                motivo: turnoSeleccionado.value.description
-            },
-            { withCredentials: true }
-        );
-
-        modalVisible.value = false;
-        cargarTurnosProfesional(); // Recargar calendario
-        alert('Turno actualizado correctamente');
-    } catch (err) {
-        console.error('Error actualizando turno:', err);
-        alert('Error al actualizar: ' + (err.response?.data?.error || err.message));
-    }
+    modalVisible.value = false;
+    await cargarAgenda();
 }
 
 async function eliminarTurno() {
-    if (!confirm('¿Seguro que deseas eliminar este turno?')) return;
-
-    try {
-        await api.delete(`/turnos/${turnoSeleccionado.value.id}`, { withCredentials: true });
-        modalVisible.value = false;
-
-        // Eliminar visualmente sin recargar todo (más rápido)
-        eventos.value = eventos.value.filter((e) => e.id !== turnoSeleccionado.value.id);
-        calendarOptions.events = eventos.value;
-    } catch (err) {
-        console.error('Error eliminando turno:', err);
-        alert('Error al eliminar');
-    }
+    await api.delete(`/turnos/${turnoSeleccionado.value.turnoId}`, { withCredentials: true });
+    modalVisible.value = false;
+    await cargarAgenda();
 }
 
 let intervalo = null;
+watch(sujetoSeleccionadoId, async () => {
+    bloqueoForm.usuario_id = sujetoSeleccionadoId.value;
+    await cargarAgenda();
+});
+
+watch(
+    () => bloqueoForm.tipo_evento,
+    (tipoEvento) => {
+        if (esTurnoAgenda(tipoEvento)) {
+            bloqueoForm.todoDia = false;
+        } else {
+            limpiarPacienteSeleccionado();
+        }
+    }
+);
 
 onMounted(async () => {
     await cargarDatosUsuario();
-    await cargarTurnosProfesional();
-    intervalo = setInterval(cargarTurnosProfesional, 60000);
+    await cargarSujetos();
+    await cargarAgenda();
+    intervalo = setInterval(cargarAgenda, 60000);
 });
 
 onUnmounted(() => {
@@ -291,105 +714,306 @@ onUnmounted(() => {
 
 <template>
     <div class="p-6 h-screen flex flex-col">
-        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-4">
+        <Toast />
+
+        <!-- Header -->
+        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-5">
             <div>
-                <h1 class="text-2xl font-bold text-gray-800 dark:text-gray-100 flex items-center gap-2">
-                    📅 Mi Agenda
-                    <span class="text-xs font-normal text-gray-500 bg-gray-200 dark:bg-gray-700 px-2 py-1 rounded">
-                        {{ nombreProfesionalLogueado || 'Cargando...' }}
-                    </span>
-                </h1>
+                <h1 class="text-2xl font-heading font-bold text-[#134E4A] dark:text-teal-100 tracking-tight">Agenda</h1>
+                <p class="text-xs text-slate-400 dark:text-slate-500 mt-1 font-sans">Click en una celda para crear un evento. Las zonas grises indican horarios no disponibles.</p>
             </div>
 
-            <div class="flex flex-wrap items-center gap-4 text-sm">
-                <div class="flex items-center gap-2">
-                    <span class="w-3 h-3 rounded-full bg-blue-600 border border-blue-800"></span>
-                    <span class="text-gray-800 dark:text-gray-200 font-medium">Mis Turnos</span>
-                </div>
-
-                <div v-for="g in leyendaGrupos" :key="g.nombre" class="flex items-center gap-2">
-                    <span class="w-3 h-3 rounded-full border border-dashed" :style="{ backgroundColor: g.colorTransparente, borderColor: g.colorOriginal }"></span>
-                    <span class="text-gray-500 dark:text-gray-400 text-xs">
-                        {{ g.nombre }}
-                    </span>
-                </div>
+            <div class="flex items-center gap-3">
+                <Select v-if="canSelectSubject" v-model="sujetoSeleccionadoId" :options="sujetos" optionValue="id" optionLabel="nombre" filter class="min-w-56">
+                    <template #option="slotProps">
+                        {{ slotProps.option.nombre }} <span class="text-muted-color text-xs">({{ slotProps.option.rol }})</span>
+                    </template>
+                </Select>
+                <span v-else class="text-sm font-heading font-semibold text-[#134E4A] dark:text-teal-200">{{ sujetoActualNombre }}</span>
+                <Button label="Agregar evento" icon="pi pi-calendar-plus" severity="secondary" class="!rounded-lg !text-sm !font-sans" @click="abrirModalBloqueo(new Date())" />
             </div>
         </div>
 
-        <div class="flex-1 bg-white dark:bg-[#1b1b1b] rounded-2xl shadow border border-gray-200 dark:border-gray-700 p-4 overflow-hidden">
-            <FullCalendar ref="fullCalendar" :options="calendarOptions" class="h-full" />
+        <!-- Leyenda -->
+        <div class="flex items-center gap-4 mb-4 flex-wrap">
+            <span class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#0891B2]/10 text-[#0891B2] dark:bg-cyan-900/30 dark:text-cyan-300 text-xs font-medium">
+                <span class="w-2.5 h-2.5 rounded-full bg-[#0891B2] inline-block"></span> Individual
+            </span>
+            <span class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#0891B2]/5 border border-dashed border-[#0891B2] text-[#0891B2] dark:border-cyan-400 dark:text-cyan-300 text-xs font-medium">
+                <span class="w-2.5 h-2.5 rounded-full border-2 border-dashed border-[#0891B2] dark:border-cyan-400 inline-block"></span> Grupal
+            </span>
+            <span class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-400 text-xs font-medium">
+                <span class="w-2.5 h-2.5 rounded-full bg-red-400 dark:bg-red-500 inline-block"></span> Ausencia
+            </span>
+            <span class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400 text-xs font-medium">
+                <span class="w-2.5 h-2.5 rounded-full bg-slate-300 dark:bg-slate-600 inline-block"></span> No disponible
+            </span>
         </div>
 
-        <Dialog v-model:visible="modalVisible" modal :header="editando ? 'Editar Turno' : 'Detalles del Turno'" :style="{ width: '450px' }" class="p-fluid">
-            <div v-if="turnoSeleccionado" class="space-y-4">
-                <div v-if="turnoSeleccionado.tipo === 'ausencia'" class="bg-red-50 p-4 rounded border border-red-200">
-                    <p class="text-red-700 font-bold flex items-center gap-2"><i class="pi pi-ban"></i> Día Bloqueado</p>
-                    <p class="text-gray-600 mt-2">{{ turnoSeleccionado.description || 'Sin motivo especificado' }}</p>
+        <!-- Calendar container -->
+        <div class="flex-1 bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-[#E0F2FE] dark:border-slate-700 p-4 overflow-hidden transition-colors">
+            <FullCalendar :options="calendarOptions" class="h-full" />
+        </div>
+
+        <!-- Modal: Nuevo turno -->
+        <Dialog v-model:visible="nuevoTurnoModalVisible" modal :header="nuevoTurnoTipoEvento === 'Turno' ? 'Nuevo turno' : 'Nuevo evento de agenda'" :style="{ width: '520px' }" :pt="{ header: { class: 'font-heading' } }">
+            <div class="space-y-4">
+                <div class="flex items-center gap-2 px-3 py-2 rounded-lg bg-[#F0FDFA] dark:bg-teal-900/20 text-[#0891B2] dark:text-cyan-300 text-sm font-medium">
+                    <i class="pi pi-calendar"></i>
+                    <span>{{ nuevoTurnoFecha }}</span>
                 </div>
-
-                <div v-else>
-                    <div v-if="editando">
-                        <div class="field mb-3">
-                            <label class="font-semibold block mb-1">Motivo / Descripción</label>
-                            <InputText v-model="turnoSeleccionado.description" class="w-full" />
+                <div>
+                    <label class="font-heading font-semibold text-sm block mb-1.5 text-[#134E4A] dark:text-slate-200"><i class="pi pi-tag mr-1.5 text-[#0891B2]"></i>Tipo de evento</label>
+                    <Select v-model="nuevoTurnoTipoEvento" :options="TIPOS_EVENTO_AGENDA" optionLabel="label" optionValue="value" class="w-full" />
+                </div>
+                <div v-if="nuevoTurnoTipoEvento === 'Turno'">
+                    <label class="font-heading font-semibold text-sm block mb-1.5 text-[#134E4A] dark:text-slate-200"><i class="pi pi-user mr-1.5 text-[#0891B2]"></i>Paciente</label>
+                    <InputText v-model="pacienteBusqueda" @input="buscarPacientes" class="w-full" placeholder="Buscar por DNI o nombre..." />
+                    <ul v-if="pacientes.length" class="border border-[#E0F2FE] dark:border-slate-600 rounded-lg mt-1.5 max-h-40 overflow-y-auto bg-white dark:bg-slate-800 shadow-lg">
+                        <li
+                            v-for="p in pacientes"
+                            :key="p.id"
+                            class="px-3 py-2.5 hover:bg-[#F0FDFA] dark:hover:bg-teal-900/20 cursor-pointer transition-colors text-sm border-b border-[#E0F2FE] dark:border-slate-700 last:border-0"
+                            @click="seleccionarPaciente(p)"
+                        >
+                            <span class="font-medium text-[#134E4A] dark:text-slate-200">{{ p.apellido }} {{ p.nombre }}</span> <span class="text-slate-400 ml-1">DNI: {{ p.dni }}</span>
+                        </li>
+                    </ul>
+                    <div v-if="pacienteSeleccionado" class="flex items-center gap-2 mt-2 px-3 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300 text-xs font-medium">
+                        <i class="pi pi-check-circle"></i>
+                        {{ pacienteSeleccionado.apellido }} {{ pacienteSeleccionado.nombre }}
+                    </div>
+                    <div v-if="pacienteSeleccionado && ausenciasConteoNuevoTurno" class="flex flex-col gap-1.5 mt-2">
+                        <div
+                            v-if="ausenciasConteoNuevoTurno.sin_aviso >= 3"
+                            class="flex items-center gap-2 px-3 py-2 rounded-lg bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-300 text-xs font-semibold border border-red-200 dark:border-red-900"
+                        >
+                            <i class="pi pi-exclamation-triangle text-sm"></i>
+                            <span>¡Alerta! El paciente tiene {{ ausenciasConteoNuevoTurno.sin_aviso }} ausencias sin aviso.</span>
                         </div>
-
-                        <div class="grid grid-cols-2 gap-4 mb-3">
-                            <div class="field">
-                                <label class="font-semibold block mb-1">Fecha</label>
-                                <InputText type="date" v-model="fechaEdit" class="w-full" />
-                            </div>
-                            <div class="field">
-                                <label class="font-semibold block mb-1">Hora</label>
-                                <InputText type="time" v-model="horaEdit" class="w-full" />
-                            </div>
-                        </div>
-
-                        <div class="flex justify-end gap-2 mt-4">
-                            <Button label="Cancelar" severity="secondary" text @click="editando = false" />
-                            <Button label="Guardar Cambios" icon="pi pi-check" @click="guardarEdicion" />
+                        <div class="text-[11px] text-slate-500 px-1">
+                            Historial de ausencias: <strong class="text-slate-700 dark:text-slate-300">{{ ausenciasConteoNuevoTurno.total }}</strong> total (<span class="text-orange-600 font-semibold"
+                                >{{ ausenciasConteoNuevoTurno.con_aviso }} con aviso</span
+                            >, <span class="text-red-600 font-semibold">{{ ausenciasConteoNuevoTurno.sin_aviso }} sin aviso</span>)
                         </div>
                     </div>
+                </div>
+                <div>
+                    <label class="font-heading font-semibold text-sm block mb-1.5 text-[#134E4A] dark:text-slate-200"> <i class="pi pi-comment mr-1.5 text-[#0891B2]"></i>{{ nuevoTurnoTipoEvento === 'Turno' ? 'Motivo' : 'Detalle' }} </label>
+                    <InputText v-model="nuevoTurnoMotivo" class="w-full" :placeholder="nuevoTurnoTipoEvento === 'Turno' ? 'Motivo de la consulta' : 'Detalle opcional del evento'" />
+                </div>
+                <div v-if="nuevoTurnoTipoEvento === 'Turno'">
+                    <label class="font-heading font-semibold text-sm block mb-1.5 text-[#134E4A] dark:text-slate-200"> <i class="pi pi-align-left mr-1.5 text-[#0891B2]"></i>Observaciones </label>
+                    <Textarea v-model="nuevoTurnoObservaciones" rows="3" autoResize class="w-full" placeholder="Observaciones adicionales" />
+                </div>
+            </div>
+            <template #footer>
+                <Button label="Cancelar" text severity="secondary" class="!rounded-lg" @click="nuevoTurnoModalVisible = false" />
+                <Button :label="nuevoTurnoTipoEvento === 'Turno' ? 'Guardar turno' : 'Guardar evento'" icon="pi pi-check" :loading="nuevoTurnoGuardando" class="!rounded-lg !bg-[#0891B2] !border-[#0891B2]" @click="guardarNuevoTurno" />
+            </template>
+        </Dialog>
 
-                    <div v-else>
-                        <div class="p-3 rounded-lg border-l-4 mb-4" :class="turnoSeleccionado.editable ? 'bg-blue-50 border-blue-500' : 'bg-gray-50 border-gray-400 border-dashed'">
-                            <p class="text-sm text-gray-500">Paciente</p>
-                            <p class="text-lg font-bold text-gray-800">{{ turnoSeleccionado.paciente }}</p>
-                            <p class="text-sm text-gray-600">DNI: {{ turnoSeleccionado.dni }}</p>
-
-                            <div v-if="!turnoSeleccionado.editable" class="mt-2 text-xs text-gray-500 flex items-center gap-1">
-                                <i class="pi pi-users"></i>
-                                Turno de: <strong>{{ turnoSeleccionado.profesional }}</strong>
-                            </div>
+        <!-- Modal: Evento de agenda -->
+        <Dialog v-model:visible="bloqueoModalVisible" modal header="Evento de agenda" :style="{ width: '480px' }" :pt="{ header: { class: 'font-heading' } }">
+            <div class="space-y-4">
+                <div>
+                    <label class="font-heading font-semibold text-sm block mb-1.5 text-[#134E4A] dark:text-slate-200"><i class="pi pi-tag mr-1.5 text-red-500"></i>Tipo de evento</label>
+                    <Select v-model="bloqueoForm.tipo_evento" :options="TIPOS_EVENTO_AGENDA" optionLabel="label" optionValue="value" class="w-full" />
+                </div>
+                <div v-if="esTurnoAgenda(bloqueoForm.tipo_evento)">
+                    <label class="font-heading font-semibold text-sm block mb-1.5 text-[#134E4A] dark:text-slate-200"><i class="pi pi-user mr-1.5 text-[#0891B2]"></i>Paciente</label>
+                    <InputText v-model="pacienteBusqueda" @input="buscarPacientes" class="w-full" placeholder="Buscar por DNI o nombre..." />
+                    <ul v-if="pacientes.length" class="border border-[#E0F2FE] dark:border-slate-600 rounded-lg mt-1.5 max-h-40 overflow-y-auto bg-white dark:bg-slate-800 shadow-lg">
+                        <li
+                            v-for="p in pacientes"
+                            :key="p.id"
+                            class="px-3 py-2.5 hover:bg-[#F0FDFA] dark:hover:bg-teal-900/20 cursor-pointer transition-colors text-sm border-b border-[#E0F2FE] dark:border-slate-700 last:border-0"
+                            @click="seleccionarPaciente(p)"
+                        >
+                            <span class="font-medium text-[#134E4A] dark:text-slate-200">{{ p.apellido }} {{ p.nombre }}</span> <span class="text-slate-400 ml-1">DNI: {{ p.dni }}</span>
+                        </li>
+                    </ul>
+                    <div v-if="pacienteSeleccionado" class="flex items-center gap-2 mt-2 px-3 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300 text-xs font-medium">
+                        <i class="pi pi-check-circle"></i>
+                        {{ pacienteSeleccionado.apellido }} {{ pacienteSeleccionado.nombre }}
+                    </div>
+                    <div v-if="pacienteSeleccionado && ausenciasConteoNuevoTurno" class="flex flex-col gap-1.5 mt-2">
+                        <div
+                            v-if="ausenciasConteoNuevoTurno.sin_aviso >= 3"
+                            class="flex items-center gap-2 px-3 py-2 rounded-lg bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-300 text-xs font-semibold border border-red-200 dark:border-red-900"
+                        >
+                            <i class="pi pi-exclamation-triangle text-sm"></i>
+                            <span>¡Alerta! El paciente tiene {{ ausenciasConteoNuevoTurno.sin_aviso }} ausencias sin aviso.</span>
                         </div>
+                        <div class="text-[11px] text-slate-500 px-1">
+                            Historial de ausencias: <strong class="text-slate-700 dark:text-slate-300">{{ ausenciasConteoNuevoTurno.total }}</strong> total (<span class="text-orange-600 font-semibold"
+                                >{{ ausenciasConteoNuevoTurno.con_aviso }} con aviso</span
+                            >, <span class="text-red-600 font-semibold">{{ ausenciasConteoNuevoTurno.sin_aviso }} sin aviso</span>)
+                        </div>
+                    </div>
+                </div>
+                <div>
+                    <label class="font-heading font-semibold text-sm block mb-1.5 text-[#134E4A] dark:text-slate-200"><i class="pi pi-calendar mr-1.5 text-red-500"></i>Fecha</label>
+                    <InputText type="date" v-model="bloqueoForm.fecha" class="w-full" />
+                </div>
+                <label v-if="!esTurnoAgenda(bloqueoForm.tipo_evento)" class="flex items-center gap-2.5 cursor-pointer px-3 py-2 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
+                    <Checkbox v-model="bloqueoForm.todoDia" :binary="true" />
+                    <span class="text-sm font-medium text-[#134E4A] dark:text-slate-200">Todo el dia</span>
+                </label>
+                <div :class="esTurnoAgenda(bloqueoForm.tipo_evento) ? 'grid grid-cols-1 gap-3' : 'grid grid-cols-2 gap-3'">
+                    <div>
+                        <label class="font-heading font-semibold text-sm block mb-1.5 text-[#134E4A] dark:text-slate-200">Hora inicio</label>
+                        <InputText type="time" v-model="bloqueoForm.horaInicio" class="w-full" :disabled="bloqueoForm.todoDia" />
+                    </div>
+                    <div v-if="!esTurnoAgenda(bloqueoForm.tipo_evento)">
+                        <label class="font-heading font-semibold text-sm block mb-1.5 text-[#134E4A] dark:text-slate-200">Hora fin</label>
+                        <InputText type="time" v-model="bloqueoForm.horaFin" class="w-full" :disabled="bloqueoForm.todoDia" />
+                    </div>
+                </div>
+                <div>
+                    <label class="font-heading font-semibold text-sm block mb-1.5 text-[#134E4A] dark:text-slate-200"> <i class="pi pi-comment mr-1.5 text-red-500"></i>{{ esTurnoAgenda(bloqueoForm.tipo_evento) ? 'Motivo' : 'Detalle' }} </label>
+                    <InputText v-model="bloqueoForm.motivo" class="w-full" :placeholder="esTurnoAgenda(bloqueoForm.tipo_evento) ? 'Motivo de la consulta' : 'Detalle opcional del evento'" />
+                </div>
+            </div>
+            <template #footer>
+                <Button label="Cancelar" text severity="secondary" class="!rounded-lg" @click="bloqueoModalVisible = false" />
+                <Button :label="esTurnoAgenda(bloqueoForm.tipo_evento) ? 'Guardar turno' : 'Guardar evento'" icon="pi pi-check" :loading="bloqueoGuardando" severity="danger" class="!rounded-lg" @click="guardarBloqueo" />
+            </template>
+        </Dialog>
 
-                        <div class="grid grid-cols-2 gap-4 mb-3">
+        <!-- Modal: Detalle / Editar turno -->
+        <Dialog v-model:visible="modalVisible" modal :header="editando ? 'Editar turno' : 'Detalle del turno'" :style="{ width: '480px' }" :pt="{ header: { class: 'font-heading' } }">
+            <div v-if="turnoSeleccionado" class="space-y-4">
+                <!-- Ausencia -->
+                <div v-if="turnoSeleccionado.tipo === 'ausencia'">
+                    <div class="flex items-center gap-2 mb-3 px-3 py-2 rounded-lg bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 text-sm font-medium">
+                        <i class="pi pi-calendar-times"></i> {{ turnoSeleccionado.tipoEvento || 'Bloqueo' }}
+                    </div>
+                    <div class="space-y-2 text-sm">
+                        <p class="flex items-center gap-2">
+                            <i class="pi pi-user text-slate-400"></i> <strong class="text-[#134E4A] dark:text-slate-200">Profesional:</strong> <span class="text-slate-600 dark:text-slate-300">{{ turnoSeleccionado.profesional }}</span>
+                        </p>
+                        <p class="flex items-center gap-2">
+                            <i class="pi pi-comment text-slate-400"></i> <strong class="text-[#134E4A] dark:text-slate-200">Detalle:</strong> <span class="text-slate-600 dark:text-slate-300">{{ turnoSeleccionado.description || 'Sin detalle' }}</span>
+                        </p>
+                    </div>
+                    <div class="mt-3 pt-3 border-t border-slate-100 dark:border-slate-700 text-xs text-slate-400 dark:text-slate-500">
+                        <i class="pi pi-user-edit mr-1"></i>
+                        <template v-if="turnoSeleccionado.creadoPorNombre">
+                            Cargado por <span class="font-medium text-slate-500 dark:text-slate-400">{{ turnoSeleccionado.creadoPorNombre }}</span>
+                            <template v-if="turnoSeleccionado.creadoEn"> el {{ fechaBonitaCompleta(turnoSeleccionado.creadoEn) }}</template>
+                        </template>
+                        <template v-else>Sin registro de carga</template>
+                    </div>
+                    <div class="flex justify-end gap-2 mt-5">
+                        <Button label="Cerrar" text severity="secondary" class="!rounded-lg" @click="modalVisible = false" />
+                        <Button v-if="canDeleteAusencia" label="Eliminar evento" severity="danger" icon="pi pi-trash" class="!rounded-lg" @click="eliminarAusencia" />
+                    </div>
+                </div>
+                <!-- Editando -->
+                <div v-else-if="editando">
+                    <div class="grid grid-cols-2 gap-3 mb-3">
+                        <div>
+                            <label class="font-heading font-semibold text-sm block mb-1.5 text-[#134E4A] dark:text-slate-200">Fecha</label>
+                            <InputText type="date" v-model="fechaEdit" class="w-full" />
+                        </div>
+                        <div>
+                            <label class="font-heading font-semibold text-sm block mb-1.5 text-[#134E4A] dark:text-slate-200">Hora</label>
+                            <InputText type="time" v-model="horaEdit" class="w-full" />
+                        </div>
+                    </div>
+                    <div>
+                        <label class="font-heading font-semibold text-sm block mb-1.5 text-[#134E4A] dark:text-slate-200">Motivo</label>
+                        <InputText v-model="turnoSeleccionado.description" class="w-full" />
+                    </div>
+                    <div>
+                        <label class="font-heading font-semibold text-sm block mb-1.5 text-[#134E4A] dark:text-slate-200">Observaciones</label>
+                        <Textarea v-model="turnoSeleccionado.observaciones" rows="3" autoResize class="w-full" placeholder="Observaciones adicionales" />
+                    </div>
+                    <div class="flex justify-end gap-2 mt-5">
+                        <Button label="Cancelar" text severity="secondary" class="!rounded-lg" @click="editando = false" />
+                        <Button label="Guardar cambios" icon="pi pi-check" class="!rounded-lg !bg-[#0891B2] !border-[#0891B2]" @click="guardarEdicion" />
+                    </div>
+                </div>
+                <!-- Vista detalle -->
+                <div v-else>
+                    <div class="mb-4">
+                        <Tag :value="turnoSeleccionado.tipo === 'grupal' ? 'Grupal' : 'Individual'" :severity="turnoSeleccionado.tipo === 'grupal' ? 'info' : 'primary'" rounded class="!font-heading" />
+                    </div>
+                    <div class="space-y-3 text-sm">
+                        <div class="flex items-center gap-3 p-3 rounded-lg bg-[#F0FDFA] dark:bg-teal-900/15">
+                            <div class="w-9 h-9 rounded-full bg-[#0891B2] flex items-center justify-center text-white text-sm font-heading font-bold shrink-0">
+                                {{ (turnoSeleccionado.paciente || '?')[0].toUpperCase() }}
+                            </div>
                             <div>
-                                <span class="text-xs text-gray-500 uppercase font-bold">Fecha</span>
-                                <p>{{ formatearFecha(turnoSeleccionado.start) }}</p>
-                            </div>
-                            <div>
-                                <span class="text-xs text-gray-500 uppercase font-bold">Hora</span>
-                                <p>{{ formatearHora(turnoSeleccionado.start) }}</p>
+                                <p class="font-semibold text-[#134E4A] dark:text-slate-200">{{ turnoSeleccionado.paciente }}</p>
+                                <p class="text-xs text-slate-400">DNI: {{ turnoSeleccionado.dni }}</p>
                             </div>
                         </div>
-
-                        <div class="mb-4">
-                            <span class="text-xs text-gray-500 uppercase font-bold">Motivo</span>
-                            <p class="italic text-gray-700 bg-gray-100 p-2 rounded text-sm">
-                                {{ turnoSeleccionado.description || 'Sin motivo' }}
-                            </p>
+                        <p class="flex items-center gap-2">
+                            <i class="pi pi-briefcase text-[#0891B2]"></i> <span class="text-slate-600 dark:text-slate-300">{{ turnoSeleccionado.profesional }}</span>
+                        </p>
+                        <p class="flex items-center gap-2">
+                            <i class="pi pi-comment text-[#0891B2]"></i> <span class="text-slate-600 dark:text-slate-300">{{ turnoSeleccionado.description || 'Sin motivo' }}</span>
+                        </p>
+                        <div v-if="turnoSeleccionado.observaciones" class="mt-3 p-3 rounded-lg bg-slate-50 dark:bg-slate-800/40 text-xs border border-slate-100 dark:border-slate-700">
+                            <span class="font-semibold text-slate-500 block mb-1"><i class="pi pi-align-left mr-1 text-[#0891B2]"></i>Observaciones:</span>
+                            <p class="text-slate-600 dark:text-slate-300 whitespace-pre-wrap">{{ turnoSeleccionado.observaciones }}</p>
                         </div>
-
-                        <div class="flex justify-between items-center pt-4 border-t border-gray-100">
-                            <div v-if="turnoSeleccionado.editable" class="flex gap-2">
-                                <Button icon="pi pi-pencil" severity="warning" text rounded v-tooltip="'Editar'" @click="iniciarEdicion" />
-                                <Button icon="pi pi-trash" severity="danger" text rounded v-tooltip="'Eliminar'" @click="eliminarTurno" />
+                        <div class="mt-3 p-3 rounded-lg bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-700 space-y-2">
+                            <span class="font-semibold text-slate-500 text-xs block"><i class="pi pi-check-square mr-1 text-[#0891B2]"></i>Asistencia del Paciente:</span>
+                            <div class="flex flex-wrap gap-2 pt-1">
+                                <Button
+                                    label="Presente"
+                                    icon="pi pi-check"
+                                    :severity="!turnoSeleccionado.ausencia ? 'success' : 'secondary'"
+                                    :outlined="!!turnoSeleccionado.ausencia"
+                                    size="small"
+                                    class="!text-xs !py-1 !px-2.5 !rounded-lg"
+                                    :loading="guardandoAusencia"
+                                    @click="guardarAusenciaTurno(null)"
+                                />
+                                <Button
+                                    label="Faltó con aviso"
+                                    icon="pi pi-envelope"
+                                    :severity="turnoSeleccionado.ausencia === 'con_aviso' ? 'warning' : 'secondary'"
+                                    :outlined="turnoSeleccionado.ausencia !== 'con_aviso'"
+                                    size="small"
+                                    class="!text-xs !py-1 !px-2.5 !rounded-lg"
+                                    :loading="guardandoAusencia"
+                                    @click="guardarAusenciaTurno('con_aviso')"
+                                />
+                                <Button
+                                    label="Faltó sin aviso"
+                                    icon="pi pi-times"
+                                    :severity="turnoSeleccionado.ausencia === 'sin_aviso' ? 'danger' : 'secondary'"
+                                    :outlined="turnoSeleccionado.ausencia !== 'sin_aviso'"
+                                    size="small"
+                                    class="!text-xs !py-1 !px-2.5 !rounded-lg"
+                                    :loading="guardandoAusencia"
+                                    @click="guardarAusenciaTurno('sin_aviso')"
+                                />
                             </div>
-                            <div v-else class="text-xs text-gray-400 italic">Solo lectura (Grupo)</div>
-
-                            <Button label="Cerrar" severity="secondary" text @click="modalVisible = false" />
+                            <div v-if="ausenciasConteoDetalle" class="text-[11px] text-slate-400 pt-1">
+                                Historial: {{ ausenciasConteoDetalle.total }} ausencias ({{ ausenciasConteoDetalle.con_aviso }} con aviso, {{ ausenciasConteoDetalle.sin_aviso }} sin aviso)
+                            </div>
                         </div>
+                        <div class="pt-3 border-t border-slate-100 dark:border-slate-700 text-xs text-slate-400 dark:text-slate-500">
+                            <i class="pi pi-user-edit mr-1"></i>
+                            <template v-if="turnoSeleccionado.creadoPorNombre">
+                                Cargado por <span class="font-medium text-slate-500 dark:text-slate-400">{{ turnoSeleccionado.creadoPorNombre }}</span>
+                                <template v-if="turnoSeleccionado.creadoEn"> el {{ fechaBonitaCompleta(turnoSeleccionado.creadoEn) }}</template>
+                            </template>
+                            <template v-else>Sin registro de carga</template>
+                        </div>
+                    </div>
+                    <div class="flex justify-between pt-4 border-t border-[#E0F2FE] dark:border-slate-700 mt-4">
+                        <div class="flex gap-2">
+                            <Button v-if="turnoSeleccionado.editable" icon="pi pi-pencil" label="Editar" text severity="warning" size="small" class="!rounded-lg" @click="iniciarEdicion" />
+                            <Button v-if="turnoSeleccionado.editable" icon="pi pi-trash" label="Eliminar" text severity="danger" size="small" class="!rounded-lg" @click="eliminarTurno" />
+                            <span v-if="!turnoSeleccionado.editable" class="text-xs text-slate-400 italic flex items-center gap-1"><i class="pi pi-eye text-xs"></i>Solo lectura</span>
+                        </div>
+                        <Button label="Cerrar" text severity="secondary" class="!rounded-lg" @click="modalVisible = false" />
                     </div>
                 </div>
             </div>
@@ -398,34 +1022,6 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
-/* CLASES DINÁMICAS PARA FULLCALENDAR */
-:deep(.evento-grupal) {
-    border-style: dashed !important;
-    border-width: 2px !important;
-    z-index: 1 !important;
-}
-
-:deep(.evento-propio) {
-    border-style: solid !important;
-    border-width: 0 !important;
-    border-left-width: 4px !important; /* Estilo moderno: barra lateral */
-    z-index: 10 !important;
-    box-shadow:
-        0 4px 6px -1px rgba(0, 0, 0, 0.1),
-        0 2px 4px -1px rgba(0, 0, 0, 0.06);
-}
-
-:deep(.fc-event-title) {
-    font-weight: 600;
-}
-
-/* Modo Oscuro */
-:deep(.app-dark .fc),
-:deep(html.dark .fc) {
-    --fc-page-bg-color: #1b1b1b;
-    --fc-neutral-bg-color: #2a2a2a;
-    --fc-list-event-hover-bg-color: #333;
-    --fc-theme-standard-border-color: #333;
-    color: #e5e7eb;
-}
+/* Calendar Medical Clean theme is loaded from @/assets/calendar-medical.css */
+/* Only view-specific overrides go here */
 </style>

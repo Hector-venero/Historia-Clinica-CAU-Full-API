@@ -1,6 +1,7 @@
 from flask import Blueprint, jsonify, request
 from flask_login import login_required, current_user
-from app.database import get_connection
+from app.database import get_connection, db_cursor
+from app.utils.fechas import a_iso_arg
 from app.utils.permisos import requiere_rol
 import traceback
 
@@ -250,3 +251,42 @@ def obtener_miembros(grupo_id):
     miembros = cursor.fetchall()
     cursor.close(); conn.close()
     return jsonify(miembros)
+
+
+@bp_grupos.route("/api/grupos/<int:grupo_id>/ausencias", methods=["GET"])
+@login_required
+def obtener_ausencias_grupo(grupo_id):
+    """Ausencias de todos los miembros del grupo, para pintarlas en su agenda.
+
+    El calendario de grupo muestra una sola grilla con varios profesionales, asi
+    que necesita las ausencias de todos juntas. Pedirlas de a una por miembro
+    contra /api/ausencias serian N pedidos para dibujar una pantalla.
+    """
+    with db_cursor() as (_conn, cursor):
+        cursor.execute(
+            """
+            SELECT
+                a.id,
+                a.usuario_id,
+                u.nombre AS nombre_usuario,
+                a.fecha_inicio,
+                a.fecha_fin,
+                a.motivo
+            FROM grupo_miembros gm
+            JOIN ausencias a ON a.usuario_id = gm.usuario_id
+            JOIN usuarios u ON u.id = a.usuario_id
+            WHERE gm.grupo_id = %s
+            ORDER BY a.fecha_inicio ASC
+            """,
+            (grupo_id,),
+        )
+        ausencias = cursor.fetchall()
+
+    # FullCalendar espera ISO 8601. Sin esto jsonify serializa los DATETIME al
+    # formato de fecha HTTP ("Mon, 08 Sep 2026 10:00:00 GMT"), que el calendario
+    # no interpreta y las ausencias no se dibujan.
+    for ausencia in ausencias:
+        ausencia["fecha_inicio"] = a_iso_arg(ausencia.get("fecha_inicio"))
+        ausencia["fecha_fin"] = a_iso_arg(ausencia.get("fecha_fin"))
+
+    return jsonify(ausencias)
