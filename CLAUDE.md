@@ -15,17 +15,36 @@ docker compose up -d               # Start in background
 docker compose logs -f web         # Tail Flask backend logs
 docker compose logs -f frontend    # Tail frontend build logs
 docker compose down                # Stop all services
-docker compose down -v             # WARNING: destroys db_data, bfa_data, uploads_data volumes
+docker compose down -v             # WARNING: destroys db_data, uploads_data volumes
 ```
+
+La app queda en **http://localhost** (puerto 80, nginx). No en `:5173` ni `:8080`. El backend también se publica en `:5000`, solo para depurar.
+
+### Modo desarrollo sin nginx (`docker-compose.dev.yml`)
+
+El stack normal sirve el frontend como build estático detrás de **dos** capas de nginx (el proxy `nginx` y el propio contenedor `frontend`, que también es nginx). Para desarrollar eso cuesta: cada cambio exige reconstruir la imagen y no hay recarga en caliente.
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d db web frontend-dev
+# queda en http://localhost:5173, con HMR
+docker compose stop nginx frontend    # si venían levantados
+```
+
+Corre sobre `node:20-alpine` **a propósito**: Vite 7 exige Node ≥ 20.19 y en la máquina hay 18.19, con lo que `npm run dev` local falla con `crypto.hash is not a function`. `node_modules` va en un volumen propio para que el bind mount no exponga el de la máquina.
+
+El destino del proxy sale de `VITE_PROXY_TARGET`: dentro de la red de Docker el backend es `http://web:5000`, no `localhost` (que sería el propio contenedor).
 
 ### Frontend (Vue 3 + Vite)
 ```bash
 cd frontend
 npm install
-npm run dev       # Dev server on http://localhost:5173
+npm run dev       # Dev server on http://localhost:5173 (requiere Node >= 20.19)
 npm run build     # Production build → dist/
-npm run lint      # ESLint with auto-fix (Vue, JS files)
+npm run lint      # Solo reporta. NO reescribe archivos
+npm run lint:fix  # Aplica las correcciones
 ```
+
+⚠️ `lint` y `lint:fix` están separados a propósito: cuando `lint` corría con `--fix`, reescribía ~20 archivos como efecto secundario de "verificar", y eso llegó a chocar con un `git stash` y casi se pierde trabajo.
 
 ### Backend (Flask)
 The backend is intended to run inside Docker, but for local development:
@@ -44,6 +63,11 @@ curl -I http://localhost/api/health/public   # Health check público (expects 20
 # /api/health/secure devuelve el detalle (DB, TSA de BFA, SMTP) — solo rol director
 
 cd backend_flask && pytest   # Suite del backend (no requiere MySQL: usa dobles en memoria)
+
+bash scripts/comparar_esquemas.sh   # Verifica que init.sql + migraciones y el
+                                     # init.sql viejo + migraciones lleguen al
+                                     # mismo esquema. Levanta dos MySQL
+                                     # temporales; no toca la base del proyecto
 ```
 
 ## Architecture
@@ -65,15 +89,20 @@ El build del frontend requiere **Node ≥ 20.19** (lo exige Vite 7). El contened
 ### Frontend (`frontend/src/`)
 - **`main.js`** — bootstraps Pinia, Vue Router, PrimeVue (UI component library), Tailwind CSS
 - **`router/index.js`** — guard global `beforeEach`, **async**: valida la sesión contra el backend (`/api/usuarios/me`), no contra `localStorage`. Rutas públicas: `/auth/login`, `/recuperar`, `/logout`, `/reset/:token`; las protegidas usan `meta.roles` o `meta.requiresAuth`
-- **`stores/user.js`** — store de Pinia con `rol`, `id`, `nombre`. **No se persiste en `localStorage`**: el rol salía de ahí y era editable desde devtools, lo que permitía ver pantallas de otro rol. La fuente de verdad es la cookie de sesión (HttpOnly)
+- **`stores/user.js`** — store de Pinia. **No se persiste en `localStorage`**: el rol salía de ahí y era editable desde devtools, lo que permitía ver pantallas de otro rol. La fuente de verdad es la cookie de sesión (HttpOnly). Además del usuario básico guarda los **campos profesionales** (`dni`, `matricula_*`, `lugar_atencion_*`, …), enumerados en `CAMPOS_PROFESIONALES`: `/api/usuarios/me` ya los devolvía y `setUser` los descartaba, con lo que la pantalla de recetas nunca daba el perfil por completo y el botón de emitir quedaba deshabilitado para siempre
 - **`api/axios.js`** — centralized Axios instance with `withCredentials: true` and base URL `/api`; all API calls must go through this
-- **`views/pages/`** — page components grouped by domain: `historias/`, `usuarios/`, `turnos/`, `disponibilidades/`, `grupos/`, `evolucion/`, `auth/`
-- **`components/`** — reusable UI pieces
+- **`views/pages/`** — page components grouped by domain: `historias/`, `usuarios/`, `turnos/`, `disponibilidades/`, `grupos/`, `evolucion/`, `auth/`, `recetas/`, `comunicados/`, `Agenda/`
+- **`components/`** — reusable UI pieces, incluida `ComunicadosCampana.vue` (campana de la barra superior)
 - **`layout/AppLayout.vue`** — wraps all authenticated routes
+- **`assets/calendar-medical.css`** — tema común de FullCalendar, compartido por `Turnos.vue` y `CalendarioGrupo.vue`
 
-Vite dev server proxies `/api/` to `localhost:5000` (vite.config.mjs).
+Vite dev server proxies `/api/` al backend; el destino sale de `VITE_PROXY_TARGET` y por defecto es `localhost:5000` (vite.config.mjs).
+
+**Modo oscuro:** se activa con la clase `app-dark` en `<html>` (`layout/composables/layout.js`), y `tailwind.config.js` la declara como `darkMode: ['class', '[class*="app-dark"]']`. Todo color necesita su variante `dark:`. Usar la escala **`surface`**, que en el rango 200–800 resuelve a variables de PrimeUI (`--p-surface-*`) y sigue el tema; los valores 0/50/100/900/950 están fijados en `tailwind.config.js`. Un `bg-white` o un `text-gray-800` sueltos dejan la pantalla en claro sobre una app oscura.
 
 Key frontend libraries: PrimeVue 4, FullCalendar 5 (turnos/grupos), vee-validate + yup (forms), Pinia (state), Axios.
+
+**Caché del frontend en producción:** `frontend/nginx.conf` sirve `index.html` con `no-cache` y `/assets/` con un año e `immutable`. No es un detalle: sin `Cache-Control`, nginx manda solo `ETag`/`Last-Modified` y el navegador aplica **caché heurística**. Aplicado a `index.html` —el único archivo con nombre fijo, y el que apunta a los assets con hash— eso hace que después de cada deploy se siga viendo la versión anterior, y no hay rebuild que lo arregle: solo Ctrl+Shift+R.
 
 ### Backend (`backend_flask/app/`)
 - **`__init__.py`** — app factory: registers all blueprints, configures Flask-Login, Flask-Mail, CORS, Talisman; serves user photos from `/static/fotos_usuarios/` and `/api/static/fotos_usuarios/`
@@ -87,11 +116,18 @@ Key frontend libraries: PrimeVue 4, FullCalendar 5 (turnos/grupos), vee-validate
 - **`utils/hashing.py`** — SHA-256 con **payload versionado** (ver Blockchain)
 - **`utils/qbi_client.py`** — cliente HTTP de recetas; `QbiNoConfigurado` → 503, `QbiError` conserva el status del proveedor
 - **`utils/mails_turnos.py`** — plantillas HTML de confirmación y cancelación de turnos, con invitación `.ics` adjunta
+- **`utils/mails_comunicados.py`** — aviso de comunicado importante. Los destinatarios van en **Bcc**: son todos los usuarios del sistema y en `To` cada persona vería la lista de mails del equipo. Sin `MAIL_DEFAULT_SENDER` configurado no manda nada, en vez de poner a un destinatario real en `To` para tener un remitente válido
+- **`utils/correo.py`** — `enviar_en_segundo_plano()`: un hilo por mensaje, con su propio `app_context`. El envío era síncrono dentro del request y un SMTP lento demoraba la respuesta de la API. No es una cola con reintentos; si algún día hace falta garantizar la entrega, el punto de cambio es este módulo
+- **`utils/fechas.py`** — `TZ_ARG` y `a_iso_arg()`. Vivía dentro de `turnos_routes.py`; se compartió cuando el calendario de grupos necesitó lo mismo, para no dejar dos definiciones que pudieran divergir en silencio
 - **`utils/alertas.py`** — resumen diario de agenda por mail (`flask enviar-alertas [--dry-run]`, disparado por cron)
 - **`migrate.py`** — runner de migraciones que corre al arrancar. Trackea por checksum y solo marca aplicada una migración si **todas** sus sentencias pasaron
 
 ### Tests (`backend_flask/tests/`)
-`pytest` desde `backend_flask/`. **No requiere MySQL**: `conftest.py` provee dobles en memoria (`FakeCursor`, `FakeConnection`) que registran las queries y permiten inyectar fallos en la N-ésima llamada. Usar `make_db(monkeypatch, modulo, ...)` para enganchar la base falsa a un módulo.
+`pytest` desde `backend_flask/`. **No requiere MySQL**: `conftest.py` provee dobles en memoria (`FakeCursor`, `FakeConnection`) que registran las queries y permiten inyectar fallos en la N-ésima llamada. Usar `make_db(monkeypatch, modulo, ...)` para enganchar la base falsa a un módulo, y `login_as(client, MockUser(...))` para la sesión.
+
+Hay una sola fixture, `client`; para lo que necesite contexto de aplicación se importa `from app import app as flask_app` y se usa `with flask_app.app_context():`.
+
+Al 26/08/2026 son **226 tests** y corren en menos de un segundo.
 
 ## Authentication & Roles
 
@@ -144,18 +180,50 @@ El blueprint `recetas` (`routes/recetas_routes.py`, prefijo `/api/recetas`) emit
 |---|---|---|
 | GET | `/config` | Si el módulo está configurado (503 si no) |
 | GET | `/financiadores` | Obras sociales |
-| GET | `/buscar_medicamento?q=` | Autocompletado (mínimo 2 caracteres) |
-| GET | `/buscar_diagnostico?q=` | Autocompletado CIE-10 (mínimo 3) |
+| GET | `/buscar_medicamento?q=` o `/medicamentos?q=` | Autocompletado (mínimo 2 caracteres) |
+| GET | `/buscar_diagnostico?q=` o `/diagnosticos?q=` | Autocompletado CIE-10 (mínimo 3) |
 | GET | `/buscar_paciente?q=` | Búsqueda en la base local |
-| POST | `/emitir` | Emite; `tipo` = `receta` o `estudio` |
+| POST | `/emitir` o `` (raíz) | Emite; `tipo` = `receta` o `estudio` |
 | POST | `/enviar_mail_manual` | Reenvía el PDF por mail |
 | DELETE | `/anular/<hash>` | Anula y marca la fila local |
 
+Varios endpoints tienen **dos rutas** por compatibilidad: el frontend del fork usaba `/medicamentos`, `/diagnosticos` y `POST /api/recetas` a secas.
+
 **Reglas de negocio (CAU):** máximo 3 medicamentos distintos por receta y cantidad entre 1 y 2 por medicamento. Sin diagnóstico explícito se usa Z76.9 y la observación "Tratamiento prolongado". Los estudios se emiten de a uno: cada bloque de texto libre es una prescripción independiente contra otro endpoint.
 
-El bloque `medico` y el `lugarAtencion` salen de la fila del profesional en `usuarios` (`matricula_*`, `lugar_atencion_*`), no de constantes en el código ni del formulario. Cada emisión se persiste en `recetas_electronicas` y **deja una evolución en la historia clínica**: una receta es un acto médico.
+El bloque `medico` y el `lugarAtencion` salen de la fila del profesional en `usuarios` (`matricula_*`, `lugar_atencion_*`), **no de constantes en el código ni del formulario**: el backend arma `lugarAtencion` con `_construir_lugar_atencion(usuario)` e **ignora** lo que mande el frontend. Una pantalla que muestre una dirección fija estaría enseñando algo distinto de lo que se imprime.
 
-`GeneradorRecetas.vue` ofrece, tras emitir: **Ver PDF**, **Enviar por WhatsApp**, **Enviar por mail** y **Anular**.
+Cada emisión se persiste en `recetas_electronicas` y **deja una evolución en la historia clínica**: una receta es un acto médico.
+
+**Frontend:** `views/pages/recetas/RecetasElectronicas.vue` (reemplazó a `GeneradorRecetas.vue`, que emitía un solo medicamento y no permitía emitir estudios). Tiene selector receta/estudio y hasta 3 medicamentos. Tras emitir ofrece **Ver PDF**, **WhatsApp**, **Enviar por mail** y **Anular**, sobre una lista normalizada: una receta trae `receta_hash`/`link_pdf` en la raíz, y los estudios vienen en `resultados`, uno por prescripción, de modo que **cada estudio se anula por separado**.
+
+La ruta lleva `meta: { roles: ['director', 'profesional'] }`, igual que el `@requiere_rol` del backend. Sin eso un administrativo podía completar la pantalla entera para recibir un 403 recién al emitir.
+
+## Comunicados y notificaciones
+
+Avisos institucionales para todo el equipo (`routes/comunicados_routes.py`). Los lee cualquier usuario autenticado; publican y borran `director` y `administrativo`.
+
+**La prioridad decide los canales:**
+
+| Prioridad | Campana | Mail |
+|---|---|---|
+| `normal` | sí | no |
+| `importante` | sí | a todos los usuarios **activos**, menos el autor |
+
+Los dos canales y no solo mail **a propósito**: un mail por cada aviso convierte la casilla en ruido y termina logrando que no se lean los que sí importan.
+
+| Método | Path | Propósito |
+|---|---|---|
+| GET | `/api/comunicados` | Listado, con `prioridad` y `leido` por usuario |
+| POST | `/api/comunicados` | Publica; `prioridad` = `normal` o `importante` |
+| GET | `/api/comunicados/no_leidos` | Solo el número, para el globo de la campana |
+| POST | `/api/comunicados/<id>/leer` | Marca uno como leído |
+| POST | `/api/comunicados/leer_todos` | Marca todos |
+| DELETE | `/api/comunicados/<id>` | Borra |
+
+El marcado usa `INSERT IGNORE` contra el UNIQUE `(comunicado_id, usuario_id)`: marcar dos veces no es un error y no hace falta consultar antes de escribir. **Al publicar, el autor queda marcado como lector** en la misma operación; sin eso el contador le queda en 1 apenas termina de escribir.
+
+Frontend: `components/ComunicadosCampana.vue` en la barra superior. Relee cada 2 minutos y además escucha el evento `comunicados:actualizados` del bus (`utils/eventBus.js`) para no quedar desactualizada al publicar desde la propia pantalla.
 
 ## Blockchain Integration
 
@@ -163,11 +231,11 @@ El contenido de la historia consolidada se hashea con SHA-256 y se sella en BFA 
 
 **El payload del hash está versionado** (`utils/hashing.py`). El hash es SHA-256 sobre el JSON de las evoluciones, así que la forma de ese JSON es parte del algoritmo: agregar un campo cambia el hash de todas las historias y las ya ancladas dejarían de verificar. v1 es el payload original; v2 suma `indicaciones` y descarta las evoluciones dadas de baja. Cada historia guarda con qué versión se calculó.
 
-**`anclajes_historia` es append-only.** La historia consolidada se recalcula cada vez que se carga una evolución, así que su hash cambia. Si el recibo viviera solo en `historias.tx_hash`, quedaría apuntando a un hash inexistente. Cada sellado inserta una fila con su hash, su versión y su recibo, y **nunca se pisa**: verificar usa los datos del anclaje, no el estado actual.
+**`anclajes_blockchain` es append-only.** La historia consolidada se recalcula cada vez que se carga una evolución, así que su hash cambia. Si el recibo viviera solo en `historias.tx_hash`, quedaría apuntando a un hash inexistente. Cada sellado inserta una fila con su hash, su versión y su recibo, y **nunca se pisa**: verificar usa los datos del anclaje, no el estado actual.
 
 **La verificación tiene tres estados, no dos.** La TSA agrupa hashes en lotes: entre el sellado y su confirmación responde `pending`, que no significa adulteración. `pending` devuelve `valido: null` y no escribe auditoría; un error de red devuelve 503 sin concluir nada. Solo `success` y `failure` son veredictos y se auditan en `auditorias_blockchain`.
 
-El anclaje de evoluciones individuales **no está implementado**: `/api/blockchain/verificar/evolucion/<id>` responde 501. Antes comparaba el hash de la evolución contra el recibo de la historia consolidada — dos hashes distintos — y siempre daba "modificada".
+**Las evoluciones individuales también se anclan**, con su propio hash y su propio recibo (`POST /api/blockchain/registrar/evolucion/<id>`, `GET /api/blockchain/verificar/evolucion/<id>`). Eso permite probar la integridad de un acto médico puntual sin depender del estado de la historia completa, que cambia con cada evolución nueva. La versión anterior de la verificación comparaba el hash de la evolución contra el recibo de la **historia consolidada** —dos hashes distintos— y por eso daba "modificada" sobre evoluciones intactas; quedó en 501 hasta poder sellarlas por separado.
 
 ## Database Notes
 

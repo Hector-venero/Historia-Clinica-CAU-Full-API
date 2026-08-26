@@ -103,6 +103,13 @@ DB_USER=hc_app
 DB_PASSWORD=cambia_esto
 DB_NAME=hc_bfa
 
+# Migraciones. El usuario de la app solo tiene DML; las migraciones necesitan
+# DDL (ALTER/CREATE/INDEX), por eso usan credenciales propias. Sin esto el
+# backend no arranca: aplica las migraciones al iniciar y falla con un 1142.
+MYSQL_ROOT_PASSWORD=cambia_esto
+DB_MIGRATION_USER=root
+DB_MIGRATION_PASSWORD=cambia_esto
+
 # Frontend (si lo usás en CORS / links)
 FRONTEND_URL=http://localhost
 
@@ -128,6 +135,19 @@ docker compose --env-file .env up -d --build
 
 - **Frontend**: `http://localhost`
 - **API**: `http://localhost/api`
+
+### 5) Desarrollo con recarga en caliente (sin nginx)
+
+El stack de arriba sirve el frontend como build estático, así que cada cambio
+exige reconstruir la imagen. Para desarrollar:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.dev.yml \
+    up -d db web frontend-dev
+```
+
+Queda en `http://localhost:5173` con HMR. Corre sobre `node:20-alpine`, así que
+no hace falta tener Node instalado (Vite 7 exige ≥ 20.19).
 
 ---
 
