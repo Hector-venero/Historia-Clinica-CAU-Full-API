@@ -26,7 +26,23 @@ correspondiente y actualizar el `.env` de producción.
 
 ---
 
-## 2. "Bloquear un día" en Agenda del profesional está roto
+## 2. ~~"Bloquear un día" en Agenda del profesional está roto~~ ✅ corregido — pero el archivo es código muerto
+
+**Corrección importante sobre el reporte original:** los dos errores eran
+reales, pero `AgendaProfesional.vue` **no tiene ruta, ni import, ni entrada de
+menú**. Es código inalcanzable: nadie podía toparse con el bug.
+
+Bloquear un día **sí funciona**, desde el modal del calendario en `Turnos.vue`
+(el que se trajo del fork el 26/08). Ese manda la forma correcta y contempla
+tanto día completo como rango parcial.
+
+Los dos errores quedaron corregidos igual, para que el archivo no sea una
+trampa si alguna vez se le pone ruta. **Queda por decidir** qué hacer con él:
+borrarlo, o terminarlo y rutearlo — tiene una tabla de turnos en formato lista
+que el calendario no ofrece.
+
+<details>
+<summary>El detalle de lo que estaba mal</summary>
 
 `AgendaProfesional.vue` manda `{ fecha }` y el backend exige `fecha_inicio` y
 `fecha_fin`. **Siempre devuelve 400**, así que la función no anda desde que
@@ -48,13 +64,12 @@ curl -b cookies -X POST http://localhost:5000/api/ausencias \
 # {"id": 2, "message": "Ausencia registrada"}  -> HTTP 201
 ```
 
-Es el más barato de los que quedan y el que más se nota. Hay que decidir si un
-bloqueo es de día completo (y entonces el frontend arma las dos fechas) o si se
-pide un rango horario.
+Se corrigió armando un bloqueo de día completo (`00:00:00` a `23:59:59`), que es
+la forma que Nuevo Turno reconoce para deshabilitar la fecha en el calendario, y
+construyéndolo desde las componentes locales en vez de `toISOString()`, que pasa
+a UTC y puede devolver el día anterior.
 
-**Ahora importa más que antes:** desde el 26/08, Nuevo Turno deshabilita en el
-calendario los días con bloqueo de día completo. Esa función depende de que se
-puedan cargar bloqueos, y hoy la única pantalla para hacerlo no funciona.
+</details>
 
 ---
 
