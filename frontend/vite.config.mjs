@@ -25,9 +25,13 @@ export default defineConfig({
         host: '0.0.0.0', // 🔹 Necesario para exponer el servidor dentro del contenedor
         port: 5173,
         proxy: {
+            // El destino depende de desde dónde corra el dev server, así que sale
+            // del entorno en vez de estar fijo (antes había que editar el archivo
+            // y comentar/descomentar la línea de al lado):
+            //   - en la máquina, contra el backend publicado -> localhost:5000
+            //   - dentro de la red de Docker (perfil `dev`)  -> http://web:5000
             '/api': {
-                //target: 'http://web:5000', // 🔁 Cambiamos localhost → nombre del servicio del backend en Docker
-                target: 'http://localhost:5000',
+                target: process.env.VITE_PROXY_TARGET || 'http://localhost:5000',
                 changeOrigin: true,
                 secure: false
             }

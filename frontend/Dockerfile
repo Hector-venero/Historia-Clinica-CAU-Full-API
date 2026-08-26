@@ -22,18 +22,12 @@ RUN npm run build
 # === Deploy Stage ===
 FROM nginx:latest
 
-# Aquí usamos el default.conf que trae Nginx por defecto o creamos uno simple inline.
-# Como este Nginx está DETRÁS del proxy principal, una config básica sirve.
 COPY --from=build /app/dist /usr/share/nginx/html
 
-# Configuración básica para SPA (React/Vue) para que no de 404 al recargar
-RUN echo 'server { \
-    listen 80; \
-    location / { \
-        root /usr/share/nginx/html; \
-        index index.html index.htm; \
-        try_files $uri $uri/ /index.html; \
-    } \
-}' > /etc/nginx/conf.d/default.conf
+# La config va en un archivo aparte y no embebida en un `RUN echo`: asi se puede
+# leer, comentar y versionar. La anterior no declaraba cache, y por eso el
+# navegador se quedaba con un index.html viejo que seguia pidiendo los assets
+# anteriores aunque se reconstruyera la imagen. Ver frontend/nginx.conf.
+COPY nginx.conf /etc/nginx/conf.d/default.conf
 
 EXPOSE 80

@@ -1,0 +1,49 @@
+# Perfil de desarrollo: el frontend servido por el dev server de Vite, sin nginx.
+#
+# El stack normal sirve el frontend como build estatico detras de dos capas de
+# nginx (el proxy `nginx` y el propio contenedor `frontend`, que tambien es
+# nginx). Eso es lo que corresponde en produccion, pero para desarrollar tiene
+# dos costos: cada cambio exige reconstruir la imagen, y no hay recarga en
+# caliente.
+#
+# Este archivo agrega `frontend-dev`, que monta el codigo fuente y corre Vite.
+# No reemplaza nada: se combina con docker-compose.yml y se eligen los servicios
+# a levantar, dejando `nginx` y `frontend` sin arrancar.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml \
+#       up -d db web frontend-dev
+#
+# Queda en http://localhost:5173 (el backend sigue publicado en :5000).
+#
+# Corre sobre node:20-alpine y no sobre el Node de la maquina a proposito: Vite 7
+# exige Node >= 20.19 y aca hay 18.19, con lo que `npm run dev` local falla con
+# "crypto.hash is not a function". Asi no hace falta instalar nada.
+
+services:
+    frontend-dev:
+        image: node:20-alpine
+        container_name: historia_frontend_dev
+        working_dir: /app
+        # `npm install` en cada arranque y no `npm ci`: el volumen de
+        # node_modules persiste entre corridas, asi que la primera vez instala y
+        # las siguientes salen casi instantaneas.
+        command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
+        environment:
+            # Dentro de la red de Docker el backend no es localhost: localhost
+            # seria este mismo contenedor. Se llega por el nombre del servicio.
+            VITE_PROXY_TARGET: http://web:5000
+        volumes:
+            - ./frontend:/app
+            # Volumen propio para node_modules: sin esto el bind mount de arriba
+            # expone el node_modules de la maquina, instalado con Node 18 y con
+            # binarios nativos compilados para otra plataforma.
+            - frontend_dev_modules:/app/node_modules
+        ports:
+            - '5173:5173'
+        depends_on:
+            - web
+        networks:
+            - historia_net
+
+volumes:
+    frontend_dev_modules:
