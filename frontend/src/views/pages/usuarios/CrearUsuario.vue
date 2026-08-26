@@ -1,5 +1,5 @@
 <script setup>
-import { computed, reactive, ref } from 'vue';
+import { reactive, ref } from 'vue';
 import usuarioService from '@/service/usuarioService';
 import { validarPasswordFuerte, validarEmail } from '@/utils/validators';
 
@@ -54,9 +54,9 @@ const ok = ref('');
 // cargaba el usuario y la contraseña de quien estaba logueado, y cambiando solo
 // el nombre de usuario se creaba una cuenta con la contraseña del director.
 //
-// El unico metodo que respeta es no tener un campo editable en el momento en
-// que decide autocompletar: los campos arrancan readonly y dejan de serlo al
-// recibir el foco. Para quien escribe es transparente.
+// Lo unico que respeta es que no haya un campo editable en el momento en que
+// decide autocompletar: usuario y contraseña arrancan readonly y dejan de serlo
+// con el primer foco dentro del formulario. Para quien escribe es transparente.
 const bloqueadoParaAutorelleno = ref(true);
 
 function habilitarCampo() {
@@ -65,17 +65,6 @@ function habilitarCampo() {
 
 // ✅ Lista de roles corregida (incluye Área)
 const roles = ref(['Director', 'Profesional', 'Administrativo', 'Área']);
-
-// Los nombres de los roles no dicen qué puede hacer cada uno, y 'Área' no es
-// una persona sino un módulo: sin explicarlo se elige por intuición.
-const DESCRIPCION_ROL = {
-    Director: 'Acceso total: usuarios, auditoría y todos los datos.',
-    Profesional: 'Su agenda, sus pacientes y emisión de recetas.',
-    Administrativo: 'Operación diaria: pacientes y turnos.',
-    Área: 'No es una persona: representa una especialidad o módulo (ej. Kinesiología) para las agendas grupales.'
-};
-
-const ayudaRol = computed(() => DESCRIPCION_ROL[form.rol] || 'Define a qué pantallas y datos accede.');
 
 function validate() {
     if (!form.nombre || !form.username || !form.email || !form.password || !form.rol) {
@@ -148,159 +137,123 @@ async function onSubmit() {
 </script>
 
 <template>
-    <div class="max-w-5xl mx-auto p-4 md:p-6 space-y-6">
-        <header>
-            <h1 class="text-2xl md:text-3xl font-bold text-surface-900 dark:text-surface-0 m-0">Crear usuario</h1>
-            <p class="text-sm text-surface-500 dark:text-surface-400 mt-1 mb-0">Registrar un nuevo miembro del personal.</p>
-        </header>
+    <div class="flex justify-center items-start p-6 md:p-8">
+        <div class="bg-white dark:bg-[#1e1e1e] shadow-xl rounded-2xl p-8 w-full max-w-2xl transition-colors">
+            <div class="text-center mb-8">
+                <h1 class="text-3xl font-bold text-gray-800 dark:text-white mb-2">Crear Usuario</h1>
+                <p class="text-gray-500 dark:text-gray-400">Registrar un nuevo miembro del personal</p>
+            </div>
 
-        <!-- El desbloqueo va en el formulario y no en cada campo: `focusin`
-             burbujea, asi que alcanza con un solo manejador y no depende de que
-             los componentes de PrimeVue expongan su propio @focus. -->
-        <form class="space-y-6" autocomplete="off" @focusin="habilitarCampo" @submit.prevent="onSubmit">
-            <section class="bg-surface-0 dark:bg-surface-900 border border-surface-200 dark:border-surface-700 rounded-2xl p-5 md:p-6 space-y-5">
-                <h2 class="seccion"><span class="paso">1</span> Datos de la cuenta</h2>
+            <!-- focusin y no un @focus por campo: burbujea, asi que alcanza un
+                 manejador y no depende de que los componentes de PrimeVue
+                 expongan el suyo. -->
+            <form @submit.prevent="onSubmit" class="space-y-6" autocomplete="off" @focusin="habilitarCampo">
+                <div class="flex flex-col gap-2">
+                    <label class="font-semibold text-gray-700 dark:text-gray-200"> <i class="pi pi-id-card mr-1 text-primary"></i> Nombre completo </label>
+                    <InputText v-model.trim="form.nombre" placeholder="Ej: Ana Pérez (o Módulo Kinesiología)" class="w-full" :disabled="loading" />
+                </div>
 
-                <!-- Dos columnas: con los campos apilados a lo ancho de la
-                     pantalla, cada uno quedaba desproporcionadamente largo para
-                     lo que se escribe en el (un usuario, un rol). -->
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-x-5 gap-y-5">
-                    <div class="flex flex-col gap-2 md:col-span-2">
-                        <label class="etiqueta"><i class="pi pi-id-card mr-1 text-primary"></i> Nombre completo</label>
-                        <InputText v-model.trim="form.nombre" placeholder="Ej: Ana Pérez (o Módulo Kinesiología)" class="w-full" autocomplete="off" :disabled="loading" />
-                    </div>
-
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div class="flex flex-col gap-2">
-                        <label class="etiqueta"><i class="pi pi-user mr-1 text-primary"></i> Usuario</label>
+                        <label class="font-semibold text-gray-700 dark:text-gray-200"> <i class="pi pi-user mr-1 text-primary"></i> Usuario </label>
                         <InputText v-model.trim="form.username" name="usuario-nuevo" placeholder="Ej: aperez" class="w-full" autocomplete="off" :readonly="bloqueadoParaAutorelleno" :disabled="loading" />
                     </div>
 
                     <div class="flex flex-col gap-2">
-                        <label class="etiqueta"><i class="pi pi-envelope mr-1 text-primary"></i> Email</label>
-                        <InputText v-model.trim="form.email" type="email" placeholder="ana@ejemplo.com" class="w-full" autocomplete="off" :disabled="loading" />
-                    </div>
-
-                    <div class="flex flex-col gap-2">
-                        <label class="etiqueta"><i class="pi pi-lock mr-1 text-primary"></i> Contraseña</label>
-                        <Password
-                            v-model="form.password"
-                            :feedback="false"
-                            toggleMask
-                            placeholder="Contraseña del nuevo usuario"
-                            class="w-full"
-                            inputClass="w-full"
-                            autocomplete="new-password"
-                            :inputProps="{ readonly: bloqueadoParaAutorelleno }"
-                            :disabled="loading"
-                        />
-                        <small class="text-surface-500 dark:text-surface-400">Mínimo 8 caracteres, con mayúscula, minúscula y número.</small>
-                    </div>
-
-                    <div class="flex flex-col gap-2">
-                        <label class="etiqueta"><i class="pi pi-briefcase mr-1 text-primary"></i> Rol</label>
-                        <Dropdown v-model="form.rol" :options="roles" placeholder="Seleccioná un rol" class="w-full" :disabled="loading" />
-                        <small class="text-surface-500 dark:text-surface-400">{{ ayudaRol }}</small>
+                        <label class="font-semibold text-gray-700 dark:text-gray-200"> <i class="pi pi-envelope mr-1 text-primary"></i> Email </label>
+                        <InputText v-model.trim="form.email" type="email" placeholder="ana@ejemplo.com" class="w-full" :disabled="loading" />
                     </div>
                 </div>
-            </section>
 
-            <!-- Datos que la receta electrónica exige del profesional que la firma.
-                 Sin apellido, DNI, matrícula y dirección de atención, el proveedor
-                 rechaza la emisión. Por eso aparecen recién al elegir un rol que
-                 prescribe: al resto no le hacen falta. -->
-            <transition name="fade">
-                <section v-if="rolPrescribe()" class="bg-surface-0 dark:bg-surface-900 border border-surface-200 dark:border-surface-700 rounded-2xl p-5 md:p-6 space-y-5">
-                    <div>
-                        <h2 class="seccion m-0"><span class="paso">2</span> Datos profesionales</h2>
-                        <p class="text-sm text-surface-500 dark:text-surface-400 mt-1 mb-0">Se imprimen en cada receta. Sin ellos, {{ form.rol === 'Director' ? 'el director' : 'el profesional' }} no va a poder emitir.</p>
+                <div class="flex flex-col gap-2">
+                    <label class="font-semibold text-gray-700 dark:text-gray-200"> <i class="pi pi-lock mr-1 text-primary"></i> Contraseña </label>
+                    <Password v-model="form.password" :feedback="false" toggleMask placeholder="********" class="w-full" inputClass="w-full" autocomplete="new-password" :inputProps="{ readonly: bloqueadoParaAutorelleno }" :disabled="loading" />
+                    <small class="text-gray-500 dark:text-gray-400"> Mínimo 8 caracteres, mayúscula, minúscula y número. </small>
+                </div>
+
+                <div class="flex flex-col gap-2">
+                    <label class="font-semibold text-gray-700 dark:text-gray-200"> <i class="pi pi-briefcase mr-1 text-primary"></i> Rol </label>
+                    <Dropdown v-model="form.rol" :options="roles" placeholder="Seleccioná un rol" class="w-full" :disabled="loading" />
+                </div>
+
+                <transition name="fade">
+                    <div v-if="rolPrescribe()" class="flex flex-col gap-2 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-xl border border-blue-100 dark:border-blue-800">
+                        <label class="font-semibold text-gray-700 dark:text-gray-200"> <i class="pi pi-heart mr-1 text-primary"></i> Especialidad </label>
+                        <InputText v-model.trim="form.especialidad" placeholder="Ej: Cardiología, Pediatría..." class="w-full" :disabled="loading" />
                     </div>
+                </transition>
 
-                    <div class="flex flex-col gap-2">
-                        <label class="etiqueta"><i class="pi pi-heart mr-1 text-primary"></i> Especialidad</label>
-                        <InputText v-model.trim="form.especialidad" placeholder="Ej: Cardiología, Pediatría..." class="w-full" autocomplete="off" :disabled="loading" />
-                    </div>
+                <!-- Datos que la receta electrónica exige del profesional que la firma.
+                     Sin apellido, DNI, matrícula y dirección de atención, el proveedor
+                     rechaza la emisión. -->
+                <transition name="fade">
+                    <div v-if="rolPrescribe()" class="flex flex-col gap-4 p-4 bg-amber-50 dark:bg-amber-900/20 rounded-xl border border-amber-100 dark:border-amber-800">
+                        <h3 class="font-semibold text-gray-700 dark:text-gray-200"><i class="pi pi-id-card mr-1 text-primary"></i> Datos para recetas electrónicas</h3>
 
-                    <div class="space-y-4">
                         <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
                             <div class="flex flex-col gap-1">
-                                <label class="text-sm text-surface-600 dark:text-surface-300">Apellido</label>
+                                <label class="text-sm text-gray-600 dark:text-gray-300">Apellido</label>
                                 <InputText v-model.trim="form.apellido" placeholder="Apellido" class="w-full" :disabled="loading" />
                             </div>
                             <div class="flex flex-col gap-1">
-                                <label class="text-sm text-surface-600 dark:text-surface-300">DNI</label>
+                                <label class="text-sm text-gray-600 dark:text-gray-300">DNI</label>
                                 <InputText v-model.trim="form.dni" placeholder="Sin puntos" class="w-full" :disabled="loading" />
                             </div>
                             <div class="flex flex-col gap-1">
-                                <label class="text-sm text-surface-600 dark:text-surface-300">Sexo</label>
+                                <label class="text-sm text-gray-600 dark:text-gray-300">Sexo</label>
                                 <Dropdown v-model="form.sexo" :options="sexos" optionLabel="label" optionValue="value" class="w-full" :disabled="loading" />
                             </div>
                         </div>
 
                         <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
                             <div class="flex flex-col gap-1">
-                                <label class="text-sm text-surface-600 dark:text-surface-300">Tipo de matrícula</label>
+                                <label class="text-sm text-gray-600 dark:text-gray-300">Tipo de matrícula</label>
                                 <Dropdown v-model="form.matricula_tipo" :options="tiposMatricula" class="w-full" :disabled="loading" />
                             </div>
                             <div class="flex flex-col gap-1">
-                                <label class="text-sm text-surface-600 dark:text-surface-300">N° de matrícula</label>
+                                <label class="text-sm text-gray-600 dark:text-gray-300">N° de matrícula</label>
                                 <InputText v-model.trim="form.matricula_numero" class="w-full" :disabled="loading" />
                             </div>
                             <div class="flex flex-col gap-1">
-                                <label class="text-sm text-surface-600 dark:text-surface-300">Provincia</label>
+                                <label class="text-sm text-gray-600 dark:text-gray-300">Provincia</label>
                                 <InputText v-model.trim="form.matricula_provincia" placeholder="Ej: Buenos Aires" class="w-full" :disabled="loading" />
                             </div>
                         </div>
 
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                             <div class="flex flex-col gap-1">
-                                <label class="text-sm text-surface-600 dark:text-surface-300">Lugar de atención</label>
+                                <label class="text-sm text-gray-600 dark:text-gray-300">Lugar de atención</label>
                                 <InputText v-model.trim="form.lugar_atencion_nombre" class="w-full" :disabled="loading" />
                             </div>
                             <div class="flex flex-col gap-1">
-                                <label class="text-sm text-surface-600 dark:text-surface-300">Dirección de atención</label>
+                                <label class="text-sm text-gray-600 dark:text-gray-300">Dirección de atención</label>
                                 <InputText v-model.trim="form.lugar_atencion_direccion" placeholder="Calle y número" class="w-full" :disabled="loading" />
                             </div>
                             <div class="flex flex-col gap-1">
-                                <label class="text-sm text-surface-600 dark:text-surface-300">Teléfono</label>
+                                <label class="text-sm text-gray-600 dark:text-gray-300">Teléfono</label>
                                 <InputText v-model.trim="form.telefono" class="w-full" :disabled="loading" />
                             </div>
                             <div class="flex flex-col gap-1">
-                                <label class="text-sm text-surface-600 dark:text-surface-300">Email de contacto</label>
+                                <label class="text-sm text-gray-600 dark:text-gray-300">Email de contacto</label>
                                 <InputText v-model.trim="form.lugar_atencion_email" class="w-full" :disabled="loading" />
                             </div>
                         </div>
                     </div>
-                </section>
-            </transition>
+                </transition>
 
-            <!-- Los mensajes no tenian variante oscura: quedaban con fondo claro
-                 y texto oscuro sobre una pantalla oscura. -->
-            <div v-if="error" class="rounded-xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 px-4 py-3 text-sm text-red-800 dark:text-red-200"><i class="pi pi-times-circle mr-2"></i> {{ error }}</div>
+                <div v-if="error" class="p-3 rounded-lg bg-red-100 text-red-700 text-center font-medium border border-red-200"><i class="pi pi-times-circle mr-2"></i> {{ error }}</div>
 
-            <div v-if="ok" class="rounded-xl bg-green-50 dark:bg-green-950/40 border border-green-200 dark:border-green-800 px-4 py-3 text-sm text-green-800 dark:text-green-200"><i class="pi pi-check-circle mr-2"></i> {{ ok }}</div>
+                <div v-if="ok" class="p-3 rounded-lg bg-green-100 text-green-700 text-center font-medium border border-green-200"><i class="pi pi-check-circle mr-2"></i> {{ ok }}</div>
 
-            <div class="flex justify-end">
-                <Button type="submit" label="Crear usuario" icon="pi pi-user-plus" class="px-6 py-3 font-semibold" :loading="loading" />
-            </div>
-        </form>
+                <div class="flex justify-center pt-4">
+                    <Button type="submit" label="Crear Usuario" icon="pi pi-user-plus" class="w-full md:w-auto px-8 py-3 font-bold shadow-lg" :loading="loading" />
+                </div>
+            </form>
+        </div>
     </div>
 </template>
 
 <style scoped>
-.etiqueta {
-    @apply font-semibold text-surface-700 dark:text-surface-200;
-}
-
-.seccion {
-    @apply flex items-center gap-2 text-base font-semibold text-surface-900 dark:text-surface-0 m-0;
-}
-
-/* El numero de paso ordena la lectura sin necesidad de un componente de wizard. */
-.paso {
-    @apply inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold
-           bg-primary-100 dark:bg-primary-900 text-primary-700 dark:text-primary-200;
-}
-
 .fade-enter-active,
 .fade-leave-active {
     transition:
