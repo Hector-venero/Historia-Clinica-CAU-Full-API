@@ -26,50 +26,18 @@ correspondiente y actualizar el `.env` de producción.
 
 ---
 
-## 2. ~~"Bloquear un día" en Agenda del profesional está roto~~ ✅ corregido — pero el archivo es código muerto
+## 2. ~~"Bloquear un día" en Agenda del profesional está roto~~ ✅ cerrado el 26/08/2026
 
-**Corrección importante sobre el reporte original:** los dos errores eran
-reales, pero `AgendaProfesional.vue` **no tiene ruta, ni import, ni entrada de
-menú**. Es código inalcanzable: nadie podía toparse con el bug.
+**Corrección sobre el reporte original:** los dos errores eran reales
+(mandaba `{fecha}` cuando la API pide `fecha_inicio`/`fecha_fin`, y la tabla
+leía una columna `fecha` inexistente), pero `AgendaProfesional.vue` **no tenía
+ruta, ni import, ni entrada de menú**. Era código inalcanzable: nadie podía
+toparse con el bug.
 
-Bloquear un día **sí funciona**, desde el modal del calendario en `Turnos.vue`
-(el que se trajo del fork el 26/08). Ese manda la forma correcta y contempla
-tanto día completo como rango parcial.
+Bloquear un día **sí funciona**, desde el modal del calendario en `Turnos.vue`,
+que manda la forma correcta y contempla día completo y rango parcial.
 
-Los dos errores quedaron corregidos igual, para que el archivo no sea una
-trampa si alguna vez se le pone ruta. **Queda por decidir** qué hacer con él:
-borrarlo, o terminarlo y rutearlo — tiene una tabla de turnos en formato lista
-que el calendario no ofrece.
-
-<details>
-<summary>El detalle de lo que estaba mal</summary>
-
-`AgendaProfesional.vue` manda `{ fecha }` y el backend exige `fecha_inicio` y
-`fecha_fin`. **Siempre devuelve 400**, así que la función no anda desde que
-existe. La tabla, además, muestra una columna `fecha` que la API nunca devuelve,
-por lo que sale vacía.
-
-Verificado contra la API:
-
-```bash
-# Lo que manda el frontend hoy
-curl -b cookies -X POST http://localhost:5000/api/ausencias \
-     -H 'Content-Type: application/json' -d '{"fecha":"2026-09-15"}'
-# {"error": "Se requieren fecha_inicio y fecha_fin"}  -> HTTP 400
-
-# Lo que la API espera
-curl -b cookies -X POST http://localhost:5000/api/ausencias \
-     -H 'Content-Type: application/json' \
-     -d '{"fecha_inicio":"2026-09-15 08:00:00","fecha_fin":"2026-09-15 18:00:00"}'
-# {"id": 2, "message": "Ausencia registrada"}  -> HTTP 201
-```
-
-Se corrigió armando un bloqueo de día completo (`00:00:00` a `23:59:59`), que es
-la forma que Nuevo Turno reconoce para deshabilitar la fecha en el calendario, y
-construyéndolo desde las componentes locales en vez de `toISOString()`, que pasa
-a UTC y puede devolver el día anterior.
-
-</details>
+El archivo se eliminó junto con el resto del código muerto.
 
 ---
 
@@ -115,8 +83,17 @@ de la conexión y de la carga inicial.
 - **`ModuloRehabilitacion.vue`** (700 líneas, con su ruta) sigue solo en el fork.
   Se decidió no traerlo. Depende de `calendar-medical.css`, que sí está, así que
   portarlo es viable si alguna vez hace falta.
-- **El directorio `bfa-node/` está muerto.** Quedó de cuando el anclaje usaba un
-  nodo Geth local. No hay servicio en `docker-compose.yml` que lo use ni código
-  que lo referencie: las únicas menciones son comentarios que explican por qué
-  se dejó de usar. Se puede borrar; no se hizo por si guarda algo de la etapa
-  anterior que convenga conservar para el trabajo final.
+- **El directorio `bfa-node/` sigue ahí, y borrarlo es decisión del usuario.**
+  Quedó de cuando el anclaje usaba un nodo Geth local: no hay servicio ni código
+  que lo use, solo comentarios que explican por qué se dejó de usar.
+
+  **No se borró con el resto del código muerto porque no es código del
+  repositorio.** De sus 127 archivos (4,8 MB) **solo uno está versionado**
+  (`setup_bfa_node.sh`); el resto es un clon del repositorio de BFA más los
+  datos del nodo, incluyendo directorios `keystore/` con permisos de root
+  —creados por el contenedor de geth— y un `nucleo/password.txt`.
+
+  Es decir: contiene **material de una wallet**, no está en git, y hace falta
+  `sudo` para borrarlo. Si se elimina, no hay forma de recuperarlo. Conviene
+  revisar antes si esa wallet tiene alguna dirección con saldo o identidad
+  asociada al trabajo final.
