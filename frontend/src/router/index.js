@@ -173,8 +173,12 @@ const router = createRouter({
                 // 📌 Recetas
                 {
                     path: 'recetas',
-                    name: 'generadorRecetas',
-                    component: () => import('@/views/pages/GeneradorRecetas.vue')
+                    name: 'recetasElectronicas',
+                    component: () => import('@/views/pages/recetas/RecetasElectronicas.vue'),
+                    // El backend ya exige estos dos roles en /api/recetas. Sin
+                    // el meta, un administrativo podia abrir la pantalla y
+                    // completarla entera para recibir un 403 recien al emitir.
+                    meta: { roles: ['director', 'profesional'] }
                 },
                 // 💬 Posteos internos de un grupo profesional
                 {

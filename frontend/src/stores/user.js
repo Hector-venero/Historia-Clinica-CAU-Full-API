@@ -14,6 +14,25 @@ import usuarioService from '@/service/usuarioService';
 // Ahora la única fuente de verdad es el backend: el guard pide /api/usuarios/me
 // y el rol viene de la cookie de sesión, que es HttpOnly y no se puede falsear
 // desde el navegador.
+// Se enumeran una sola vez para que el estado inicial y setUser no puedan
+// quedar desalineados: agregar un campo en un solo lado dejaba a la pantalla de
+// recetas leyendo undefined sin ningún error visible.
+const CAMPOS_PROFESIONALES = [
+    'apellido',
+    'dni',
+    'sexo',
+    'telefono',
+    'profesion',
+    'especialidad',
+    'matricula_tipo',
+    'matricula_numero',
+    'matricula_provincia',
+    'lugar_atencion_nombre',
+    'lugar_atencion_direccion',
+    'lugar_atencion_contacto',
+    'lugar_atencion_email'
+];
+
 export const useUserStore = defineStore('user', {
     state: () => ({
         id: null,
@@ -24,6 +43,23 @@ export const useUserStore = defineStore('user', {
         duracion_turno: 20,
         foto: null,
         fotoVersion: Date.now(),
+        // Identidad profesional. La necesita la pantalla de recetas para armar
+        // el bloque `medico` y el `lugarAtencion` sin volver a pedir el perfil.
+        // /api/usuarios/me ya los devolvía; setUser los descartaba, y sin ellos
+        // el formulario de emisión nunca se daba por completo.
+        apellido: '',
+        dni: '',
+        sexo: '',
+        telefono: '',
+        profesion: '',
+        especialidad: '',
+        matricula_tipo: '',
+        matricula_numero: '',
+        matricula_provincia: '',
+        lugar_atencion_nombre: '',
+        lugar_atencion_direccion: '',
+        lugar_atencion_contacto: '',
+        lugar_atencion_email: '',
         // Evita el rebote login -> dashboard mientras se está cerrando sesión.
         loggingOut: false
     }),
@@ -37,6 +73,13 @@ export const useUserStore = defineStore('user', {
             this.email = data.email ?? '';
             this.duracion_turno = data.duracion_turno ?? this.duracion_turno;
             this.foto = data.foto ?? null;
+
+            // Se copian con '' y no con null para que los v-model de los
+            // formularios no arranquen en null y marquen el campo como sucio.
+            for (const campo of CAMPOS_PROFESIONALES) {
+                this[campo] = data[campo] ?? '';
+            }
+
             this.loggingOut = false;
 
             emit('user:updated', { ...this.$state });
