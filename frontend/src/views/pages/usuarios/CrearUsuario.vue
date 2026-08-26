@@ -49,6 +49,20 @@ const loading = ref(false);
 const error = ref('');
 const ok = ref('');
 
+// Chrome ignora autocomplete="off" en cualquier formulario que tenga un campo
+// de contraseña: lo trata como un login y rellena igual. Sin esto, el gestor
+// cargaba el usuario y la contraseña de quien estaba logueado, y cambiando solo
+// el nombre de usuario se creaba una cuenta con la contraseña del director.
+//
+// El unico metodo que respeta es no tener un campo editable en el momento en
+// que decide autocompletar: los campos arrancan readonly y dejan de serlo al
+// recibir el foco. Para quien escribe es transparente.
+const bloqueadoParaAutorelleno = ref(true);
+
+function habilitarCampo() {
+    bloqueadoParaAutorelleno.value = false;
+}
+
 // ✅ Lista de roles corregida (incluye Área)
 const roles = ref(['Director', 'Profesional', 'Administrativo', 'Área']);
 
@@ -134,50 +148,59 @@ async function onSubmit() {
 </script>
 
 <template>
-    <div class="max-w-3xl mx-auto p-4 md:p-6 space-y-6">
+    <div class="max-w-5xl mx-auto p-4 md:p-6 space-y-6">
         <header>
             <h1 class="text-2xl md:text-3xl font-bold text-surface-900 dark:text-surface-0 m-0">Crear usuario</h1>
             <p class="text-sm text-surface-500 dark:text-surface-400 mt-1 mb-0">Registrar un nuevo miembro del personal.</p>
         </header>
 
-        <!-- autocomplete="off" en el formulario y campos con nombres que el
-             navegador no reconoce como los de un login. Sin esto, el gestor de
-             contraseñas rellenaba usuario y contraseña con las credenciales de
-             quien estaba logueado: se llegaba a crear una cuenta nueva con la
-             contraseña del director sin que nadie lo notara. -->
-        <form class="space-y-6" autocomplete="off" @submit.prevent="onSubmit">
+        <!-- El desbloqueo va en el formulario y no en cada campo: `focusin`
+             burbujea, asi que alcanza con un solo manejador y no depende de que
+             los componentes de PrimeVue expongan su propio @focus. -->
+        <form class="space-y-6" autocomplete="off" @focusin="habilitarCampo" @submit.prevent="onSubmit">
             <section class="bg-surface-0 dark:bg-surface-900 border border-surface-200 dark:border-surface-700 rounded-2xl p-5 md:p-6 space-y-5">
                 <h2 class="seccion"><span class="paso">1</span> Datos de la cuenta</h2>
 
-                <div class="flex flex-col gap-2">
-                    <label class="etiqueta"><i class="pi pi-id-card mr-1 text-primary"></i> Nombre completo</label>
-                    <InputText v-model.trim="form.nombre" placeholder="Ej: Ana Pérez (o Módulo Kinesiología)" class="w-full" autocomplete="off" :disabled="loading" />
-                </div>
+                <!-- Dos columnas: con los campos apilados a lo ancho de la
+                     pantalla, cada uno quedaba desproporcionadamente largo para
+                     lo que se escribe en el (un usuario, un rol). -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-x-5 gap-y-5">
+                    <div class="flex flex-col gap-2 md:col-span-2">
+                        <label class="etiqueta"><i class="pi pi-id-card mr-1 text-primary"></i> Nombre completo</label>
+                        <InputText v-model.trim="form.nombre" placeholder="Ej: Ana Pérez (o Módulo Kinesiología)" class="w-full" autocomplete="off" :disabled="loading" />
+                    </div>
 
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div class="flex flex-col gap-2">
                         <label class="etiqueta"><i class="pi pi-user mr-1 text-primary"></i> Usuario</label>
-                        <InputText v-model.trim="form.username" name="usuario-nuevo" placeholder="Ej: aperez" class="w-full" autocomplete="off" :disabled="loading" />
+                        <InputText v-model.trim="form.username" name="usuario-nuevo" placeholder="Ej: aperez" class="w-full" autocomplete="off" :readonly="bloqueadoParaAutorelleno" :disabled="loading" />
                     </div>
 
                     <div class="flex flex-col gap-2">
                         <label class="etiqueta"><i class="pi pi-envelope mr-1 text-primary"></i> Email</label>
                         <InputText v-model.trim="form.email" type="email" placeholder="ana@ejemplo.com" class="w-full" autocomplete="off" :disabled="loading" />
                     </div>
-                </div>
 
-                <div class="flex flex-col gap-2">
-                    <label class="etiqueta"><i class="pi pi-lock mr-1 text-primary"></i> Contraseña</label>
-                    <!-- new-password y no off: es lo que respetan Chrome y Firefox
-                         para no ofrecer la contraseña guardada del sitio. -->
-                    <Password v-model="form.password" :feedback="false" toggleMask placeholder="Contraseña para el nuevo usuario" class="w-full" inputClass="w-full" autocomplete="new-password" :disabled="loading" />
-                    <small class="text-surface-500 dark:text-surface-400">Mínimo 8 caracteres, con mayúscula, minúscula y número.</small>
-                </div>
+                    <div class="flex flex-col gap-2">
+                        <label class="etiqueta"><i class="pi pi-lock mr-1 text-primary"></i> Contraseña</label>
+                        <Password
+                            v-model="form.password"
+                            :feedback="false"
+                            toggleMask
+                            placeholder="Contraseña del nuevo usuario"
+                            class="w-full"
+                            inputClass="w-full"
+                            autocomplete="new-password"
+                            :inputProps="{ readonly: bloqueadoParaAutorelleno }"
+                            :disabled="loading"
+                        />
+                        <small class="text-surface-500 dark:text-surface-400">Mínimo 8 caracteres, con mayúscula, minúscula y número.</small>
+                    </div>
 
-                <div class="flex flex-col gap-2">
-                    <label class="etiqueta"><i class="pi pi-briefcase mr-1 text-primary"></i> Rol</label>
-                    <Dropdown v-model="form.rol" :options="roles" placeholder="Seleccioná un rol" class="w-full" :disabled="loading" />
-                    <small class="text-surface-500 dark:text-surface-400">{{ ayudaRol }}</small>
+                    <div class="flex flex-col gap-2">
+                        <label class="etiqueta"><i class="pi pi-briefcase mr-1 text-primary"></i> Rol</label>
+                        <Dropdown v-model="form.rol" :options="roles" placeholder="Seleccioná un rol" class="w-full" :disabled="loading" />
+                        <small class="text-surface-500 dark:text-surface-400">{{ ayudaRol }}</small>
+                    </div>
                 </div>
             </section>
 
