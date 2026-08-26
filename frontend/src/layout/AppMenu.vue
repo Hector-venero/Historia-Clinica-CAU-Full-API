@@ -58,13 +58,23 @@ const model = computed(() => {
             items: [
                 { label: 'Agenda', icon: 'pi pi-fw pi-calendar', to: '/turnos' },
                 { label: 'Nuevo Turno', icon: 'pi pi-fw pi-calendar-plus', to: '/turnos/nuevo' },
-                { label: 'Disponibilidad', icon: 'pi pi-fw pi-clock', to: '/disponibilidad' },
-                // Configuración solo visible para profesionales (opcional, por si quieres ocultarlo a admin)
+                // Las dos pantallas de ajustes van agrupadas: son lo que se
+                // toca al configurar la agenda (que dias se atiende y de cuanto
+                // es cada turno), no algo del uso diario. Sueltas al mismo nivel
+                // que Agenda y Nuevo Turno, competian en peso con lo que se usa
+                // todos los dias.
                 {
-                    label: 'Configuración de Turnos',
-                    icon: 'pi pi-clock',
-                    to: '/turnos/configuracion',
-                    visible: ['profesional', 'director', 'area'].includes(userStore.rol)
+                    label: 'Configuración',
+                    icon: 'pi pi-fw pi-cog',
+                    items: [
+                        { label: 'Disponibilidad', icon: 'pi pi-fw pi-clock', to: '/disponibilidad' },
+                        {
+                            label: 'Duración de turnos',
+                            icon: 'pi pi-fw pi-sliders-h',
+                            to: '/turnos/configuracion',
+                            visible: ['profesional', 'director', 'area'].includes(userStore.rol)
+                        }
+                    ]
                 }
             ]
         },

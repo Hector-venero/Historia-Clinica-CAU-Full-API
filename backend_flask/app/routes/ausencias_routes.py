@@ -2,6 +2,7 @@
 from flask import Blueprint, request, jsonify
 from flask_login import login_required, current_user
 from app.database import get_connection
+from app.utils.fechas import a_iso_arg
 from app.utils.permisos import requiere_rol
 from datetime import datetime
 
@@ -78,6 +79,20 @@ def listar_ausencias():
     ausencias = cursor.fetchall()
     cursor.close()
     conn.close()
+
+    # jsonify serializa los DATETIME al formato de fecha HTTP y los etiqueta
+    # "GMT", aunque estan guardados en hora argentina:
+    #
+    #     "fecha_inicio": "Thu, 10 Sep 2026 08:00:00 GMT"   <- son las 08:00 ART
+    #
+    # Quien los lea como UTC corre el valor tres horas. En el navegador eso hacia
+    # que una ausencia de dia completo (00:00 a 23:59) se leyera como 21:00 del
+    # dia anterior a 20:59, con lo que dejaba de reconocerse como dia completo y
+    # el dia no se bloqueaba en el calendario de Nuevo Turno.
+    for ausencia in ausencias:
+        ausencia["fecha_inicio"] = a_iso_arg(ausencia.get("fecha_inicio"))
+        ausencia["fecha_fin"] = a_iso_arg(ausencia.get("fecha_fin"))
+
     return jsonify(ausencias)
 
 
