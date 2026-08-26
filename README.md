@@ -20,7 +20,7 @@ La solución integra un backend API en Flask, un frontend en Vue 3 (Vite + Prime
 - **Seguridad**:
   - Autenticación con sesión (Flask-Login).
   - Roles con control de acceso (RBAC) tanto en backend (decoradores) como en frontend (guards).
-  - Contraseñas hasheadas con **bcrypt**.
+  - Contraseñas hasheadas con **scrypt** (`werkzeug.security`).
   - La sesión vive en una cookie HttpOnly; el rol **no** se guarda en `localStorage`.
   - CORS/CSP configurables por entorno.
 
