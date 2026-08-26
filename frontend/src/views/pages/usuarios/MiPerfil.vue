@@ -4,6 +4,10 @@ import api from '@/api/axios';
 import { useUserStore } from '@/stores/user';
 import { buildFotoURL } from '@/utils/fotoUrl.js';
 
+import Toast from 'primevue/toast';
+import { useToast } from 'primevue/usetoast';
+
+const toast = useToast();
 const userStore = useUserStore();
 
 // Campos del formulario
@@ -12,6 +16,7 @@ const email = ref('');
 
 // Datos que la receta electrónica exige del profesional que la firma.
 // Los edita cada uno: es quien conoce su matrícula y dónde atiende.
+// La lista tiene que coincidir con PROFESSIONAL_FIELDS del backend.
 const CAMPOS_PROFESIONALES = ['apellido', 'dni', 'sexo', 'telefono', 'matricula_tipo', 'matricula_numero', 'matricula_provincia', 'lugar_atencion_nombre', 'lugar_atencion_direccion', 'lugar_atencion_contacto', 'lugar_atencion_email'];
 
 const perfil = reactive(Object.fromEntries(CAMPOS_PROFESIONALES.map((c) => [c, ''])));
@@ -24,14 +29,29 @@ const SEXOS = [
 ];
 const TIPOS_MATRICULA = ['MN', 'MP', 'OP'];
 
+// Lo que _validar_payload() del backend exige para que el proveedor acepte una
+// receta. Se listan acá para poder decir qué falta antes de que la persona
+// llegue a la pantalla de emisión y se choque con un error del proveedor.
+const REQUERIDOS_RECETA = [
+    { campo: 'nombre', etiqueta: 'Nombre completo', valor: () => nombre.value },
+    { campo: 'apellido', etiqueta: 'Apellido', valor: () => perfil.apellido },
+    { campo: 'dni', etiqueta: 'DNI', valor: () => perfil.dni },
+    { campo: 'matricula_numero', etiqueta: 'N° de matrícula', valor: () => perfil.matricula_numero },
+    { campo: 'lugar_atencion_direccion', etiqueta: 'Dirección de atención', valor: () => perfil.lugar_atencion_direccion }
+];
+
 const puedePrescribir = computed(() => ['profesional', 'director'].includes((userStore.rol || '').toLowerCase()));
+const faltantes = computed(() => REQUERIDOS_RECETA.filter((r) => !String(r.valor() || '').trim()).map((r) => r.etiqueta));
+const listoParaRecetar = computed(() => faltantes.value.length === 0);
+
 const archivoFoto = ref(null);
 const previewFoto = ref(null);
-const mensaje = ref('');
-const error = ref('');
+const guardando = ref(false);
 
 // Variable reactiva para forzar la recarga de la imagen
 const imgVersion = ref(Date.now());
+
+const inicial = computed(() => (nombre.value ? nombre.value.charAt(0).toUpperCase() : 'U'));
 
 // Cargar datos iniciales
 onMounted(async () => {
@@ -49,6 +69,7 @@ onMounted(async () => {
         });
     } catch (err) {
         console.error('No se pudieron cargar los datos profesionales:', err);
+        toast.add({ severity: 'error', summary: 'Error', detail: 'No se pudieron cargar los datos profesionales.', life: 4500 });
     }
 });
 
@@ -78,8 +99,7 @@ const onFileChange = (e) => {
 
 /* Guardar perfil */
 const actualizarPerfil = async () => {
-    mensaje.value = '';
-    error.value = '';
+    guardando.value = true;
 
     try {
         const form = new FormData();
@@ -101,7 +121,7 @@ const actualizarPerfil = async () => {
             headers: { 'Content-Type': 'multipart/form-data' }
         });
 
-        mensaje.value = 'Perfil actualizado correctamente ✅';
+        toast.add({ severity: 'success', summary: 'Guardado', detail: 'Perfil actualizado correctamente.', life: 3200 });
 
         // 1. Recargar datos del usuario
         await userStore.fetchUser();
@@ -115,7 +135,10 @@ const actualizarPerfil = async () => {
         imgVersion.value = Date.now();
     } catch (err) {
         console.error(err);
-        error.value = 'Error al actualizar el perfil.';
+        const detail = err?.response?.data?.error || 'Error al actualizar el perfil.';
+        toast.add({ severity: 'error', summary: 'Error', detail, life: 4500 });
+    } finally {
+        guardando.value = false;
     }
 };
 
@@ -133,143 +156,203 @@ const eliminarFoto = async () => {
         archivoFoto.value = null;
         imgVersion.value = Date.now();
 
-        mensaje.value = 'Foto eliminada correctamente.';
+        toast.add({ severity: 'success', summary: 'Listo', detail: 'Foto eliminada correctamente.', life: 3000 });
     } catch (err) {
         console.error(err);
-        error.value = 'No se pudo eliminar la foto.';
+        toast.add({ severity: 'error', summary: 'Error', detail: 'No se pudo eliminar la foto.', life: 4500 });
     }
 };
 </script>
 
 <template>
-    <div class="max-w-lg mx-auto bg-white p-8 rounded-2xl shadow-lg mt-6 border border-gray-100">
-        <h1 class="text-2xl font-bold mb-8 text-gray-800 text-center">Editar mi Perfil</h1>
+    <!-- Todos los colores van con su variante dark:. La pantalla no tenia
+         ninguna, asi que en tema oscuro quedaba una tarjeta blanca con campos
+         claros, peleada con el resto de la aplicacion. -->
+    <div class="max-w-5xl mx-auto p-4 md:p-6 space-y-6">
+        <Toast />
 
-        <div class="flex flex-col items-center mb-8">
-            <div v-if="imagenA_Mostrar" class="mb-4 relative group">
-                <img :src="imagenA_Mostrar" class="w-32 h-32 rounded-full object-cover border-4 border-blue-50 shadow-md" alt="Foto de perfil" />
-            </div>
-
-            <div v-else class="mb-4 w-32 h-32 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 text-5xl font-bold border-4 border-white shadow-md select-none">
-                {{ nombre ? nombre.charAt(0).toUpperCase() : 'U' }}
-            </div>
-
-            <label class="cursor-pointer bg-gray-50 hover:bg-gray-100 text-gray-700 px-4 py-2 rounded-lg transition border border-gray-200 text-sm font-medium flex items-center gap-2">
-                <i class="pi pi-camera text-lg"></i>
-                <span>{{ userStore.foto || previewFoto ? 'Cambiar foto' : 'Subir foto' }}</span>
-                <input type="file" class="hidden" accept="image/*" @change="onFileChange" />
-            </label>
-        </div>
-
-        <div class="space-y-5">
+        <!-- Encabezado: el boton de guardar vive aca para que siga visible sin
+             tener que bajar hasta el final del formulario. -->
+        <header class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
-                <label class="block mb-2 font-semibold text-gray-700 text-sm">Nombre completo</label>
-                <input v-model="nombre" type="text" class="w-full p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition bg-gray-50" />
+                <h1 class="text-2xl md:text-3xl font-bold text-surface-900 dark:text-surface-0 m-0">Mi perfil</h1>
+                <p class="text-sm text-surface-500 dark:text-surface-400 mt-1 mb-0">Tus datos personales y los que se imprimen en las recetas.</p>
             </div>
 
-            <div>
-                <label class="block mb-2 font-semibold text-gray-700 text-sm">Correo electrónico</label>
-                <input v-model="email" type="email" class="w-full p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition bg-gray-50" />
-            </div>
+            <button
+                type="button"
+                :disabled="guardando"
+                class="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-white bg-primary-600 hover:bg-primary-700 disabled:opacity-60 disabled:cursor-not-allowed shadow-sm transition"
+                @click="actualizarPerfil"
+            >
+                <i :class="guardando ? 'pi pi-spin pi-spinner' : 'pi pi-check'"></i>
+                {{ guardando ? 'Guardando...' : 'Guardar cambios' }}
+            </button>
+        </header>
 
-            <!-- Sin estos datos no se puede emitir ninguna receta. Los completa
-                 el propio profesional: es quien conoce su matrícula y su consultorio. -->
-            <section v-if="puedePrescribir" class="p-4 bg-amber-50 border border-amber-200 rounded-xl space-y-3">
-                <h3 class="font-semibold text-gray-700 text-sm">Datos para recetas electrónicas</h3>
-                <p class="text-xs text-gray-500">Necesarios para emitir recetas: apellido, DNI, matrícula y dirección de atención.</p>
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+            <!-- Identidad -->
+            <section class="bg-surface-0 dark:bg-surface-900 border border-surface-200 dark:border-surface-700 rounded-2xl p-6 flex flex-col items-center text-center">
+                <img v-if="imagenA_Mostrar" :src="imagenA_Mostrar" class="w-28 h-28 rounded-full object-cover ring-4 ring-surface-100 dark:ring-surface-800" alt="Foto de perfil" />
 
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-                    <div>
-                        <label class="block mb-1 text-sm text-gray-600">Apellido</label>
-                        <input v-model.trim="perfil.apellido" type="text" class="w-full p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition bg-gray-50" />
-                    </div>
-                    <div>
-                        <label class="block mb-1 text-sm text-gray-600">DNI</label>
-                        <input v-model.trim="perfil.dni" type="text" class="w-full p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition bg-gray-50" />
-                    </div>
-                    <div>
-                        <label class="block mb-1 text-sm text-gray-600">Sexo</label>
-                        <select v-model="perfil.sexo" class="w-full p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition bg-gray-50">
-                            <option value="">—</option>
-                            <option v-for="s in SEXOS" :key="s.value" :value="s.value">{{ s.label }}</option>
-                        </select>
-                    </div>
+                <div v-else class="w-28 h-28 rounded-full bg-primary-100 dark:bg-primary-900 text-primary-700 dark:text-primary-200 flex items-center justify-center text-4xl font-bold ring-4 ring-surface-100 dark:ring-surface-800 select-none">
+                    {{ inicial }}
                 </div>
 
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-                    <div>
-                        <label class="block mb-1 text-sm text-gray-600">Tipo de matrícula</label>
-                        <select v-model="perfil.matricula_tipo" class="w-full p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition bg-gray-50">
-                            <option value="">—</option>
-                            <option v-for="t in TIPOS_MATRICULA" :key="t" :value="t">{{ t }}</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label class="block mb-1 text-sm text-gray-600">N° de matrícula</label>
-                        <input v-model.trim="perfil.matricula_numero" type="text" class="w-full p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition bg-gray-50" />
-                    </div>
-                    <div>
-                        <label class="block mb-1 text-sm text-gray-600">Provincia</label>
-                        <input v-model.trim="perfil.matricula_provincia" type="text" class="w-full p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition bg-gray-50" />
-                    </div>
-                </div>
+                <p class="mt-4 mb-0 font-semibold text-surface-900 dark:text-surface-0 break-words">{{ nombre || 'Sin nombre' }}</p>
+                <span v-if="userStore.rol" class="mt-1 inline-block text-[11px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full bg-surface-100 dark:bg-surface-800 text-surface-600 dark:text-surface-300">
+                    {{ userStore.rol }}
+                </span>
 
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <div>
-                        <label class="block mb-1 text-sm text-gray-600">Lugar de atención</label>
-                        <input v-model.trim="perfil.lugar_atencion_nombre" type="text" class="w-full p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition bg-gray-50" />
-                    </div>
-                    <div>
-                        <label class="block mb-1 text-sm text-gray-600">Dirección de atención</label>
-                        <input
-                            v-model.trim="perfil.lugar_atencion_direccion"
-                            type="text"
-                            placeholder="Calle y número"
-                            class="w-full p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition bg-gray-50"
-                        />
-                    </div>
-                    <div>
-                        <label class="block mb-1 text-sm text-gray-600">Teléfono</label>
-                        <input v-model.trim="perfil.telefono" type="text" class="w-full p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition bg-gray-50" />
-                    </div>
-                    <div>
-                        <label class="block mb-1 text-sm text-gray-600">Email de contacto</label>
-                        <input v-model.trim="perfil.lugar_atencion_email" type="text" class="w-full p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition bg-gray-50" />
-                    </div>
-                </div>
+                <label
+                    class="mt-5 w-full cursor-pointer inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-sm font-medium border border-surface-300 dark:border-surface-600 text-surface-700 dark:text-surface-200 hover:bg-surface-100 dark:hover:bg-surface-800 transition"
+                >
+                    <i class="pi pi-camera"></i>
+                    <span>{{ userStore.foto || previewFoto ? 'Cambiar foto' : 'Subir foto' }}</span>
+                    <input type="file" class="hidden" accept="image/*" @change="onFileChange" />
+                </label>
+
+                <p v-if="previewFoto" class="text-xs text-amber-600 dark:text-amber-400 mt-2 mb-0">Vista previa. Guardá los cambios para aplicarla.</p>
+
+                <button v-if="userStore.foto" type="button" class="mt-2 text-sm text-red-600 dark:text-red-400 hover:underline inline-flex items-center gap-1" @click="eliminarFoto"><i class="pi pi-trash"></i> Eliminar foto</button>
             </section>
-        </div>
 
-        <div class="flex justify-between items-center mt-8 pt-6 border-t border-gray-100">
-            <button v-if="userStore.foto" class="text-red-500 hover:text-red-700 text-sm font-semibold flex items-center gap-1 transition px-2 py-1 rounded hover:bg-red-50" @click="eliminarFoto"><i class="pi pi-trash"></i> Eliminar foto</button>
+            <!-- Formularios -->
+            <div class="lg:col-span-2 space-y-6">
+                <section class="bg-surface-0 dark:bg-surface-900 border border-surface-200 dark:border-surface-700 rounded-2xl p-6">
+                    <h2 class="text-base font-semibold text-surface-900 dark:text-surface-0 m-0 mb-4">Datos de la cuenta</h2>
 
-            <div v-else></div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block mb-1.5 text-sm font-medium text-surface-700 dark:text-surface-300">Nombre completo</label>
+                            <input v-model="nombre" type="text" class="campo" />
+                        </div>
+                        <div>
+                            <label class="block mb-1.5 text-sm font-medium text-surface-700 dark:text-surface-300">Correo electrónico</label>
+                            <input v-model="email" type="email" class="campo" />
+                        </div>
+                    </div>
+                </section>
 
-            <button class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-xl shadow-md transition font-semibold flex items-center gap-2" @click="actualizarPerfil"><i class="pi pi-check"></i> Guardar cambios</button>
-        </div>
+                <!-- Sin estos datos no se puede emitir ninguna receta. Los completa
+                     el propio profesional: es quien conoce su matrícula y su consultorio. -->
+                <section v-if="puedePrescribir" class="bg-surface-0 dark:bg-surface-900 border border-surface-200 dark:border-surface-700 rounded-2xl p-6">
+                    <div class="flex items-start justify-between gap-3 mb-1">
+                        <h2 class="text-base font-semibold text-surface-900 dark:text-surface-0 m-0">Datos para recetas electrónicas</h2>
+                        <span
+                            :class="[
+                                'shrink-0 text-[11px] font-bold uppercase tracking-wide px-2 py-1 rounded-full',
+                                listoParaRecetar ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' : 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200'
+                            ]"
+                        >
+                            {{ listoParaRecetar ? 'Completo' : 'Incompleto' }}
+                        </span>
+                    </div>
+                    <p class="text-sm text-surface-500 dark:text-surface-400 mt-0 mb-4">Se imprimen en cada receta que emitís.</p>
 
-        <div v-if="mensaje" class="mt-4 p-3 bg-green-50 text-green-700 rounded-lg text-center text-sm font-medium border border-green-200 animate-fade-in">
-            {{ mensaje }}
-        </div>
+                    <!-- Decir exactamente que falta evita que la persona lo
+                         descubra recien al emitir, con un codigo de error del
+                         proveedor que no dice donde se carga el dato. -->
+                    <div v-if="faltantes.length" class="mb-5 p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800">
+                        <p class="text-sm text-amber-900 dark:text-amber-200 m-0">
+                            <i class="pi pi-exclamation-circle mr-1"></i>
+                            Sin estos datos no vas a poder emitir recetas: <strong>{{ faltantes.join(', ') }}</strong>
+                        </p>
+                    </div>
 
-        <div v-if="error" class="mt-4 p-3 bg-red-50 text-red-700 rounded-lg text-center text-sm font-medium border border-red-200 animate-fade-in">
-            {{ error }}
+                    <div class="space-y-4">
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div>
+                                <label class="etiqueta">Apellido</label>
+                                <input v-model.trim="perfil.apellido" type="text" class="campo" />
+                            </div>
+                            <div>
+                                <label class="etiqueta">DNI</label>
+                                <input v-model.trim="perfil.dni" type="text" class="campo" />
+                            </div>
+                            <div>
+                                <label class="etiqueta">Sexo</label>
+                                <select v-model="perfil.sexo" class="campo">
+                                    <option value="">—</option>
+                                    <option v-for="s in SEXOS" :key="s.value" :value="s.value">{{ s.label }}</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div>
+                                <label class="etiqueta">Tipo de matrícula</label>
+                                <select v-model="perfil.matricula_tipo" class="campo">
+                                    <option value="">—</option>
+                                    <option v-for="t in TIPOS_MATRICULA" :key="t" :value="t">{{ t }}</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="etiqueta">N° de matrícula</label>
+                                <input v-model.trim="perfil.matricula_numero" type="text" class="campo" />
+                            </div>
+                            <div>
+                                <label class="etiqueta">Provincia</label>
+                                <input v-model.trim="perfil.matricula_provincia" type="text" class="campo" />
+                            </div>
+                        </div>
+
+                        <hr class="border-surface-200 dark:border-surface-700" />
+
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label class="etiqueta">Lugar de atención</label>
+                                <input v-model.trim="perfil.lugar_atencion_nombre" type="text" placeholder="Nombre del consultorio" class="campo" />
+                            </div>
+                            <div>
+                                <label class="etiqueta">Dirección de atención</label>
+                                <input v-model.trim="perfil.lugar_atencion_direccion" type="text" placeholder="Calle y número" class="campo" />
+                            </div>
+                            <div>
+                                <label class="etiqueta">Teléfono</label>
+                                <input v-model.trim="perfil.telefono" type="text" class="campo" />
+                            </div>
+                            <div>
+                                <label class="etiqueta">Email de contacto</label>
+                                <input v-model.trim="perfil.lugar_atencion_email" type="text" class="campo" />
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Repetido al pie a proposito: el formulario es largo y en
+                     pantallas chicas el boton del encabezado ya no se ve al
+                     llegar al final. -->
+                <div class="flex justify-end">
+                    <button
+                        type="button"
+                        :disabled="guardando"
+                        class="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-white bg-primary-600 hover:bg-primary-700 disabled:opacity-60 disabled:cursor-not-allowed shadow-sm transition"
+                        @click="actualizarPerfil"
+                    >
+                        <i :class="guardando ? 'pi pi-spin pi-spinner' : 'pi pi-check'"></i>
+                        {{ guardando ? 'Guardando...' : 'Guardar cambios' }}
+                    </button>
+                </div>
+            </div>
         </div>
     </div>
 </template>
 
 <style scoped>
-.animate-fade-in {
-    animation: fadeIn 0.3s ease-in-out;
+/* Los campos repetian la misma cadena de doce clases de Tailwind en cada input,
+   lo que hacia imposible ver que ninguno tenia variante oscura. Con @apply la
+   definicion queda en un solo lugar. */
+.campo {
+    @apply w-full px-3 py-2.5 rounded-xl outline-none transition
+           bg-surface-50 dark:bg-surface-800
+           border border-surface-300 dark:border-surface-600
+           text-surface-900 dark:text-surface-0
+           placeholder:text-surface-400 dark:placeholder:text-surface-500
+           focus:ring-2 focus:ring-primary-500 focus:border-primary-500;
 }
-@keyframes fadeIn {
-    from {
-        opacity: 0;
-        transform: translateY(-5px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
+
+.etiqueta {
+    @apply block mb-1.5 text-sm font-medium text-surface-700 dark:text-surface-300;
 }
 </style>
