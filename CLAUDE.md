@@ -108,7 +108,7 @@ Key frontend libraries: PrimeVue 4, FullCalendar 5 (turnos/grupos), vee-validate
 - **`__init__.py`** — app factory: registers all blueprints, configures Flask-Login, Flask-Mail, CORS, Talisman; serves user photos from `/static/fotos_usuarios/` and `/api/static/fotos_usuarios/`
 - **`config.py`** — reads all config from environment variables
 - **`database.py`** — conexión cruda `mysql-connector-python` con reintentos (sin ORM), y el context manager **`db_cursor()`**, que es la forma preferida de hablar con la base: cierra conexión y cursor pase lo que pase. El patrón `conn = get_connection()` … `conn.close()` al final filtra la conexión ante cualquier excepción o salida temprana
-- **`auth.py`** — `Usuario` class (Flask-Login `UserMixin`); bcrypt password verification
+- **`auth.py`** — `Usuario` class (Flask-Login `UserMixin`). Las contraseñas se hashean con **scrypt** vía `werkzeug.security` (`generate_password_hash(..., method="scrypt")`), no con bcrypt: en la base se ven como `scrypt:32768:8:1$...`. `bcrypt` ni siquiera está en `requirements.txt`
 - **`routes/`** — un blueprint por dominio (todos bajo `/api/`): `auth`, `usuarios`, `pacientes`, `historias`, `turnos`, `disponibilidades`, `grupos`, `ausencias`, `blockchain`, `dashboard`, `health`, `recetas`, `comunicados`, `grupo_posteos`
 - **`utils/permisos.py`** — `@requiere_rol('director', ...)` decorator for route-level role enforcement
 - **`utils/validacion.py`** — shared password and email validation (8–64 chars, upper+lower+digit+symbol)
