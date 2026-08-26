@@ -17,6 +17,16 @@ services:
       # las lee, nunca las escribe. Si falta este mount el arranque falla, en
       # vez de servir la app contra un esquema viejo sin avisar.
       - ./db/migrations:/app/migrations:ro
+      # Esquema base, para crear la base de un consultorio nuevo. Las
+      # migraciones solo hacen ALTER: sobre una base vacia fallan con 1146
+      # "Table doesn't exist". Se lee de init.sql y no de una copia, para que no
+      # existan dos definiciones del esquema que puedan divergir.
+      #
+      # Va fuera de /app a proposito: /app es a su vez un bind mount de
+      # ./backend_flask/app, y montar un archivo adentro hace que Docker cree el
+      # punto de montaje en el arbol de fuentes del host (un archivo vacio de
+      # root que termina apareciendo en git status).
+      - ./db/init.sql:/esquema_base.sql:ro
     depends_on:
       db:
         condition: service_healthy
@@ -33,6 +43,16 @@ services:
       - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD:-root}
       - DB_MIGRATION_USER=${DB_MIGRATION_USER:-root}
       - DB_MIGRATION_PASSWORD=${DB_MIGRATION_PASSWORD:-}
+      # Plano de control de la plataforma: que consultorios existen y donde vive
+      # la base de cada uno. Credenciales propias, distintas de las del
+      # inquilino: quien lee el catalogo no tiene por que tocar una base clinica.
+      - PLATAFORMA_DB_NAME=${PLATAFORMA_DB_NAME:-plataforma}
+      - PLATAFORMA_DB_USER=${PLATAFORMA_DB_USER:-root}
+      - PLATAFORMA_DB_PASSWORD=${PLATAFORMA_DB_PASSWORD:-}
+      # Cifra las credenciales que la plataforma guarda por cliente. Rotarla
+      # invalida todo lo cifrado: hay que descifrar con la vieja y recifrar.
+      - PLATAFORMA_SECRET_KEY=${PLATAFORMA_SECRET_KEY:-}
+      - DIAS_DE_PRUEBA=${DIAS_DE_PRUEBA:-30}
     command: bash -c "echo Starting Flask with ENV=$FLASK_ENV && /wait-for-it.sh db:3306 -- /app/start.sh"
     networks:
       - historia_net

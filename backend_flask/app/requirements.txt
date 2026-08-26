@@ -11,6 +11,11 @@ mysql-connector-python==9.2.0
 reportlab==4.4.0
 requests==2.32.3
 
+# Cifrado de las credenciales que la plataforma guarda por cliente (la clave de
+# su base de datos, el token de recetas). Python no trae cifrado simetrico en la
+# biblioteca estandar: hashlib solo deriva y firma, no cifra.
+cryptography==44.0.1
+
 # Usada por usuarios_routes.py y pacientes_routes.py (from PIL import Image).
 # Estaba disponible solo por arrastre de reportlab: si reportlab dejaba de
 # depender de ella, la subida de fotos y el PDF con adjuntos se rompian.

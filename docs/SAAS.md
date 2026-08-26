@@ -93,6 +93,54 @@ cron no tienen `flask.g`, así que hay que pasarles el cliente explícitamente.
 
 ---
 
+## Cómo se da de alta un consultorio
+
+```bash
+bash scripts/alta_cliente.sh drlopez "Consultorio Dr. Lopez" lopez@ejemplo.com
+```
+
+El script es un envoltorio de `backend_flask/app/alta_cliente.py`, que es lo que
+después va a invocar el registro autoservicio: así no hay dos caminos de alta que
+puedan divergir. Deja el consultorio listo e imprime la contraseña del admin una
+sola vez.
+
+Lo que hace, en orden:
+
+1. Valida el subdominio (etiqueta DNS válida, mínimo 3 caracteres, no reservado).
+2. Crea la base `hc_<slug>` y el usuario `c_<slug>` **con permisos solo sobre
+   ella** — el usuario de MySQL admite 32 caracteres, de ahí el recorte.
+3. Crea el esquema base a partir de `db/init.sql`, filtrando lo administrativo.
+4. Aplica las migraciones con el mismo `migrate.py` del arranque normal.
+5. Siembra el admin con una contraseña generada.
+6. Registra el cliente en el plano de control, con la contraseña de su base
+   cifrada.
+
+Si algo falla a mitad, borra la base y el usuario que alcanzó a crear. Sin eso
+quedaría una base huérfana: nadie la ve, nadie la limpia, y el slug parece libre
+aunque la base ya exista.
+
+**El esquema base sale de `db/init.sql`, no de una copia.** Dos definiciones del
+mismo esquema divergen sin que nadie se entere — es justo lo que
+`scripts/comparar_esquemas.sh` existe para detectar. Se descartan las sentencias
+que crean la base del CAU, la seleccionan o dan de alta usuarios de MySQL, y
+**también el `INSERT` del admin de desarrollo**: su contraseña (`admin123`) está
+publicada en el README, y un consultorio nuevo no puede nacer con una cuenta de
+credenciales conocidas.
+
+### Verificado sobre el stack
+
+Con dos consultorios de prueba dados de alta:
+
+```
+c_drgarcia -> hc_drlopez.usuarios     denied
+c_drlopez  -> hc_bfa.pacientes        denied      (la base del CAU)
+c_drlopez  -> plataforma.clientes     denied      (el plano de control)
+c_drlopez  -> hc_drlopez.usuarios     OK
+```
+
+La contraseña de cada base queda cifrada en el plano de control (`gAAAAA…`) y la
+aplicación la recupera al conectarse.
+
 ## Pendiente legal
 
 Alojar datos de salud de terceros en Argentina cae bajo la **Ley 25.326**
