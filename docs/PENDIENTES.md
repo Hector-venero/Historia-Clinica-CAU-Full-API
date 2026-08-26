@@ -48,29 +48,26 @@ curl -b cookies -X POST http://localhost:5000/api/ausencias \
 # {"id": 2, "message": "Ausencia registrada"}  -> HTTP 201
 ```
 
-Es el más barato de los tres y el que más se nota. Hay que decidir si un bloqueo
-es de día completo (y entonces el frontend arma las dos fechas) o si se pide un
-rango horario.
+Es el más barato de los que quedan y el que más se nota. Hay que decidir si un
+bloqueo es de día completo (y entonces el frontend arma las dos fechas) o si se
+pide un rango horario.
+
+**Ahora importa más que antes:** desde el 26/08, Nuevo Turno deshabilita en el
+calendario los días con bloqueo de día completo. Esa función depende de que se
+puedan cargar bloqueos, y hoy la única pantalla para hacerlo no funciona.
 
 ---
 
-## 3. `/api/ausencias` miente sobre la zona horaria
+## 3. ~~`/api/ausencias` miente sobre la zona horaria~~ ✅ resuelto el 26/08/2026
 
-Devuelve los `DATETIME` con `jsonify` por defecto, que los serializa al formato
-de fecha HTTP **etiquetado como GMT**, aunque estén guardados en hora argentina:
+Devolvía los `DATETIME` con `jsonify` por defecto, que los serializa al formato
+de fecha HTTP **etiquetado como GMT** aunque estén guardados en hora argentina,
+y eso corría el valor tres horas en cualquier consumidor que lo leyera como UTC.
 
-```
-"fecha_inicio": "Thu, 10 Sep 2026 08:00:00 GMT"   <- son las 08:00 de Argentina
-```
-
-Cualquier consumidor que lo lea como UTC corre el valor **tres horas**. El
-dashboard se salva porque tiene su propia conversión (`isoformat()`), y el
-calendario de grupos usa el endpoint nuevo, que ya convierte bien.
-
-La corrección es aplicar `a_iso_arg()` de `app/utils/fechas.py`, igual que hace
-`obtener_ausencias_grupo()` en `grupos_routes.py`. **Ojo:** cambiar el formato
-de esa respuesta afecta a `AgendaProfesional.vue`, que hoy la consume; conviene
-hacerlo junto con el punto 2.
+Se corrigió con `a_iso_arg()` al implementar el bloqueo de días en Nuevo Turno,
+que era justamente lo que el bug rompía: un bloqueo de día completo se leía como
+21:00 del día anterior a 20:59 y por lo tanto nunca se reconocía como día
+completo. Verificado bajo `America/Argentina/Buenos_Aires`.
 
 ---
 
