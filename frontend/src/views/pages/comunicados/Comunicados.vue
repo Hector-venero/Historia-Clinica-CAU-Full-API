@@ -9,6 +9,7 @@ import InputText from 'primevue/inputtext';
 import Textarea from 'primevue/textarea';
 import Toast from 'primevue/toast';
 import { useToast } from 'primevue/usetoast';
+import { emit } from '@/utils/eventBus';
 
 const toast = useToast();
 const userStore = useUserStore();
@@ -16,7 +17,14 @@ const userStore = useUserStore();
 const loading = ref(true);
 const guardando = ref(false);
 const comunicados = ref([]);
-const form = ref({ titulo: '', contenido: '' });
+const form = ref({ titulo: '', contenido: '', prioridad: 'normal' });
+
+// Un `importante` ademas manda un mail a todo el equipo, asi que conviene que
+// al publicar quede claro cual de los dos se esta eligiendo.
+const PRIORIDADES = [
+    { valor: 'normal', etiqueta: 'Normal', ayuda: 'Aparece en la campana' },
+    { valor: 'importante', etiqueta: 'Importante', ayuda: 'Campana y mail a todo el equipo' }
+];
 
 const puedePublicar = computed(() => {
     const rol = (userStore.rol || '').toLowerCase().trim();
@@ -54,9 +62,15 @@ async function publicarComunicado() {
 
     guardando.value = true;
     try {
-        await comunicadoService.crear({ titulo, contenido });
-        form.value = { titulo: '', contenido: '' };
-        toast.add({ severity: 'success', summary: 'Publicado', detail: 'Comunicado publicado correctamente.', life: 3200 });
+        const { data } = await comunicadoService.crear({ titulo, contenido, prioridad: form.value.prioridad });
+        form.value = { titulo: '', contenido: '', prioridad: 'normal' };
+
+        // Se informa a cuantos se les mando el mail: publicar un importante
+        // notifica a todo el equipo y conviene que quede a la vista.
+        const detail = data?.avisados ? `Publicado. Se avisó por mail a ${data.avisados} persona(s).` : 'Comunicado publicado correctamente.';
+        toast.add({ severity: 'success', summary: 'Publicado', detail, life: 4000 });
+
+        emit('comunicados:actualizados');
         await cargarComunicados();
     } catch (err) {
         console.error('Error publicando comunicado:', err);
@@ -84,6 +98,18 @@ async function eliminarComunicado(comunicado) {
 
 onMounted(async () => {
     await cargarComunicados();
+
+    // Entrar a la pantalla cuenta como haberlos leido: quedan todos a la vista.
+    // Se hace despues de cargar para que el resaltado de no leidos alcance a
+    // verse en esta visita y no desaparezca antes de que la persona los mire.
+    if (comunicados.value.some((c) => !c.leido)) {
+        try {
+            await comunicadoService.marcarTodosLeidos();
+            emit('comunicados:actualizados');
+        } catch (err) {
+            console.error('No se pudieron marcar como leidos:', err);
+        }
+    }
 });
 </script>
 
@@ -102,6 +128,25 @@ onMounted(async () => {
                 <div class="space-y-3">
                     <InputText v-model="form.titulo" class="w-full" placeholder="Titulo" />
                     <Textarea v-model="form.contenido" rows="5" class="w-full" placeholder="Escriba el comunicado" autoResize />
+
+                    <div class="flex flex-wrap gap-2">
+                        <label
+                            v-for="p in PRIORIDADES"
+                            :key="p.valor"
+                            :class="[
+                                'flex-1 min-w-[180px] cursor-pointer rounded-lg border p-3 transition',
+                                form.prioridad === p.valor ? 'border-primary-500 bg-primary-50 dark:bg-slate-800' : 'border-gray-200 dark:border-slate-700 hover:border-gray-300'
+                            ]"
+                        >
+                            <input v-model="form.prioridad" type="radio" :value="p.valor" class="sr-only" />
+                            <span class="block text-sm font-semibold text-gray-800 dark:text-gray-100">
+                                <i :class="['pi mr-1', p.valor === 'importante' ? 'pi-exclamation-circle text-amber-500' : 'pi-bell text-gray-400']"></i>
+                                {{ p.etiqueta }}
+                            </span>
+                            <span class="block text-xs text-gray-500 mt-0.5">{{ p.ayuda }}</span>
+                        </label>
+                    </div>
+
                     <div class="flex justify-end">
                         <Button label="Publicar" icon="pi pi-send" :loading="guardando" @click="publicarComunicado" />
                     </div>
@@ -116,11 +161,24 @@ onMounted(async () => {
         </div>
 
         <div v-else class="space-y-4">
-            <Card v-for="c in comunicados" :key="c.id" class="border border-gray-100 dark:border-slate-700">
+            <Card
+                v-for="c in comunicados"
+                :key="c.id"
+                :class="[
+                    'border',
+                    // El borde ambar distingue los importantes de un vistazo, sin
+                    // depender de leer la etiqueta.
+                    c.prioridad === 'importante' ? 'border-amber-300 dark:border-amber-700' : 'border-gray-100 dark:border-slate-700'
+                ]"
+            >
                 <template #title>
                     <div class="flex items-start justify-between gap-3">
                         <div>
-                            <h2 class="text-lg font-semibold text-gray-800 dark:text-gray-100">{{ c.titulo }}</h2>
+                            <div class="flex items-center gap-2 flex-wrap">
+                                <span v-if="!c.leido" class="w-2 h-2 rounded-full bg-primary-500 shrink-0" title="Sin leer"></span>
+                                <h2 class="text-lg font-semibold text-gray-800 dark:text-gray-100">{{ c.titulo }}</h2>
+                                <span v-if="c.prioridad === 'importante'" class="text-[11px] font-bold tracking-wide uppercase px-2 py-0.5 rounded bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200"> Importante </span>
+                            </div>
                             <p class="text-xs text-gray-500 mt-1">{{ c.autor_nombre }} ({{ c.autor_rol }}) - {{ formatearFecha(c.creado_en) }}</p>
                         </div>
                         <Button v-if="c.puede_eliminar" icon="pi pi-trash" text severity="danger" @click="eliminarComunicado(c)" />

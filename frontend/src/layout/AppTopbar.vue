@@ -2,6 +2,7 @@
 import { useLayout } from '@/layout/composables/layout';
 import AppConfigurator from './AppConfigurator.vue';
 import UserMenu from '@/components/dashboard/UserMenu.vue'; // ← nuevo menú de usuario
+import ComunicadosCampana from '@/components/ComunicadosCampana.vue';
 import { useRouter } from 'vue-router';
 
 const { toggleMenu, toggleDarkMode, isDarkTheme } = useLayout();
@@ -36,6 +37,9 @@ function irAgenda() {
             <button type="button" class="layout-topbar-action" @click="irAgenda">
                 <i class="pi pi-calendar"></i>
             </button>
+
+            <!-- 🔔 Comunicados -->
+            <ComunicadosCampana />
 
             <!-- 🎨 Tema -->
             <button type="button" class="layout-topbar-action" @click="toggleDarkMode">
