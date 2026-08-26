@@ -1,6 +1,7 @@
 from flask import Blueprint, request, jsonify, send_from_directory, send_file, current_app
 from flask_login import login_required, current_user
 from app.database import db_cursor
+from app.utils.adjuntos import carpeta_evolucion, ruta_adjunto, url_adjunto
 from werkzeug.utils import secure_filename
 from io import BytesIO
 from reportlab.platypus import (SimpleDocTemplate, Paragraph, Spacer, Image, PageBreak, Table, TableStyle)
@@ -291,8 +292,7 @@ def agregar_evolucion(id):
         conn.commit()
         evolucion_id = cursor.lastrowid
 
-        upload_dir = os.path.join(os.getcwd(), 'uploads', 'evoluciones', str(evolucion_id))
-        os.makedirs(upload_dir, exist_ok=True)
+        upload_dir = carpeta_evolucion(evolucion_id, crear=True)
 
         for archivo in archivos:
             if archivo.filename:
@@ -350,7 +350,7 @@ def get_evoluciones(id):
             archivos = cursor.fetchall()
             evo['archivos'] = [{
                 'nombre': a['filename'],
-                'url': f"/api/uploads/evoluciones/{evo['id']}/{a['filename']}"
+                'url': url_adjunto(evo['id'], a['filename'])
             } for a in archivos]
 
     return jsonify(evoluciones)
@@ -358,9 +358,13 @@ def get_evoluciones(id):
 @bp_pacientes.route('/api/uploads/evoluciones/<int:evo_id>/<filename>')
 @login_required
 def uploaded_file(evo_id, filename):
-    """Sirve los archivos adjuntos de evoluciones."""
-    folder = os.path.join(os.getcwd(), 'uploads', 'evoluciones', str(evo_id))
-    return send_from_directory(folder, filename)
+    """Sirve los archivos adjuntos de evoluciones.
+
+    Es el unico camino hacia estos archivos. nginx los publicaba ademas en
+    /uploads/ directamente desde el volumen, sin pasar por aca y por lo tanto
+    sin exigir sesion: cualquiera con la URL se descargaba un adjunto clinico.
+    """
+    return send_from_directory(carpeta_evolucion(evo_id), filename)
 
 # ==========================================================
 # 📄 Exportar Historia Clínica en PDF (versión institucional)
@@ -543,7 +547,7 @@ def exportar_historia_pdf(id):
                 for a in archivos:
                     filename = a["filename"]
                     ext = filename.lower().split(".")[-1]
-                    file_path = os.path.join(os.getcwd(), "uploads", "evoluciones", str(evo["id"]), filename)
+                    file_path = str(ruta_adjunto(evo["id"], filename))
 
                     if os.path.exists(file_path):
                         if ext in ["jpg", "jpeg", "png"]:
@@ -560,8 +564,7 @@ def exportar_historia_pdf(id):
                             except Exception as e:
                                 elements.append(Paragraph(f"⚠️ No se pudo mostrar {filename}", styles["Normal"]))
                         else:
-                            base_url = request.host_url.rstrip('/')
-                            url = f"{base_url}/api/uploads/evoluciones/{evo['id']}/{filename}"
+                            url = url_adjunto(evo["id"], filename, base=request.host_url.rstrip('/'))
 
                             elements.append(Paragraph(
                                 f"• <b>{filename}</b> — "
@@ -758,7 +761,10 @@ def exportar_evolucion_pdf(paciente_id, evo_id):
 
         for a in archivos:
             nombre = a["filename"]
-            file_path = os.path.join("uploads", "evoluciones", str(evo_id), nombre)
+            # Era una ruta relativa, asi que dependia por completo del directorio
+            # de trabajo del proceso: con gunicorn (--chdir /) apuntaba a
+            # /uploads, fuera del volumen.
+            file_path = str(ruta_adjunto(evo_id, nombre))
             ext = nombre.lower().split(".")[-1]
 
             # IMÁGENES
@@ -778,7 +784,7 @@ def exportar_evolucion_pdf(paciente_id, evo_id):
                     elements.append(Paragraph(f"⚠️ No se pudo mostrar {nombre}", styles["Normal"]))
             else:
                 # LINK CLICKEABLE
-                url = f"{request.host_url.rstrip('/')}/api/uploads/evoluciones/{evo_id}/{nombre}"
+                url = url_adjunto(evo_id, nombre, base=request.host_url.rstrip('/'))
                 elements.append(Paragraph(f"• <a href='{url}' color='blue'>{nombre}</a>", styles["Normal"]))
                 elements.append(Spacer(1, 0.1*cm))
 
