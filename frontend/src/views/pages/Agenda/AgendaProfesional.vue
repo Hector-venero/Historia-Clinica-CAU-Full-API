@@ -41,10 +41,24 @@ const agregarAusencia = async () => {
     if (!fechaAusencia.value) return;
 
     try {
-        // Ajuste de fecha para enviar string (YYYY-MM-DD)
-        const fechaStr = fechaAusencia.value.toISOString().split('T')[0];
+        // La API pide fecha_inicio y fecha_fin, no `fecha`: mandando `fecha`
+        // respondía 400 y el bloqueo no se creaba nunca.
+        //
+        // Se arma a partir de las componentes locales y no con toISOString(),
+        // que pasa a UTC y puede devolver el día anterior según la hora.
+        //
+        // 00:00:00 a 23:59:59 del mismo día es la forma que Nuevo Turno
+        // reconoce como bloqueo de día completo para deshabilitar la fecha en
+        // el calendario. Cualquier otro rango cuenta como bloqueo parcial.
+        const d = fechaAusencia.value;
+        const pad = (n) => String(n).padStart(2, '0');
+        const dia = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 
-        await ausenciasService.crear({ fecha: fechaStr });
+        await ausenciasService.crear({
+            fecha_inicio: `${dia}T00:00:00`,
+            fecha_fin: `${dia}T23:59:59`,
+            motivo: 'Día no laborable'
+        });
         toast.add({ severity: 'success', summary: 'Bloqueado', detail: 'Día bloqueado correctamente ✅', life: 3000 });
         fechaAusencia.value = null;
         await cargarDatos();
@@ -147,11 +161,20 @@ onMounted(() => {
                                         <div class="text-center p-4 text-gray-500">No hay días bloqueados.</div>
                                     </template>
 
-                                    <Column field="fecha" header="Fecha Bloqueada" sortable>
+                                    <!-- La API devuelve fecha_inicio/fecha_fin. Este
+                                         Column leía `fecha`, que no existe en la
+                                         respuesta, así que salía siempre vacío. -->
+                                    <Column field="fecha_inicio" header="Fecha Bloqueada" sortable>
                                         <template #body="slotProps">
                                             <span class="font-mono font-medium text-red-600 dark:text-red-400">
-                                                {{ formatDate(slotProps.data.fecha) }}
+                                                {{ formatDate(slotProps.data.fecha_inicio) }}
                                             </span>
+                                        </template>
+                                    </Column>
+
+                                    <Column field="motivo" header="Motivo">
+                                        <template #body="slotProps">
+                                            <span class="text-gray-600 dark:text-gray-300">{{ slotProps.data.motivo || '-' }}</span>
                                         </template>
                                     </Column>
 

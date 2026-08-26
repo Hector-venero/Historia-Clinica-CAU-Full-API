@@ -171,23 +171,13 @@ const eliminarFoto = async () => {
     <div class="max-w-5xl mx-auto p-4 md:p-6 space-y-6">
         <Toast />
 
-        <!-- Encabezado: el boton de guardar vive aca para que siga visible sin
-             tener que bajar hasta el final del formulario. -->
-        <header class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div>
-                <h1 class="text-2xl md:text-3xl font-bold text-surface-900 dark:text-surface-0 m-0">Mi perfil</h1>
-                <p class="text-sm text-surface-500 dark:text-surface-400 mt-1 mb-0">Tus datos personales y los que se imprimen en las recetas.</p>
-            </div>
-
-            <button
-                type="button"
-                :disabled="guardando"
-                class="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-white bg-primary-600 hover:bg-primary-700 disabled:opacity-60 disabled:cursor-not-allowed shadow-sm transition"
-                @click="actualizarPerfil"
-            >
-                <i :class="guardando ? 'pi pi-spin pi-spinner' : 'pi pi-check'"></i>
-                {{ guardando ? 'Guardando...' : 'Guardar cambios' }}
-            </button>
+        <!-- Un solo boton de guardar, al pie del formulario. Habia tambien uno
+             aca arriba, pensando en que no se perdiera de vista al scrollear,
+             pero en pantallas normales entran los dos a la vez y dos botones
+             identicos hacen dudar de si hacen lo mismo. -->
+        <header>
+            <h1 class="text-2xl md:text-3xl font-bold text-surface-900 dark:text-surface-0 m-0">Mi perfil</h1>
+            <p class="text-sm text-surface-500 dark:text-surface-400 mt-1 mb-0">Tus datos personales y los que se imprimen en las recetas.</p>
         </header>
 
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
@@ -320,9 +310,6 @@ const eliminarFoto = async () => {
                     </div>
                 </section>
 
-                <!-- Repetido al pie a proposito: el formulario es largo y en
-                     pantallas chicas el boton del encabezado ya no se ve al
-                     llegar al final. -->
                 <div class="flex justify-end">
                     <button
                         type="button"
