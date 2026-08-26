@@ -3,6 +3,7 @@
 | Documento | Qué contiene |
 |---|---|
 | [PENDIENTES.md](PENDIENTES.md) | **Lo que está abierto.** Empezar por acá |
+| [SAAS.md](SAAS.md) | Decisiones de arquitectura de la rama `saas/multi-tenant`: por qué una base por cliente, y las reglas que no se negocian |
 | [RECONCILIACION-FORK.md](RECONCILIACION-FORK.md) | Qué se trajo del fork de GeroGauna222, qué no, y qué se cambió al traerlo |
 | [MEJORAS-QA.md](MEJORAS-QA.md) | Registro cerrado de los 15 problemas de la pasada de QA del 25/08/2026 |
 
