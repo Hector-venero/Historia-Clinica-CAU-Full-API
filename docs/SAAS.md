@@ -198,6 +198,54 @@ cookie de drlopez -> drgarcia.localhost  401
 
 Y con `MULTI_TENANT=false`, el CAU sigue entrando por `localhost` como siempre.
 
+## Migraciones con varios consultorios
+
+```bash
+python /app/migrate.py              # una sola base (la del entorno)
+python /app/migrate.py --plataforma # solo el plano de control
+python /app/migrate.py --todos      # el plano de control y despues cada consultorio
+```
+
+`start.sh` elige según `MULTI_TENANT`. Sin el interruptor migra una sola base,
+exactamente como siempre.
+
+Es **el mismo runner**: `run_migrations()` acepta la base y el directorio como
+parámetros, así que los checksums, los reintentos de migraciones parciales y el
+lock valen igual para un consultorio que para el plano de control. No hay un
+segundo camino que aplique migraciones de otra manera y pueda divergir.
+
+Dos decisiones que están en el código:
+
+- **El lock lleva el nombre de la base.** Es lo que protege, y con un lock único
+  migrar a un consultorio bloquearía a los demás sin necesidad.
+- **Un consultorio que falle no aborta al resto.** Con veinte clientes, que el
+  primero tenga un problema no puede dejar a los otros diecinueve sin
+  actualizar. Se informan todos al final y se sale con código distinto de cero.
+
+Las migraciones del plano de control viven en `db/plataforma/migrations/`,
+aparte de las de los inquilinos: son esquemas distintos y no tienen por qué
+avanzar al mismo ritmo. `--todos` corre las de la plataforma primero, porque la
+lista de clientes sale de esa base.
+
+### Verificado sobre el stack
+
+Con tres consultorios y una migración de prueba:
+
+```
+--- clinicasur --- Aplicando: 20260827_prueba.sql  OK (1/1)
+--- drgarcia  --- Aplicando: 20260827_prueba.sql  OK (1/1)
+--- drlopez   --- Aplicando: 20260827_prueba.sql  OK (1/1)
+```
+
+La columna quedó en las tres bases y **no** en `hc_bfa`, que no es inquilino del
+plano de control. Y con un cliente apuntando a una base inexistente:
+
+```
+FALLO en roto: Unknown database 'hc_no_existe'
+   los otros tres se migraron igual
+   codigo de salida: 1
+```
+
 ## Pendiente legal
 
 Alojar datos de salud de terceros en Argentina cae bajo la **Ley 25.326**

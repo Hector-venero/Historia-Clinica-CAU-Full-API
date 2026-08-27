@@ -99,3 +99,41 @@ def test_no_hay_migraciones_fuera_del_directorio():
         "Archivos .sql en db/ que el runner nunca ejecuta. Si son migraciones, "
         "van en db/migrations/:\n  " + "\n  ".join(sueltos)
     )
+
+
+# ------------------------------------------------- migraciones del plano de control
+
+
+def test_las_migraciones_de_plataforma_van_en_su_directorio():
+    """Separadas de las de los inquilinos a proposito: son esquemas distintos y
+    no tienen por que avanzar al mismo ritmo. Una migracion del plano de control
+    mezclada en db/migrations/ se aplicaria a la base de cada consultorio."""
+    plataforma = _buscar_hacia_arriba("db/plataforma/migrations")
+
+    assert plataforma is not None, "Falta db/plataforma/migrations/"
+
+    sospechosas = [
+        a.name
+        for a in MIGRACIONES.glob("*.sql")
+        if "cliente" in a.read_text(encoding="utf-8").lower()
+        and "slugs_reservados" in a.read_text(encoding="utf-8").lower()
+    ]
+
+    assert not sospechosas, (
+        "Migraciones del plano de control dentro de db/migrations/:\n  "
+        + "\n  ".join(sospechosas)
+    )
+
+
+def test_las_migraciones_de_plataforma_tambien_llevan_fecha():
+    plataforma = _buscar_hacia_arriba("db/plataforma/migrations")
+    if plataforma is None:
+        return
+
+    sin_prefijo = [
+        a.name for a in plataforma.glob("*.sql") if not re.match(r"^\d{8}_", a.name)
+    ]
+
+    assert not sin_prefijo, (
+        "Migraciones de plataforma sin prefijo de fecha:\n  " + "\n  ".join(sin_prefijo)
+    )

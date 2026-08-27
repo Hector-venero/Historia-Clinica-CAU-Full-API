@@ -27,6 +27,8 @@ services:
       # punto de montaje en el arbol de fuentes del host (un archivo vacio de
       # root que termina apareciendo en git status).
       - ./db/init.sql:/esquema_base.sql:ro
+      # Migraciones del plano de control, separadas de las de los inquilinos.
+      - ./db/plataforma/migrations:/app/migraciones_plataforma:ro
     depends_on:
       db:
         condition: service_healthy

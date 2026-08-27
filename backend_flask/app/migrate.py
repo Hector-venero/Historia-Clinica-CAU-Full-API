@@ -50,8 +50,14 @@ MIGRATION_USER = os.getenv("DB_MIGRATION_USER") or "root"
 MIGRATION_PASSWORD = os.getenv("DB_MIGRATION_PASSWORD") or os.getenv("MYSQL_ROOT_PASSWORD") or None
 
 
-def get_migration_connection(retries=10, delay=3):
-    """Conexion con privilegios de DDL para aplicar migraciones."""
+def get_migration_connection(retries=10, delay=3, db_nombre=None):
+    """Conexion con privilegios de DDL para aplicar migraciones.
+
+    Con `db_nombre` apunta a la base de un consultorio concreto en vez de a la
+    del entorno. Es lo que permite migrar a todos los inquilinos reutilizando
+    exactamente el mismo runner, en lugar de tener un segundo camino que aplique
+    las migraciones de otra manera.
+    """
     import time
 
     import mysql.connector
@@ -60,6 +66,8 @@ def get_migration_connection(retries=10, delay=3):
     if MIGRATION_PASSWORD is not None:
         config["user"] = MIGRATION_USER
         config["password"] = MIGRATION_PASSWORD
+    if db_nombre:
+        config["database"] = db_nombre
 
     ultimo_error = None
     for intento in range(retries):
@@ -288,22 +296,34 @@ def aplicar_migracion(cursor, migration):
     return aplicados, len(sentencias)
 
 
-def run_migrations():
-    if not MIGRATIONS_DIR.exists():
+def run_migrations(db_nombre=None, migrations_dir=None):
+    """Aplica las migraciones pendientes a una base.
+
+    Sin argumentos hace lo de siempre: la base y el directorio del entorno. Los
+    parametros existen para poder apuntarlo a la base de cada consultorio y al
+    directorio del plano de control, sin duplicar la logica de checksums,
+    reintentos y lock.
+    """
+    directorio = pathlib.Path(migrations_dir) if migrations_dir else MIGRATIONS_DIR
+
+    if not directorio.exists():
         # Fallar y no arrancar: si el bind-mount de migraciones no esta, la app
         # levantaria contra un esquema viejo sin que nadie se entere.
         raise RuntimeError(
-            f"No existe el directorio de migraciones ({MIGRATIONS_DIR}). "
+            f"No existe el directorio de migraciones ({directorio}). "
             f"Revisa el volumen en docker-compose.yml, o defini MIGRATIONS_DIR."
         )
 
-    conn = get_migration_connection()
+    conn = get_migration_connection(db_nombre=db_nombre)
     cursor = conn.cursor(buffered=True)
     tiene_lock = False
+    # El lock lleva el nombre de la base: es lo que protege, y con un lock unico
+    # migrar a un consultorio bloquearia a los demas sin necesidad.
+    lock = f"{LOCK_NAME}:{db_nombre or DB_CONFIG.get('database')}"
     try:
         # Lock de aplicacion: evita que dos arranques simultaneos (restart loop,
         # varios docker compose up) migren la misma DB a la vez.
-        cursor.execute("SELECT GET_LOCK(%s, %s)", (LOCK_NAME, LOCK_TIMEOUT))
+        cursor.execute("SELECT GET_LOCK(%s, %s)", (lock, LOCK_TIMEOUT))
         if cursor.fetchone()[0] != 1:
             raise RuntimeError("No se pudo tomar el lock de migraciones; hay otra corriendo.")
         tiene_lock = True
@@ -311,7 +331,7 @@ def run_migrations():
         ensure_schema_migrations(cursor)
         conn.commit()
 
-        for migration in sorted(MIGRATIONS_DIR.glob("*.sql")):
+        for migration in sorted(directorio.glob("*.sql")):
             sha = checksum(migration.read_text(encoding="utf-8"))
             previo = estado_migracion(cursor, migration.name)
 
@@ -344,7 +364,7 @@ def run_migrations():
     finally:
         if tiene_lock:
             try:
-                cursor.execute("SELECT RELEASE_LOCK(%s)", (LOCK_NAME,))
+                cursor.execute("SELECT RELEASE_LOCK(%s)", (lock,))
                 cursor.fetchone()
             except Error:
                 pass
@@ -352,7 +372,71 @@ def run_migrations():
         conn.close()
 
 
+# Migraciones del plano de control, separadas de las de los inquilinos: son
+# esquemas distintos y no tienen por que avanzar al mismo ritmo.
+MIGRACIONES_PLATAFORMA = os.getenv("MIGRACIONES_PLATAFORMA") or "/app/migraciones_plataforma"
+
+
+def migrar_plataforma():
+    """Pone al dia el plano de control."""
+    directorio = pathlib.Path(MIGRACIONES_PLATAFORMA)
+    if not directorio.exists():
+        print(f"Sin migraciones de plataforma ({directorio} no existe).")
+        return
+
+    db = os.getenv("PLATAFORMA_DB_NAME") or "plataforma"
+    print(f"\n=== Plano de control (db={db}) ===")
+    run_migrations(db_nombre=db, migrations_dir=directorio)
+
+
+def migrar_inquilinos():
+    """Aplica las migraciones pendientes a la base de cada consultorio.
+
+    Un consultorio que falle no aborta al resto: con veinte clientes, que el
+    primero tenga un problema no puede dejar a los otros diecinueve sin
+    actualizar. Se informan todos al final y se sale con codigo distinto de cero
+    si hubo alguno.
+    """
+    sys.path.insert(0, "/")
+    from app import plataforma
+
+    clientes = plataforma.listar()
+    if not clientes:
+        print("\nNo hay consultorios dados de alta.")
+        return []
+
+    fallados = []
+    print(f"\n=== {len(clientes)} consultorio(s) ===")
+    for cliente in clientes:
+        print(f"\n--- {cliente.slug} (db={cliente.db_nombre}) ---")
+        try:
+            run_migrations(db_nombre=cliente.db_nombre)
+        except Exception as exc:  # noqa: BLE001 - se informa y se sigue
+            print(f"  FALLO en {cliente.slug}: {exc}")
+            fallados.append((cliente.slug, exc))
+
+    if fallados:
+        print("\nConsultorios con migraciones fallidas:")
+        for slug, exc in fallados:
+            print(f"  - {slug}: {exc}")
+
+    return fallados
+
+
 if __name__ == "__main__":
     usuario = MIGRATION_USER if MIGRATION_PASSWORD is not None else DB_CONFIG.get("user")
+    argumentos = set(sys.argv[1:])
+
+    if "--plataforma" in argumentos:
+        migrar_plataforma()
+        raise SystemExit(0)
+
+    if "--todos" in argumentos:
+        # Primero el plano de control: la lista de consultorios sale de ahi, asi
+        # que su esquema tiene que estar al dia antes de recorrerla.
+        migrar_plataforma()
+        fallados = migrar_inquilinos()
+        raise SystemExit(1 if fallados else 0)
+
     print(f"Migraciones: {MIGRATIONS_DIR} (db={DB_CONFIG.get('database')}, usuario={usuario})")
     run_migrations()
