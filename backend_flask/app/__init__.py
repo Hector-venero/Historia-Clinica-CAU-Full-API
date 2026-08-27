@@ -60,6 +60,18 @@ app.config['FRONTEND_URL'] = os.getenv("FRONTEND_URL", "http://localhost")
 # cliente, y arma mal las URLs absolutas y los chequeos de HTTPS.
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
+# Resolucion del consultorio por subdominio. Se registra antes que nada porque
+# el cargador de usuario de Flask-Login consulta la base, y sin el cliente
+# resuelto no sabria a cual. Sin MULTI_TENANT=true no hace nada y todo se
+# comporta como una instalacion de un solo centro.
+#
+# La cookie de sesion se deja en el host exacto: NO se define
+# SESSION_COOKIE_DOMAIN. Con un dominio comodin (.miproducto.com) la sesion de un
+# consultorio viajaria a todos los demas.
+from app.tenancy import registrar as registrar_tenancy  # noqa: E402
+
+registrar_tenancy(app)
+
 # Seguridad HTTP (headers CSP, HTTPS, etc.)
 csp = {
     "default-src": ["'self'"],

@@ -53,6 +53,11 @@ services:
       # invalida todo lo cifrado: hay que descifrar con la vieja y recifrar.
       - PLATAFORMA_SECRET_KEY=${PLATAFORMA_SECRET_KEY:-}
       - DIAS_DE_PRUEBA=${DIAS_DE_PRUEBA:-30}
+      # Apagado por defecto: sin esto la aplicacion funciona como una
+      # instalacion de un solo centro, que es como corre el CAU.
+      - MULTI_TENANT=${MULTI_TENANT:-false}
+      - DOMINIO_BASE=${DOMINIO_BASE:-}
+      - TTL_CACHE_CLIENTES=${TTL_CACHE_CLIENTES:-60}
     command: bash -c "echo Starting Flask with ENV=$FLASK_ENV && /wait-for-it.sh db:3306 -- /app/start.sh"
     networks:
       - historia_net

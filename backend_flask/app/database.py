@@ -14,10 +14,41 @@ DB_CONFIG = {
     'database': os.getenv("DB_NAME", "hc_bfa")
 }
 
+
+def config_actual():
+    """A que base hay que conectarse para atender lo que se esta haciendo.
+
+    Este es el unico punto del sistema donde se decide eso, y por eso la
+    multi-tenencia se resuelve aca en vez de reescribir las 184 consultas: cada
+    una pide una conexion y no sabe —ni tiene por que saber— de quien es la base
+    que recibe.
+
+    Con un consultorio resuelto en el pedido, se usa el suyo. Sin el —una
+    instalacion de un solo centro, una migracion, un comando de consola, el hilo
+    que manda un correo— se cae a las variables de entorno, que es como funciono
+    siempre.
+    """
+    try:
+        from flask import g, has_request_context
+
+        if has_request_context():
+            cliente = getattr(g, "cliente", None)
+            if cliente is not None:
+                return cliente.config_db()
+    except Exception:
+        # Fuera de Flask (migrate.py corre como script suelto) o con el plano de
+        # control caido, se sigue con la configuracion del entorno en lugar de
+        # dejar la aplicacion sin base.
+        pass
+
+    return DB_CONFIG
+
+
 def get_connection(retries=5, delay=3):
+    config = config_actual()
     for attempt in range(retries):
         try:
-            conn = mysql.connector.connect(**DB_CONFIG)
+            conn = mysql.connector.connect(**config)
             if conn.is_connected():
                 return conn
         except Error as e:

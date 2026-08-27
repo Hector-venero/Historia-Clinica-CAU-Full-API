@@ -141,6 +141,63 @@ c_drlopez  -> hc_drlopez.usuarios     OK
 La contraseña de cada base queda cifrada en el plano de control (`gAAAAA…`) y la
 aplicación la recupera al conectarse.
 
+## Cómo se resuelve a qué base va cada pedido
+
+```
+drlopez.miproducto.com  ->  cliente 'drlopez'  ->  base hc_drlopez
+```
+
+`app/tenancy.py` extrae el slug del encabezado `Host`, busca el cliente en el
+plano de control (con caché) y lo deja en `flask.g`. **Nada más.** Quien decide
+la base es `database.get_connection()`, que ya era el único lugar del sistema que
+lo decidía: por eso las 184 consultas no se tocaron.
+
+Se registra antes que cualquier otro `before_request`, porque el cargador de
+usuario de Flask-Login consulta la base y sin el cliente resuelto no sabría a
+cuál.
+
+**El modo está apagado por defecto** (`MULTI_TENANT=false`). Sin el interruptor,
+todo se comporta como una instalación de un solo centro y la base sale de
+`DB_NAME`: es lo que mantiene al CAU funcionando con este mismo código.
+
+| Situación | Respuesta |
+|---|---|
+| `/api/health/` | 200 siempre — lo mira el monitoreo de la plataforma |
+| Host sin subdominio | 404 |
+| Consultorio inexistente | 404 (el mismo mensaje, para no poder enumerarlos) |
+| Consultorio suspendido | 402, sin borrar datos |
+| Sesión de otro consultorio | 401 |
+
+### La sesión queda atada a su consultorio
+
+La cookie va firmada con `SECRET_KEY`, que es de la plataforma y por lo tanto la
+misma para todos, y adentro solo lleva el id del usuario. Como cada base tiene su
+propio usuario 1, **una sesión de un consultorio autenticaba en otro**:
+comprobado reenviando la cookie a mano, respondía 200 como el admin del otro.
+
+En un navegador la cookie queda acotada al host y no viaja sola, pero eso es una
+defensa del navegador, no del sistema: una cookie robada servía en todos los
+consultorios, y bastaba con que alguien definiera `SESSION_COOKIE_DOMAIN` para
+romper el aislamiento entero.
+
+Ahora la sesión anota de qué consultorio es —vía la señal `user_logged_in`, para
+que valga para cualquier camino de login presente o futuro— y se rechaza si no
+coincide.
+
+### Verificado sobre el stack
+
+Dos consultorios, cada uno con un paciente **del mismo apellido**:
+
+```
+drlopez  busca "Perez" -> 1: ANA PEREZ    DNI 11111111
+drgarcia busca "Perez" -> 1: CARLOS PEREZ DNI 22222222
+
+cookie de drlopez -> drlopez.localhost   200
+cookie de drlopez -> drgarcia.localhost  401
+```
+
+Y con `MULTI_TENANT=false`, el CAU sigue entrando por `localhost` como siempre.
+
 ## Pendiente legal
 
 Alojar datos de salud de terceros en Argentina cae bajo la **Ley 25.326**
