@@ -22,7 +22,11 @@ onMounted(async () => {
         paciente.setPaciente(data.paciente);
         estado.value = 'listo';
 
-        setTimeout(() => router.replace('/portal'), 1500);
+        // Si venía de elegir un horario, se lo devuelve ahí para que confirme
+        // en vez de dejarlo en el buzón sin entender qué pasó con su turno.
+        const volver = sessionStorage.getItem('ficha-salud:volver');
+        sessionStorage.removeItem('ficha-salud:volver');
+        setTimeout(() => router.replace(volver || '/portal'), 1500);
     } catch (e) {
         estado.value = 'error';
         error.value = e?.response?.data?.error || 'No pudimos activar tu cuenta.';

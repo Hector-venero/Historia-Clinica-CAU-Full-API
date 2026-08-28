@@ -47,6 +47,11 @@ async function salir() {
                 </router-link>
 
                 <div class="flex items-center gap-2">
+                    <router-link to="/portal/buscar" class="inline-flex items-center gap-2 px-3 md:px-4 py-2 rounded-lg text-sm font-semibold text-white bg-primary-600 hover:bg-primary-700 transition no-underline">
+                        <i class="pi pi-calendar-plus"></i>
+                        <span class="hidden sm:inline">Sacar turno</span>
+                    </router-link>
+
                     <button
                         type="button"
                         class="w-9 h-9 rounded-lg flex items-center justify-center text-surface-600 dark:text-surface-300 hover:bg-surface-100 dark:hover:bg-surface-800 transition"

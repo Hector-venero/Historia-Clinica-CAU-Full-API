@@ -245,6 +245,19 @@ const router = createRouter({
             name: 'PortalVerificar',
             component: () => import('@/views/pages/portal/PortalVerificar.vue')
         },
+        // Buscar profesional y elegir horario se ven SIN sesión: alguien tiene
+        // que poder ver con quién puede atenderse, y si hay lugar, antes de
+        // decidir si se registra. Lo único que exige cuenta es confirmar.
+        {
+            path: '/portal/buscar',
+            name: 'PortalBuscar',
+            component: () => import('@/views/pages/portal/BuscarProfesional.vue')
+        },
+        {
+            path: '/portal/reservar/:clienteId/:usuarioId',
+            name: 'PortalReservar',
+            component: () => import('@/views/pages/portal/ReservarTurno.vue')
+        },
         {
             path: '/portal',
             component: () => import('@/layout/PortalLayout.vue'),
@@ -287,9 +300,12 @@ router.beforeEach(async (to) => {
     if (to.path.startsWith('/portal')) {
         const pacienteStore = usePacienteStore();
 
-        const publicasDelPortal = ['/portal/login', '/portal/registro'];
+        const publicasDelPortal = ['/portal/login', '/portal/registro', '/portal/buscar'];
         const esVerificacion = to.path.startsWith('/portal/verificar/');
-        if (publicasDelPortal.includes(to.path) || esVerificacion) return true;
+        // Elegir horario se ve sin cuenta; confirmarlo no. El backend es quien
+        // exige la sesión al reservar, así que acá no hace falta guardarla.
+        const esReserva = to.path.startsWith('/portal/reservar/');
+        if (publicasDelPortal.includes(to.path) || esVerificacion || esReserva) return true;
 
         if (!pacienteStore.autenticado && !pacienteStore.cerrandoSesion) {
             try {

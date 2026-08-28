@@ -1,7 +1,16 @@
 <script setup>
 import { computed, ref } from 'vue';
+import { useRoute } from 'vue-router';
 import portalService from '@/service/portalService';
 import logo from '@/assets/logo-ficha-salud.svg';
+
+const route = useRoute();
+
+// A dónde volver después de verificar el correo. Lo pone la pantalla de reserva
+// cuando alguien eligió horario sin tener cuenta.
+if (route.query.volver) {
+    sessionStorage.setItem('ficha-salud:volver', String(route.query.volver));
+}
 
 const form = ref({
     nombre: '',

@@ -50,5 +50,29 @@ export default {
      */
     descargarArchivo(id) {
         return api.get(`/portal/documentos/${id}/archivo`, { responseType: 'blob' });
+    },
+
+    // --- Turnos online ---
+    //
+    // El directorio y los horarios se consultan SIN sesión: alguien tiene que
+    // poder ver con quién puede atenderse, y si hay lugar, antes de decidir si
+    // se registra. Lo único que exige cuenta es confirmar.
+
+    profesionales(params) {
+        return api.get('/portal/profesionales', { params });
+    },
+
+    especialidades() {
+        return api.get('/portal/especialidades');
+    },
+
+    horarios(clienteId, usuarioId, fecha) {
+        return api.get(`/portal/profesionales/${clienteId}/${usuarioId}/horarios`, {
+            params: { fecha }
+        });
+    },
+
+    reservar(datos) {
+        return api.post('/portal/reservar', datos);
     }
 };
