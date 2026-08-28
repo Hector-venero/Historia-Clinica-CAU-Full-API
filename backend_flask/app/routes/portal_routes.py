@@ -207,3 +207,88 @@ def archivo(documento_id):
     return send_from_directory(
         carpeta, documento["archivo_nombre"], as_attachment=True
     )
+
+
+# ------------------------------------------------------ turnos online
+
+@bp_portal.get("/profesionales")
+def profesionales():
+    """Directorio de quienes aceptan turnos online.
+
+    **Sin sesion**: alguien tiene que poder ver con quien puede atenderse antes
+    de decidir si se registra. Devuelve solo lo que el profesional publico
+    explicitamente al activar su agenda.
+    """
+    from app import reservas
+
+    filas = reservas.buscar_profesionales(
+        texto=request.args.get("q"),
+        especialidad=request.args.get("especialidad"),
+    )
+    return jsonify(filas)
+
+
+@bp_portal.get("/especialidades")
+def especialidades():
+    from app import reservas
+
+    return jsonify(reservas.especialidades_disponibles())
+
+
+@bp_portal.get("/profesionales/<int:cliente_id>/<int:usuario_id>/horarios")
+def horarios(cliente_id, usuario_id):
+    """Horarios libres de un profesional para un dia.
+
+    Tambien sin sesion: ver si hay lugar es parte de decidir si vale la pena
+    registrarse. Lo que exige cuenta es reservar.
+    """
+    from app import reservas
+
+    try:
+        libres = reservas.horarios_libres(
+            cliente_id, usuario_id, request.args.get("fecha")
+        )
+    except reservas.ErrorReserva as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    return jsonify({"horarios": libres})
+
+
+@bp_portal.post("/reservar")
+@login_required
+@requiere_paciente
+def reservar():
+    """Crea el turno. Es lo unico de esta seccion que exige cuenta.
+
+    El turno se crea en la base del consultorio; el paciente vive en el plano del
+    portal. Todo ese cruce esta encapsulado en app/reservas.py.
+    """
+    from app import reservas
+
+    datos = request.get_json(silent=True) or {}
+
+    # La conversion va afuera del try que atrapa los errores de reserva: si un
+    # id no es numerico, eso es un pedido mal formado y no un horario ocupado.
+    # Con las dos cosas en el mismo try, un TypeError de adentro se reportaba
+    # como "datos incompletos" y ocultaba el error real.
+    try:
+        cliente_id = int(datos.get("cliente_id") or 0)
+        usuario_id = int(datos.get("usuario_id") or 0)
+    except (TypeError, ValueError):
+        return jsonify({"error": "Datos incompletos."}), 400
+
+    try:
+        resultado = reservas.reservar(
+            paciente=current_user,
+            cliente_id=cliente_id,
+            usuario_id=usuario_id,
+            fecha_inicio=datos.get("fecha_inicio"),
+            motivo=datos.get("motivo"),
+        )
+    except reservas.ErrorReserva as exc:
+        return jsonify({"error": str(exc)}), 409
+    except Exception:
+        current_app.logger.exception("Fallo la reserva de turno desde el portal")
+        return jsonify({"error": "No pudimos confirmar el turno."}), 500
+
+    return jsonify(resultado), 201

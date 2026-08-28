@@ -1,0 +1,27 @@
+-- Un profesional no puede tener dos turnos a la misma hora.
+--
+-- Hasta ahora eso se garantizaba en la aplicacion: un SELECT que buscaba
+-- solapamientos y despues un INSERT. Entre esas dos sentencias hay una ventana,
+-- y con reserva de turnos online se vuelve alcanzable de verdad: dos pacientes
+-- confirmando el mismo horario pasan los dos el SELECT antes de que cualquiera
+-- llegue al INSERT, y entran los dos.
+--
+-- Con el personal reservando desde una pantalla la ventana existia igual, pero
+-- hacia falta una coincidencia muy poco probable. Publicar la agenda la
+-- convierte en algo que va a pasar.
+--
+-- La comprobacion de la aplicacion se conserva: es la que da el mensaje util
+-- ("no esta disponible, proba estos horarios"). Esta restriccion es la red que
+-- ataja el caso que esa comprobacion no puede ver.
+--
+-- Un UNIQUE simple alcanza porque **cancelar un turno lo borra**: no hay columna
+-- de estado, asi que una fila existente siempre es un turno vigente y un horario
+-- liberado queda libre de verdad. Si algun dia la cancelacion pasa a ser un
+-- estado, esta restriccion hay que rehacerla.
+--
+-- Verificado antes de aplicarla: ninguna de las bases tiene turnos duplicados,
+-- asi que no puede fallar sobre datos existentes.
+--
+-- Una clausula por sentencia: ver la nota en 20260522_bfa_evoluciones_auditoria.sql
+
+ALTER TABLE turnos ADD UNIQUE KEY idx_turno_profesional_horario (usuario_id, fecha_inicio);
