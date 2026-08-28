@@ -26,6 +26,18 @@ const router = createRouter({
             name: 'ResetContraseña',
             component: () => import('@/views/pages/auth/ResetPassword.vue')
         },
+        // 🆕 Alta autoservicio. Vive en el dominio raíz de la plataforma, no en
+        // el de un consultorio: quien se registra todavía no tiene subdominio.
+        {
+            path: '/registro',
+            name: 'Registro',
+            component: () => import('@/views/pages/registro/Registro.vue')
+        },
+        {
+            path: '/verificar/:token',
+            name: 'VerificarRegistro',
+            component: () => import('@/views/pages/registro/Verificar.vue')
+        },
         // 🌐 App principal (protegida)
         {
             path: '/',
@@ -221,8 +233,10 @@ const router = createRouter({
 // backend antes de decidir. Ese pedido se hace una sola vez por sesión, porque
 // después el store ya tiene el usuario.
 router.beforeEach(async (to) => {
-    const publicPages = ['/auth/login', '/recuperar', '/logout'];
-    const isResetRoute = to.path.startsWith('/reset/');
+    const publicPages = ['/auth/login', '/recuperar', '/logout', '/registro'];
+    // El token va en la URL, así que la ruta no puede exigir sesión: quien
+    // verifica su correo todavía no tiene cuenta.
+    const isResetRoute = to.path.startsWith('/reset/') || to.path.startsWith('/verificar/');
     const authRequired = !publicPages.includes(to.path) && !isResetRoute;
     const userStore = useUserStore();
     const needsUser = authRequired || Boolean(to.meta.roles);

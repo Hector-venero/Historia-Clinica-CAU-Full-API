@@ -287,6 +287,52 @@ Y la marca pública, sin sesión, devuelve "Consultorio Odontologico Lopez" y
 "Centro Kinesico Garcia" según el subdominio. Con `MULTI_TENANT=false`, "CAU
 UNSAM" y los siete módulos.
 
+## Alta autoservicio
+
+Tres pasos, y una razón para cada uno:
+
+```
+1. Completa el formulario   → se guarda la intención, NO se crea nada
+2. Abre el enlace del mail  → recién ahí se crea la base
+3. Entra a su subdominio
+```
+
+**Crear la base en el paso 1 sería más simple, y está mal.** El formulario es
+público: un script podría llenar el servidor de bases vacías. Exigir la casilla
+de correo no lo hace imposible, pero lo vuelve caro y deja rastro.
+
+Otras decisiones que están en el código:
+
+- **El slug no se reserva al registrarse.** Si se reservara, bastaría con
+  registrar sin verificar nunca para bloquear un nombre para siempre. Se
+  comprueba de nuevo al crear la base, y si alguien lo tomó en el medio se avisa.
+- **La contraseña se hashea al registrarse**, no al crear la base: entre una cosa
+  y otra pueden pasar 48 horas y no hay motivo para que exista en claro.
+- **Un registro sin verificar del mismo slug o correo se reemplaza.** Sin eso,
+  equivocarse al escribir el correo dejaba la dirección bloqueada sin forma de
+  reintentar.
+- **El token no viaja en la respuesta del registro.** El único camino para seguir
+  es el correo, que es justamente lo que se está verificando.
+- **`/api/registro` es lo único exento de resolver consultorio**, con una lista
+  corta y cerrada en `tenancy.py` — no una regla general, para que agregar rutas
+  públicas sea una decisión explícita.
+
+**Un solo camino de alta.** `alta_cliente.dar_de_alta()` la usan el script de
+consola y el autoservicio. Dos caminos distintos terminarían divergiendo, y un
+día se descubriría que los consultorios creados por la web no tienen algo que sí
+tienen los otros.
+
+### Verificado de punta a punta
+
+```
+POST /api/registro         → 202, y hc_dentalsur NO existe   ← el punto
+POST /api/registro/verificar/<token> → estado: listo
+                             hc_dentalsur: 18 tablas
+login con la contraseña del formulario → 200
+su marca → "Consultorio Dental Sur"
+su sesión en otro consultorio → 401
+```
+
 ## Pendiente legal
 
 Alojar datos de salud de terceros en Argentina cae bajo la **Ley 25.326**

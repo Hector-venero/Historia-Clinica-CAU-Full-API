@@ -55,6 +55,7 @@ def build_cors_origins(environment, frontend_url, configured_origins):
 app = Flask(__name__)
 app.config.from_object(Config)
 app.config['FRONTEND_URL'] = os.getenv("FRONTEND_URL", "http://localhost")
+app.config['DOMINIO_BASE'] = os.getenv("DOMINIO_BASE", "")
 
 # Detras de nginx: sin esto Flask ve la IP y el esquema del proxy, no los del
 # cliente, y arma mal las URLs absolutas y los chequeos de HTTPS.
@@ -149,6 +150,7 @@ from app.routes.recetas_routes import bp_recetas
 from app.routes.comunicados_routes import bp_comunicados
 from app.routes.grupo_posteos_routes import bp_grupo_posteos
 from app.routes.publico_routes import bp_publico
+from app.routes.registro_routes import bp_registro
 
 app.register_blueprint(bp_auth)
 app.register_blueprint(bp_usuarios)
@@ -165,6 +167,7 @@ app.register_blueprint(bp_recetas)
 app.register_blueprint(bp_comunicados)
 app.register_blueprint(bp_grupo_posteos)
 app.register_blueprint(bp_publico)
+app.register_blueprint(bp_registro)
 
 # -------------------------
 # Servir fotos de usuario

@@ -169,7 +169,14 @@ def _crear_esquema_base(db_nombre, db_usuario, db_password):
     El tokenizador es el de migrate.py, que ya sabe de comillas, comentarios y
     apostrofes dentro de literales.
     """
-    from migrate import split_statements
+    # Segun desde donde se lo invoque, migrate.py es un modulo suelto (corriendo
+    # como script, con /app en sys.path) o parte del paquete (importado desde la
+    # aplicacion, que es como llega el alta autoservicio). El alta por consola
+    # funcionaba y la de la web fallaba con ModuleNotFoundError.
+    try:
+        from app.migrate import split_statements
+    except ImportError:
+        from migrate import split_statements
 
     if not os.path.exists(ESQUEMA_BASE):
         raise RuntimeError(
@@ -227,11 +234,16 @@ def _migrar(db_nombre):
     return resultado.stdout
 
 
-def _sembrar_admin(db_nombre, db_usuario, db_password, nombre, email, password_admin):
+def _sembrar_admin(db_nombre, db_usuario, db_password, nombre, email,
+                   password_admin=None, password_hash=None):
     """Crea el primer usuario del consultorio, con rol director.
 
     Usa el mismo hash que el resto del sistema (scrypt via werkzeug), no bcrypt:
     si no, el usuario no podria iniciar sesion.
+
+    Acepta el hash ya calculado para el alta autoservicio: ahi la contrasena se
+    hashea al registrarse y entre eso y la creacion de la base puede pasar un
+    dia, asi que no tiene por que existir en claro mientras tanto.
     """
     conn = mysql.connector.connect(
         host=os.getenv("DB_HOST", "db"),
@@ -247,7 +259,8 @@ def _sembrar_admin(db_nombre, db_usuario, db_password, nombre, email, password_a
             INSERT INTO usuarios (nombre, username, email, password_hash, rol, activo)
             VALUES (%s, %s, %s, %s, 'director', 1)
             """,
-            (nombre, "admin", email, generate_password_hash(password_admin, method="scrypt")),
+            (nombre, "admin", email,
+             password_hash or generate_password_hash(password_admin, method="scrypt")),
         )
         conn.commit()
         cur.close()
@@ -255,13 +268,23 @@ def _sembrar_admin(db_nombre, db_usuario, db_password, nombre, email, password_a
         conn.close()
 
 
-def dar_de_alta(slug, nombre, email, plan="basico", password_admin=None):
-    """Deja el consultorio listo para entrar. Devuelve el resumen del alta."""
+def dar_de_alta(slug, nombre, email, plan="basico", password_admin=None,
+                password_hash=None, dias_prueba=None):
+    """Deja el consultorio listo para entrar. Devuelve el resumen del alta.
+
+    Es el unico camino de alta: lo usan el script de consola y el registro
+    autoservicio. Dos caminos distintos terminarian divergiendo, y un dia se
+    descubriria que los consultorios creados por la web no tienen algo que si
+    tienen los otros.
+    """
     _validar(slug)
 
     db_nombre, db_usuario = _nombres_mysql(slug)
     db_password = _password_aleatoria()
-    password_admin = password_admin or _password_aleatoria(16)
+    # Con el hash ya calculado no hace falta inventar una contrasena: la eligio
+    # quien se registro y solo el la conoce.
+    if password_hash is None:
+        password_admin = password_admin or _password_aleatoria(16)
 
     conn = _conexion_admin()
     cur = conn.cursor()
@@ -273,7 +296,8 @@ def dar_de_alta(slug, nombre, email, plan="basico", password_admin=None):
 
         _crear_esquema_base(db_nombre, db_usuario, db_password)
         _migrar(db_nombre)
-        _sembrar_admin(db_nombre, db_usuario, db_password, nombre, email, password_admin)
+        _sembrar_admin(db_nombre, db_usuario, db_password, nombre, email,
+                       password_admin, password_hash)
 
         with plataforma.cursor_plataforma(commit=True) as (_c, pcur):
             pcur.execute(
@@ -284,7 +308,7 @@ def dar_de_alta(slug, nombre, email, plan="basico", password_admin=None):
                 VALUES (%s, %s, %s, 'prueba', %s,
                         DATE_ADD(CURDATE(), INTERVAL %s DAY), %s, %s, %s)
                 """,
-                (slug, nombre, email, plan, DIAS_DE_PRUEBA,
+                (slug, nombre, email, plan, dias_prueba or DIAS_DE_PRUEBA,
                  db_nombre, db_usuario, cifrar(db_password)),
             )
             cliente_id = pcur.lastrowid
@@ -307,13 +331,16 @@ def dar_de_alta(slug, nombre, email, plan="basico", password_admin=None):
         conn.close()
 
     return {
+        "cliente_id": cliente_id,
         "slug": slug,
         "nombre": nombre,
         "db_nombre": db_nombre,
         "db_usuario": db_usuario,
         "usuario_admin": "admin",
-        "password_admin": password_admin,
-        "dias_de_prueba": DIAS_DE_PRUEBA,
+        # None cuando la contrasena la eligio quien se registro: no se conoce ni
+        # se muestra.
+        "password_admin": password_admin if password_hash is None else None,
+        "dias_de_prueba": dias_prueba or DIAS_DE_PRUEBA,
     }
 
 

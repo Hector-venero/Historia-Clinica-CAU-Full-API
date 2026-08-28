@@ -153,6 +153,13 @@ def registrar(app):
         if request.path.startswith("/api/health/"):
             return None
 
+        # El alta autoservicio atiende en el dominio raiz: quien se registra
+        # todavia no tiene subdominio. Es una lista corta y cerrada, y no una
+        # regla general, para que agregar rutas publicas sea una decision
+        # explicita y no algo que pase sin que nadie lo mire.
+        if request.path.startswith("/api/registro"):
+            return None
+
         slug = slug_desde_host(request.headers.get("Host", ""))
         if not slug:
             return jsonify({
