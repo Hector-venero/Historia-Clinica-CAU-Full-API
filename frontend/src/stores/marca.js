@@ -12,13 +12,14 @@ import api from '@/api/axios';
  * que mostrar el nombre del consultorio antes de que nadie se autentique. Ese
  * endpoint devuelve solo nombre y logo, nada del plan ni del estado.
  *
- * Los valores por defecto son los del CAU: si la petición falla, la aplicación
- * sigue viéndose como siempre en vez de quedar sin encabezado.
+ * Los valores por defecto son los del producto: si la petición falla, la pantalla
+ * muestra "Ficha Salud" en vez de quedarse sin encabezado. Con un consultorio
+ * resuelto siempre gana el nombre que devuelve el backend.
  */
 export const useMarcaStore = defineStore('marca', {
     state: () => ({
-        nombre: 'Centro Asistencial Universitario UNSAM',
-        nombreCorto: 'CAU UNSAM',
+        nombre: 'Ficha Salud',
+        nombreCorto: 'Ficha Salud',
         logo: null,
         cargada: false
     }),

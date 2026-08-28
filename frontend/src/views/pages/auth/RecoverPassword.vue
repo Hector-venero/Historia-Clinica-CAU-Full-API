@@ -1,5 +1,5 @@
 <script setup>
-import logoPorDefecto from '@/assets/logo_unsam_sin_letras.png';
+import logoPorDefecto from '@/assets/logo-ficha-salud.svg';
 import { useMarcaStore } from '@/stores/marca';
 import FloatingConfigurator from '@/components/FloatingConfigurator.vue';
 import { ref, onMounted } from 'vue';
@@ -67,7 +67,7 @@ const irLogin = () => {
                     <!-- Formulario -->
                     <form @submit.prevent="recuperar" class="flex flex-col">
                         <label for="email" class="block text-surface-900 dark:text-surface-0 text-xl font-medium mb-2">Correo electrónico</label>
-                        <InputText id="email" v-model="email" type="email" placeholder="ejemplo@unsam.edu.ar" class="w-full md:w-[30rem] mb-8" required />
+                        <InputText id="email" v-model="email" type="email" placeholder="tu@correo.com" class="w-full md:w-[30rem] mb-8" required />
 
                         <Button label="Enviar enlace de recuperación" class="w-full mb-4" :disabled="loading" @click="recuperar">
                             <template v-if="loading"> <i class="pi pi-spin pi-spinner mr-2"></i> Enviando... </template>

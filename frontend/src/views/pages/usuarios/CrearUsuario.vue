@@ -24,7 +24,9 @@ const form = reactive({
     matricula_tipo: 'MN',
     matricula_numero: '',
     matricula_provincia: '',
-    lugar_atencion_nombre: 'CAU - UNSAM',
+    // Sin valor por defecto: lo carga cada consultorio. Precargarlo con el
+    // nombre de otro hacia que apareciera impreso en sus recetas.
+    lugar_atencion_nombre: '',
     lugar_atencion_direccion: '',
     lugar_atencion_contacto: '',
     lugar_atencion_email: ''

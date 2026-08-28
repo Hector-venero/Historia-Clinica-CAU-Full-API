@@ -1,5 +1,5 @@
 <script setup>
-import logoPorDefecto from '@/assets/logo_unsam_sin_letras.png';
+import logoPorDefecto from '@/assets/logo-ficha-salud.svg';
 import { useMarcaStore } from '@/stores/marca';
 import { ref, watch, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';

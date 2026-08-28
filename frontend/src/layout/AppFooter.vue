@@ -13,7 +13,7 @@ onMounted(() => marca.cargar());
          mantiene: el software es el mismo, lo que cambia es quién lo usa. -->
     <footer class="app-footer">
         <div class="footer-content">
-            © {{ anio }} <span class="brand">{{ marca.nombreCorto }}</span> — Sistema de Historia Clínica desarrollado por <span class="author">Héctor Venero</span> (UNSAM)
+            © {{ anio }} <span class="brand">{{ marca.nombreCorto }}</span> — con <span class="author">Ficha Salud</span>
         </div>
     </footer>
 </template>

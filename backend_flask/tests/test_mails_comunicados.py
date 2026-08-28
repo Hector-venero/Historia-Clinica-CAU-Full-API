@@ -56,7 +56,16 @@ def test_los_destinatarios_van_en_bcc(monkeypatch):
     assert mensaje.bcc == ["uno@cau.test", "dos@cau.test"]
     # En To va solo el remitente, nunca una direccion del equipo.
     assert mensaje.recipients == ["cau@unsam.test"]
-    assert mensaje.subject == "[CAU UNSAM] Cierre"
+
+    # El asunto lleva la marca de quien publica, para que se distinga de otro
+    # correo cualquiera en la bandeja. Se compara contra marca.nombre_corto() y
+    # no contra un texto fijo: el nombre depende del consultorio, y fijarlo hacia
+    # que renombrar el producto rompiera un test de comunicados.
+    from app import marca
+
+    with flask_app.test_request_context("/"):
+        esperada = marca.nombre_corto()
+    assert mensaje.subject == f"[{esperada}] Cierre"
 
 
 def test_sin_remitente_configurado_no_se_manda(monkeypatch):

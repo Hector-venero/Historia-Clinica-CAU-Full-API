@@ -6,7 +6,7 @@ import ComunicadosCampana from '@/components/ComunicadosCampana.vue';
 import { useRouter } from 'vue-router';
 import { onMounted } from 'vue';
 import { useMarcaStore } from '@/stores/marca';
-import logoPorDefecto from '@/assets/logo_unsam_sin_letras.png';
+import logoPorDefecto from '@/assets/logo-ficha-salud.svg';
 
 const { toggleMenu, toggleDarkMode, isDarkTheme } = useLayout();
 const router = useRouter();

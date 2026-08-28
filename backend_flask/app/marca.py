@@ -5,16 +5,26 @@ del entorno del proceso, que es lo mismo que decir "igual para todos". Con vario
 consultorios en la misma aplicacion eso ya no sirve: cada uno tiene su nombre en
 las recetas, su logo en la pantalla de entrada, su token del proveedor y su plan.
 
-**Siempre hay respaldo al entorno.** Sin un consultorio resuelto —una instalacion
-de un solo centro, un comando de consola, el hilo que manda un correo— se
-devuelven los valores de las variables de entorno, y los de por defecto son los
-del CAU. Es lo que mantiene esa instalacion funcionando sin cambiar una linea de
-su configuracion.
+**Siempre hay respaldo al entorno.** Sin un consultorio resuelto —el sitio
+publico, un comando de consola, el hilo que manda un correo— se devuelven los
+valores de las variables de entorno.
+
+Los valores por defecto son los del producto, **Ficha Salud**, y no los de ningun
+consultorio: sin inquilino, quien pregunta es la plataforma. Una instalacion de un
+solo centro (como la del CAU, que corre en `main`) define MARCA_NOMBRE y
+MARCA_NOMBRE_CORTO en su entorno.
+
+Con un consultorio resuelto el default no se usa nunca: gana `nombre_visible` de
+su configuracion y, si no lo cargo, el nombre con el que se dio de alta.
 """
 
 import os
 
 from app.utils.secretos import descifrar
+
+# El nombre del producto. Es lo que ve alguien que entra al sitio publico, antes
+# de pertenecer a ningun consultorio.
+NOMBRE_PRODUCTO = "Ficha Salud"
 
 # Modulos que un plan puede habilitar. El nombre es el que viaja al frontend.
 MODULOS_CONOCIDOS = (
@@ -70,7 +80,7 @@ def nombre():
         if config and config.get("nombre_visible"):
             return config["nombre_visible"]
         return cliente.nombre
-    return os.getenv("MARCA_NOMBRE") or "Centro Asistencial Universitario UNSAM"
+    return os.getenv("MARCA_NOMBRE") or NOMBRE_PRODUCTO
 
 
 def nombre_corto():
@@ -81,7 +91,7 @@ def nombre_corto():
     cliente = _cliente()
     if cliente is not None:
         return cliente.nombre
-    return os.getenv("MARCA_NOMBRE_CORTO") or "CAU UNSAM"
+    return os.getenv("MARCA_NOMBRE_CORTO") or NOMBRE_PRODUCTO
 
 
 def logo():
@@ -97,8 +107,9 @@ def lugar_atencion():
     """
     return {
         "nombre": _valor("lugar_nombre", "MARCA_LUGAR_NOMBRE"),
-        "direccion": _valor("lugar_direccion", "MARCA_LUGAR_DIRECCION",
-                            "Campus Miguelete - UNSAM"),
+        # Sin valor por defecto: un consultorio que no cargo su direccion no
+        # puede mostrar la de otro. Antes caia al campus de la UNSAM.
+        "direccion": _valor("lugar_direccion", "MARCA_LUGAR_DIRECCION"),
         "telefono": _valor("lugar_telefono", "MARCA_LUGAR_TELEFONO"),
         "email": _valor("lugar_email", "MARCA_LUGAR_EMAIL"),
     }

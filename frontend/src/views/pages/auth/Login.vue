@@ -1,5 +1,5 @@
 <script setup>
-import logoPorDefecto from '@/assets/logo_unsam_sin_letras.png';
+import logoPorDefecto from '@/assets/logo-ficha-salud.svg';
 import { useMarcaStore } from '@/stores/marca';
 import FloatingConfigurator from '@/components/FloatingConfigurator.vue';
 import api from '@/api/axios';
@@ -58,7 +58,7 @@ const irARecuperar = () => {
                 <div class="w-full bg-surface-0 dark:bg-surface-900 py-20 px-8 sm:px-20" style="border-radius: 53px">
                     <div class="text-center mb-8">
                         <img :src="marca.logo || logoPorDefecto" :alt="`Logo ${marca.nombreCorto}`" class="mb-6 w-20 mx-auto" />
-                        <div class="text-surface-900 dark:text-surface-0 text-3xl font-medium mb-4">Bienvenido al Sistema de <br />Historias Clínicas de {{ marca.nombreCorto }}</div>
+                        <div class="text-surface-900 dark:text-surface-0 text-3xl font-medium mb-4">Bienvenido a <br />{{ marca.nombreCorto }}</div>
                         <span class="text-muted-color font-medium">Iniciá sesión para continuar</span>
                     </div>
 

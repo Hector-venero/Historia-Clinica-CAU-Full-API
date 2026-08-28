@@ -1,12 +1,19 @@
-# Plataforma SaaS para consultorios
+# Ficha Salud — plataforma para consultorios
 
 Decisiones de arquitectura de la rama `saas/multi-tenant`. Están acá para no
 volver a discutirlas: cada una tiene el motivo y el número que la respalda.
 
 **Qué se busca:** vender el sistema como suscripción a consultorios chicos —un
 odontólogo, un kinesiólogo, un consultorio de dos o tres personas— que no pueden
-pagar un servidor propio ni quien lo mantenga. Referencia de mercado:
-medicloud.com.ar.
+pagar un servidor propio ni quien lo mantenga.
+
+**El producto se llama Ficha Salud** (`fichasalud.com.ar`). "CAU UNSAM" es el
+instituto donde se hizo la tesis; esto ya es propio. Falta verificar el dominio y
+hacer una búsqueda en el INPI antes de fijarlo, y reemplazar el logo provisorio
+(`frontend/src/assets/logo-ficha-salud.svg`) por un diseño real.
+
+Referencia de mercado: medicloud.com.ar. **Referencia, no molde**: se miran los
+problemas que resolvieron, no sus pantallas.
 
 **El CAU no se toca.** Sigue con su instalación de `main`. Esta rama construye
 una plataforma nueva; migrar el CAU es una decisión posterior.
