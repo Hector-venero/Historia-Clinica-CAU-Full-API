@@ -73,12 +73,18 @@ bash scripts/comparar_esquemas.sh   # Verifica que init.sql + migraciones y el
 ## Architecture
 
 ### Service Layout (docker-compose.yml)
-- **nginx** (port 80) — reverse proxy: `/api/` → Flask, `/uploads/` → static files from shared volume, `/` → frontend
+- **nginx** (port 80) — reverse proxy: `/api/` → Flask, `/` → frontend
 - **frontend** — Vue 3 app built inside Docker via multi-stage Dockerfile (do NOT build manually), served by Nginx at port 80
-- **web** — Flask + Gunicorn backend on port 5000; also exposed on host for dev testing
+- **web** — Flask + Gunicorn backend on port 5000, **publicado solo en `127.0.0.1`**
 - **db** — MySQL 8.0; initialized from `db/init.sql` on first run; backend waits via `wait-for-it.sh`
 
-All services share the `historia_net` Docker network. Persistent volumes: `db_data`, `uploads_data` (shared between `web` and `nginx`).
+All services share the `historia_net` Docker network. Persistent volumes: `db_data`, `uploads_data`.
+
+⚠️ **nginx ya NO sirve `/uploads/` ni monta ese volumen.** Publicaba los adjuntos clínicos sin autenticación: los mismos archivos que la API devolvía con 401 se descargaban con 200 sin sesión. Ahora los sirve solo Flask, que exige `@login_required`, y el volumen no se monta para que una configuración futura no pueda volver a exponerlos. Las rutas se arman en `utils/adjuntos.py`, nunca a mano.
+
+⚠️ **El puerto 5000 está atado a `127.0.0.1` a propósito.** Publicado en todas las interfaces es una puerta al backend que saltea nginx, y con él el HTTPS y el límite de tamaño de subida. Sigue sirviendo para depurar desde la propia máquina.
+
+`docker-compose.prod.yml` agrega los ajustes de producción de la plataforma (ver más abajo). Ojo: **`command` en un override de Compose reemplaza al de base, no se suma** — por eso el `command` de `db` allí repite la zona horaria y los timeouts.
 
 Ya no hay servicio `bfa-node`: el anclaje en blockchain dejó de usar un nodo Geth local y ahora consume la API oficial TSA de BFA (`BFA_TSA_URL`).
 
@@ -110,7 +116,8 @@ Key frontend libraries: PrimeVue 4, FullCalendar 5 (turnos/grupos), vee-validate
 - **`database.py`** — conexión cruda `mysql-connector-python` con reintentos (sin ORM), y el context manager **`db_cursor()`**, que es la forma preferida de hablar con la base: cierra conexión y cursor pase lo que pase. El patrón `conn = get_connection()` … `conn.close()` al final filtra la conexión ante cualquier excepción o salida temprana
 - **`auth.py`** — `Usuario` class (Flask-Login `UserMixin`). Las contraseñas se hashean con **scrypt** vía `werkzeug.security` (`generate_password_hash(..., method="scrypt")`), no con bcrypt: en la base se ven como `scrypt:32768:8:1$...`. `bcrypt` ni siquiera está en `requirements.txt`
 - **`routes/`** — un blueprint por dominio (todos bajo `/api/`): `auth`, `usuarios`, `pacientes`, `historias`, `turnos`, `disponibilidades`, `grupos`, `ausencias`, `blockchain`, `dashboard`, `health`, `recetas`, `comunicados`, `grupo_posteos`
-- **`utils/permisos.py`** — `@requiere_rol('director', ...)` decorator for route-level role enforcement
+- **`utils/permisos.py`** — `@requiere_rol('director', ...)` y `@requiere_modulo('recetas')`, que valida el plan del consultorio. Los dos en el servidor: ocultar una opción del menú no es un permiso
+- **`utils/adjuntos.py`** — arma las rutas de los archivos de evoluciones, con un segmento por consultorio. Nunca construir esas rutas a mano: el id de evolución es autoincremental **por base**, así que dos consultorios tendrían ambos la evolución 1
 - **`utils/validacion.py`** — shared password and email validation (8–64 chars, upper+lower+digit+symbol)
 - **`utils/bfa_client.py`** — cliente de la API TSA de BFA. Devuelve la respuesta cruda sin reintentar: distinguir `pending` de `failure` es de quien llama
 - **`utils/hashing.py`** — SHA-256 con **payload versionado** (ver Blockchain)
@@ -127,7 +134,86 @@ Key frontend libraries: PrimeVue 4, FullCalendar 5 (turnos/grupos), vee-validate
 
 Hay una sola fixture, `client`; para lo que necesite contexto de aplicación se importa `from app import app as flask_app` y se usa `with flask_app.app_context():`.
 
-Al 26/08/2026 son **226 tests** y corren en menos de un segundo.
+Al 28/08/2026 son **319 tests** y corren en menos de un segundo.
+
+## Plataforma multi-consultorio (rama `saas/multi-tenant`)
+
+`main` es la instalación del CAU: **un solo centro**. La rama `saas/multi-tenant`
+convierte el mismo código en una plataforma que atiende a varios consultorios,
+cada uno en su subdominio. Decisiones completas en [`docs/SAAS.md`](docs/SAAS.md);
+despliegue en [`deploy/PLATAFORMA.md`](deploy/PLATAFORMA.md).
+
+**Está apagado por defecto.** Sin `MULTI_TENANT=true` todo se comporta como
+siempre y la base sale de `DB_NAME`. Es lo que mantiene al CAU funcionando con
+este mismo código, y hay que preservarlo: cualquier cambio acá se prueba en los
+dos modos.
+
+### Aislamiento: una base por consultorio
+
+```
+drlopez.miproducto.com  ->  cliente 'drlopez'  ->  base hc_drlopez
+```
+
+`tenancy.py` extrae el slug del `Host`, busca el cliente en el plano de control
+(con caché de 60 s) y lo deja en `flask.g`. **Nada más.** Quien decide la base es
+`database.get_connection()`, que ya era el único lugar del sistema que lo hacía:
+por eso las ~184 consultas crudas **no se tocaron** y siguen sin saber que
+existen otros consultorios.
+
+Se descartó una base compartida con `cliente_id` aunque costaba lo mismo: habría
+exigido filtrar en las 184 consultas, y un solo `WHERE` olvidado le muestra a un
+consultorio los pacientes de otro, en silencio. Con bases separadas ese error es
+imposible. Cada cliente tiene además **su propio usuario de MySQL**, con permisos
+solo sobre su base, así una inyección SQL queda encerrada en ese consultorio.
+
+### Módulos backend de la plataforma
+
+- **`tenancy.py`** — resuelve el consultorio por subdominio. Se registra antes
+  que cualquier otro `before_request`: el cargador de usuario de Flask-Login
+  consulta la base y sin el cliente resuelto no sabría a cuál.
+- **`plataforma.py`** — acceso al plano de control (base `plataforma`). **No
+  contiene datos clínicos**: un error acá no puede exponer un paciente.
+- **`marca.py`** — nombre, logo, módulos y credenciales de QBI por consultorio,
+  siempre con respaldo al entorno para el modo de un solo centro.
+- **`alta_cliente.py`** — **el único camino de alta**. Lo usan el script de
+  consola y el registro autoservicio; dos caminos distintos divergirían.
+- **`registro.py`** — alta autoservicio con verificación por correo.
+- **`suscripcion.py`** — ciclo prueba → activo → suspendido → cancelado.
+- **`utils/secretos.py`** — cifrado Fernet de las credenciales por cliente.
+
+### Reglas que son fáciles de romper sin querer
+
+- **La cookie de sesión va al host exacto.** Nunca definir
+  `SESSION_COOKIE_DOMAIN`: con un dominio comodín la sesión de un consultorio
+  viaja a todos los demás. La sesión además guarda de qué consultorio es y se
+  rechaza si se presenta en otro.
+- **`@requiere_modulo` valida en el servidor.** Que el frontend oculte una
+  entrada del menú es presentación, no permiso.
+- **Suspender no bloquea la exportación.** `RUTAS_CON_CUENTA_SUSPENDIDA` deja
+  vivas la entrada, el estado, la marca y `/api/cuenta/exportar`: las historias
+  clínicas son del paciente, no del proveedor.
+- **Fuera del ciclo de request no hay inquilino.** Un hilo de correo o un cron no
+  tienen `flask.g`; hay que pasarles el cliente explícitamente.
+- **El token de QBI no cae al del sistema.** Un consultorio sin credenciales
+  propias recibe 503 en vez de emitir con la cuenta de otro.
+
+### Comandos
+
+```bash
+bash scripts/alta_cliente.sh <slug> "<Nombre>" <email>   # alta manual
+flask clientes                                           # listado y vencimientos
+flask cliente-estado <slug> suspendido --motivo "..."
+flask revisar-suscripciones [--dry-run]                  # cron diario
+flask cancelados-vencidos                                # solo lista; borrar es a mano
+bash scripts/backup_plataforma.sh [slug]                 # copia por consultorio
+bash scripts/restaurar_cliente.sh <slug> <archivo.sql.gz>
+```
+
+Los comandos `flask` corren desde `/` con `FLASK_APP=app.main`.
+
+**Un cambio de estado tarda hasta 60 s** en surtir efecto: el catálogo está
+cacheado en memoria y los comandos corren en otro proceso que el servidor web.
+Está documentado, no es un bug pendiente.
 
 ## Authentication & Roles
 
@@ -143,6 +229,13 @@ Session-based auth via Flask-Login (cookie). Four roles with descending privileg
 **Always enforce at both layers:**
 - Backend: `@login_required` + `@requiere_rol(...)` decorators from `utils/permisos.py`
 - Frontend: `meta: { roles: [...] }` on the route in `router/index.js`
+
+En la plataforma se suma una tercera dimensión: **el plan del consultorio**, con
+`@requiere_modulo(...)`. Un rol dice qué puede hacer una persona; un módulo, qué
+contrató el consultorio.
+
+⚠️ La cookie de sesión queda en el **host exacto**. No definir
+`SESSION_COOKIE_DOMAIN`.
 
 Routes with only `meta: { requiresAuth: true }` are accessible to all authenticated roles.
 
@@ -166,7 +259,18 @@ QBI_BASE_URL, QBI_TOKEN, QBI_CLIENT_ID, QBI_TIMEOUT
 CORS_ORIGINS                        # opcional; si falta se deriva de FRONTEND_URL
 DB_MIGRATION_USER, DB_MIGRATION_PASSWORD, MYSQL_ROOT_PASSWORD
 NGINX_CONF_FILE                     # default: ./nginx/default.conf
+# Plataforma multi-consultorio (rama saas/multi-tenant)
+MULTI_TENANT                        # false por defecto: modo un solo centro
+DOMINIO_BASE                        # de drlopez.miproducto.com extrae 'drlopez'
+PLATAFORMA_DB_NAME, PLATAFORMA_DB_USER, PLATAFORMA_DB_PASSWORD
+PLATAFORMA_SECRET_KEY               # cifra las credenciales por cliente (Fernet)
+DIAS_DE_PRUEBA, DIAS_AVISO_VENCIMIENTO, DIAS_RETENCION_CANCELADOS
+TTL_CACHE_CLIENTES                  # default 60s; es lo que tarda un cambio de estado
 ```
+
+⚠️ **Sin `DOMINIO_BASE`, cualquier host que apunte al servidor se interpreta como un consultorio.** Es obligatoria en producción.
+
+⚠️ **Sin `PLATAFORMA_SECRET_KEY` el arranque falla**, en vez de guardar las credenciales de las bases en claro. Rotarla invalida todo lo cifrado: hay que descifrar con la vieja y recifrar.
 
 ⚠️ **`QBI_BASE_URL` no tiene valor por defecto a propósito.** Antes caía al ambiente de homologación, así que olvidarla en producción emitía recetas contra el ambiente de pruebas sin avisar. Sin valor, el módulo responde 503.
 
@@ -253,7 +357,17 @@ Key tables and non-obvious design decisions:
 - **`comunicado_lecturas`** — estado de leído **por usuario**. La ausencia de fila significa no leído: no se escribe una fila por cada usuario al publicar. El autor se marca como lector en el mismo INSERT, si no el contador le queda en 1 apenas publica.
 - **`grupos_profesionales`** / **`grupo_miembros`** — grupos para agendas compartidas; `es_rehabilitacion` los distingue en la agenda. Los roles `director` y `area` gestionan la membresía.
 
-**Migraciones:** todo cambio de esquema va en `db/migrations/` (se aplica solo al arrancar). `db/init.sql` solo corre en base vacía. Los `DROP TABLE` viven en `db/dev_reset.sql`, separados a propósito: al convivir con `CREATE DATABASE`, `init.sql` parecía un script de setup inofensivo y correrlo a mano contra producción borraba la historia clínica.
+**Dos planos de datos en la plataforma.** `plataforma` (el plano de control: qué consultorios existen, su estado y dónde vive su base) y una `hc_<slug>` por consultorio con las historias clínicas. El plano de control **no contiene datos clínicos**: es lo que hace que un error ahí no pueda exponer un paciente.
+
+**Migraciones:** todo cambio de esquema va en `db/migrations/` (se aplica solo al arrancar). `db/init.sql` solo corre en base vacía. Las del plano de control van aparte, en `db/plataforma/migrations/`: son esquemas distintos y no tienen por qué avanzar al mismo ritmo. Una migración de la plataforma mezclada en `db/migrations/` se aplicaría a la base de cada consultorio, y hay un test que lo vigila.
+
+```bash
+python migrate.py              # una sola base (la del entorno)
+python migrate.py --plataforma # solo el plano de control
+python migrate.py --todos      # el plano de control y después cada consultorio
+```
+
+Es el **mismo runner** en los tres casos. Un consultorio que falle no aborta al resto: se informan todos al final y se sale con código distinto de cero. Los `DROP TABLE` viven en `db/dev_reset.sql`, separados a propósito: al convivir con `CREATE DATABASE`, `init.sql` parecía un script de setup inofensivo y correrlo a mano contra producción borraba la historia clínica.
 
 **Un `ALTER TABLE` por cláusula.** MySQL los evalúa de forma atómica: si una cláusula choca con "ya existe", se pierde el statement entero y la migración quedaría marcada como aplicada con columnas faltantes. El runner se niega a tolerar errores en un ALTER compuesto.
 

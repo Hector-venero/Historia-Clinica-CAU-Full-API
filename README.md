@@ -23,6 +23,7 @@ La solución integra un backend API en Flask, un frontend en Vue 3 (Vite + Prime
   - Contraseñas hasheadas con **scrypt** (`werkzeug.security`).
   - La sesión vive en una cookie HttpOnly; el rol **no** se guarda en `localStorage`.
   - CORS/CSP configurables por entorno.
+  - Los **adjuntos clínicos** se sirven solo a través de Flask, con sesión. nginx no los publica.
 
 ---
 
@@ -48,7 +49,7 @@ La solución integra un backend API en Flask, un frontend en Vue 3 (Vite + Prime
 graph TD
   Client["Frontend Vue 3 / Vite"] -->|HTTP| Nginx["Nginx Reverse Proxy"]
   Nginx -->|/api| Flask["Backend Flask API"]
-  Nginx -->|/uploads| Files["Adjuntos (volumen)"]
+  Flask --> Files["Adjuntos (volumen)"]
   Flask --> DB[("MySQL")]
   Flask -->|Opcional| TSA["BFA TSA API"]
   Flask -->|Opcional| QBI["QBI2 (recetas)"]
@@ -74,7 +75,8 @@ historia_clinica_bfa/
 ├── scripts/                     # Utilidades (comparar_esquemas.sh)
 ├── db/
 │   ├── init.sql                 # Esquema inicial (solo en base vacía)
-│   └── migrations/              # Cambios de esquema posteriores
+│   ├── migrations/              # Cambios de esquema posteriores
+│   └── plataforma/              # Plano de control (rama saas/multi-tenant)
 └── docker-compose.yml
 ```
 
@@ -179,6 +181,27 @@ En esta rama se realizó una migración completa para dejar de depender de un no
 3. Para verificar, el sistema consulta la TSA con el recibo **de ese anclaje**, no con el estado actual. El resultado tiene **tres estados, no dos**: `success` y `failure` son veredictos y se auditan; `pending` significa que el lote todavía no cerró y no concluye nada.
 
 También puede anclarse una **evolución individual**, con su propio hash y su propio recibo, para probar la integridad de un acto médico puntual sin depender del estado de la historia completa.
+
+---
+
+## 🏢 Versión plataforma (multi-consultorio)
+
+`main` es la instalación del **CAU**: un solo centro médico. La rama
+`saas/multi-tenant` convierte el mismo código en una plataforma que atiende a
+varios consultorios independientes, cada uno con su subdominio, su base de datos
+y su marca.
+
+La decisión que la ordena: **una base por consultorio, aplicación compartida.**
+Cuesta prácticamente lo mismo que una base compartida con `cliente_id` —una base
+vacía del sistema pesa 0,88 MB— y elimina la clase de error más grave en datos
+médicos: que un `WHERE` olvidado le muestre a un consultorio los pacientes de
+otro. Con bases separadas ese error es imposible: la conexión no ve la otra base.
+
+Está **apagada por defecto** (`MULTI_TENANT=false`), así que el mismo código
+sigue sirviendo la instalación del CAU sin cambios.
+
+- Arquitectura y decisiones: [`docs/SAAS.md`](docs/SAAS.md)
+- Despliegue: [`deploy/PLATAFORMA.md`](deploy/PLATAFORMA.md)
 
 ---
 

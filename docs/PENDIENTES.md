@@ -1,7 +1,11 @@
 # Pendientes
 
-Lo que está abierto al **26/08/2026**. Cada punto trae cómo se detectó y cómo
+Lo que está abierto al **28/08/2026**. Cada punto trae cómo se detectó y cómo
 reproducirlo, para no tener que volver a investigarlo desde cero.
+
+Los ítems tachados quedan un tiempo con la explicación de cómo se cerraron: en
+varios casos la conclusión fue distinta del reporte original, y esa corrección
+vale más que el ítem.
 
 El registro de lo ya resuelto está en [MEJORAS-QA.md](MEJORAS-QA.md) (los 15
 problemas de la pasada de QA del 25/08) y en el historial de commits.
@@ -67,7 +71,40 @@ de la conexión y de la carga inicial.
 
 ---
 
-## 5. Menores
+## 5. Plataforma: lo que quedó sin verificar
+
+La rama `saas/multi-tenant` está completa (F0–F8) pero hay cosas que **no se
+pueden probar sin un dominio real**. Están anotadas acá para que nadie las dé por
+verificadas.
+
+- **DNS comodín y certificado.** `nginx/plataforma.conf.example` se validó con
+  `nginx -t` dentro de la red de Docker —sintaxis y upstreams correctos— pero
+  nadie probó todavía un `https://consultorio.dominio-real.com`. Let's Encrypt
+  emite comodines **solo con desafío DNS-01**, no HTTP-01.
+
+  Lo primero a comprobar cuando haya dominio: que el encabezado `Host` llegue
+  intacto al backend. Es lo que decide a qué consultorio pertenece cada pedido.
+
+- **Un cambio de estado tarda hasta 60 s.** El catálogo de clientes está cacheado
+  en memoria (`TTL_CACHE_CLIENTES`) y los comandos de consola corren en otro
+  proceso que el servidor web, así que su invalidación no lo alcanza. Medido:
+  ~30 s. No se corrigió porque suspender por falta de pago no es una acción de
+  emergencia; el punto de cambio sería `tenancy._cache`.
+
+- **Migrar el CAU a la plataforma.** Se decidió dejarlo aparte: es la tesis y
+  está en producción, no conviene que dependa de una arquitectura recién
+  estrenada. Cuando la plataforma tenga rodaje se puede reconsiderar. Habría que
+  migrar sus adjuntos a la estructura por consultorio (`scripts/migrar_adjuntos.sh`
+  ya hace algo equivalente).
+
+- **Legal — Ley 25.326.** Alojar datos de salud **de terceros** cae bajo la ley de
+  datos sensibles. No cambia el código, pero sí el contrato y las condiciones del
+  servicio. Conviene averiguar qué implica **antes** de facturarle al primer
+  cliente.
+
+---
+
+## 6. Menores
 
 - **`finally` en las conexiones de las rutas restantes.** Seis archivos de
   `routes/` siguen con el patrón manual `get_connection()` … `close()`. Cierran
