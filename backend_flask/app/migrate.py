@@ -376,6 +376,9 @@ def run_migrations(db_nombre=None, migrations_dir=None):
 # esquemas distintos y no tienen por que avanzar al mismo ritmo.
 MIGRACIONES_PLATAFORMA = os.getenv("MIGRACIONES_PLATAFORMA") or "/app/migraciones_plataforma"
 
+# Migraciones del plano del paciente.
+MIGRACIONES_PORTAL = os.getenv("MIGRACIONES_PORTAL") or "/app/migraciones_portal"
+
 
 def migrar_plataforma():
     """Pone al dia el plano de control."""
@@ -386,6 +389,18 @@ def migrar_plataforma():
 
     db = os.getenv("PLATAFORMA_DB_NAME") or "plataforma"
     print(f"\n=== Plano de control (db={db}) ===")
+    run_migrations(db_nombre=db, migrations_dir=directorio)
+
+
+def migrar_portal():
+    """Pone al dia el plano del paciente."""
+    directorio = pathlib.Path(MIGRACIONES_PORTAL)
+    if not directorio.exists():
+        print(f"Sin migraciones de portal ({directorio} no existe).")
+        return
+
+    db = os.getenv("PORTAL_DB_NAME") or "portal"
+    print(f"\n=== Plano del paciente (db={db}) ===")
     run_migrations(db_nombre=db, migrations_dir=directorio)
 
 
@@ -431,10 +446,15 @@ if __name__ == "__main__":
         migrar_plataforma()
         raise SystemExit(0)
 
+    if "--portal" in argumentos:
+        migrar_portal()
+        raise SystemExit(0)
+
     if "--todos" in argumentos:
         # Primero el plano de control: la lista de consultorios sale de ahi, asi
         # que su esquema tiene que estar al dia antes de recorrerla.
         migrar_plataforma()
+        migrar_portal()
         fallados = migrar_inquilinos()
         raise SystemExit(1 if fallados else 0)
 

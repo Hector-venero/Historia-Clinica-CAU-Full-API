@@ -33,6 +33,8 @@ services:
       - ./db/init.sql:/esquema_base.sql:ro
       # Migraciones del plano de control, separadas de las de los inquilinos.
       - ./db/plataforma/migrations:/app/migraciones_plataforma:ro
+      # Migraciones del plano del paciente, separadas de las otras dos.
+      - ./db/portal/migrations:/app/migraciones_portal:ro
     depends_on:
       db:
         condition: service_healthy
@@ -58,6 +60,12 @@ services:
       # Cifra las credenciales que la plataforma guarda por cliente. Rotarla
       # invalida todo lo cifrado: hay que descifrar con la vieja y recifrar.
       - PLATAFORMA_SECRET_KEY=${PLATAFORMA_SECRET_KEY:-}
+      # Plano del paciente: su cuenta y el buzon de lo que le enviaron. Es una
+      # sola base compartida entre pacientes, y por eso tiene credenciales
+      # propias: quien atiende el portal no toca ninguna base clinica.
+      - PORTAL_DB_NAME=${PORTAL_DB_NAME:-portal}
+      - PORTAL_DB_USER=${PORTAL_DB_USER:-root}
+      - PORTAL_DB_PASSWORD=${PORTAL_DB_PASSWORD:-}
       - DIAS_DE_PRUEBA=${DIAS_DE_PRUEBA:-30}
       # Apagado por defecto: sin esto la aplicacion funciona como una
       # instalacion de un solo centro, que es como corre el CAU.

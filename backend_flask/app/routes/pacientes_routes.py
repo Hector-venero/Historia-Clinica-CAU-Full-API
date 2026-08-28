@@ -1,4 +1,4 @@
-from flask import Blueprint, request, jsonify, send_from_directory, send_file, current_app
+from flask import Blueprint, request, jsonify, send_from_directory, send_file, current_app, g
 from flask_login import login_required, current_user
 from app import marca
 from app.database import db_cursor
@@ -836,3 +836,120 @@ def dibujar_marca_agua(canvas, doc):
     canvas.drawCentredString(0, 0, texto)
 
     canvas.restoreState()
+
+# ==========================================================
+# 📤 Enviar un documento al paciente (portal de Ficha Salud)
+# ==========================================================
+
+@bp_pacientes.route('/api/pacientes/<int:paciente_id>/enviar_al_portal', methods=['POST'])
+@login_required
+def enviar_al_portal(paciente_id):
+    """Publica un estudio, receta o informe en el buzon del paciente.
+
+    Es **el unico punto** donde el sistema de un consultorio escribe en el plano
+    del paciente, y por eso esta acotado a una sola operacion explicita: alguien
+    del equipo decide, documento por documento, que sale del consultorio.
+
+    Lo que se envia se COPIA, no se referencia:
+
+      - El archivo va a uploads/_portal/<token>/, fuera de la carpeta del
+        consultorio. Si ese consultorio cancela y se borra su carpeta, lo que el
+        paciente ya recibio tiene que seguir estando.
+      - El nombre del consultorio y del profesional viajan como texto. Por lo
+        mismo: el paciente tiene que poder saber quien le mando su estudio
+        aunque ese consultorio ya no exista.
+
+    Si el paciente todavia no tiene cuenta, el documento queda esperando por su
+    numero de documento y aparece cuando se registra.
+    """
+    import shutil
+
+    from app import marca, portal
+    from app.utils.adjuntos import carpeta_portal, ruta_adjunto
+    from app.utils.correo import enviar_en_segundo_plano
+    from app.utils.mails_portal import mail_documento_enviado
+
+    datos = request.get_json(silent=True) or {}
+
+    tipo = (datos.get("tipo") or "informe").strip().lower()
+    titulo = (datos.get("titulo") or "").strip()
+    descripcion = (datos.get("descripcion") or "").strip() or None
+    evolucion_id = datos.get("evolucion_id")
+    nombre_archivo = (datos.get("archivo") or "").strip() or None
+
+    if not titulo:
+        return jsonify({"error": "El documento necesita un titulo."}), 400
+
+    with db_cursor() as (_conn, cursor):
+        cursor.execute("SELECT * FROM pacientes WHERE id = %s", (paciente_id,))
+        paciente = cursor.fetchone()
+
+    if not paciente:
+        return jsonify({"error": "Paciente no encontrado"}), 404
+
+    if not paciente.get("dni"):
+        # Sin documento no hay a quien dirigirlo: es la identidad con la que el
+        # paciente se registra en el portal.
+        return jsonify({
+            "error": "El paciente no tiene documento cargado.",
+            "detalle": "Es el dato con el que va a encontrar sus estudios.",
+        }), 400
+
+    # El archivo se copia a la carpeta del portal. Si falla la copia no se
+    # registra el envio: es preferible a dejar en el buzon un documento que
+    # apunta a un archivo que no existe.
+    archivo_token = None
+    if nombre_archivo and evolucion_id:
+        origen = ruta_adjunto(int(evolucion_id), nombre_archivo)
+        if not os.path.isfile(origen):
+            return jsonify({"error": "No se encontro el archivo adjunto."}), 404
+
+        archivo_token = portal.nuevo_token_archivo()
+        destino = carpeta_portal(archivo_token, crear=True)
+        try:
+            shutil.copy2(origen, destino / nombre_archivo)
+        except OSError:
+            current_app.logger.exception("No se pudo copiar el adjunto al portal")
+            return jsonify({"error": "No se pudo preparar el archivo."}), 500
+
+    try:
+        documento_id = portal.guardar_documento(
+            tipo_documento=paciente.get("tipo_documento") or "DNI",
+            numero_documento=paciente["dni"],
+            consultorio_slug=getattr(getattr(g, "cliente", None), "slug", "principal"),
+            consultorio_nombre=marca.nombre_corto(),
+            profesional_nombre=current_user.nombre,
+            tipo=tipo,
+            titulo=titulo,
+            descripcion=descripcion,
+            archivo_token=archivo_token,
+            archivo_nombre=nombre_archivo,
+        )
+    except portal.ErrorPortal as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    # Aviso por correo, sin adjuntar el documento: un estudio clinico en un mail
+    # viaja sin cifrar y queda en la bandeja de quien sea que lo reenvie.
+    if paciente.get("email"):
+        dominio = (current_app.config.get("DOMINIO_BASE") or "").strip().strip(".")
+        url_portal = f"https://mi.{dominio}" if dominio else "http://mi.localhost:5173"
+        mensaje = mail_documento_enviado(
+            destinatario=paciente["email"],
+            nombre_paciente=paciente.get("nombre") or "",
+            consultorio=marca.nombre_corto(),
+            tipo=tipo,
+            titulo=titulo,
+            url_portal=url_portal,
+        )
+        if mensaje is not None:
+            enviar_en_segundo_plano(mensaje)
+
+    return jsonify({
+        "mensaje": "Enviado al portal del paciente",
+        "documento_id": documento_id,
+        # Le dice al profesional si el paciente lo va a ver ya o cuando se
+        # registre. Sin esto parece que no llego.
+        "tiene_cuenta": portal.buscar_por_documento(
+            paciente.get("tipo_documento") or "DNI", paciente["dni"]
+        ) is not None,
+    }), 201

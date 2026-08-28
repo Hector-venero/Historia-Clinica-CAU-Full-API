@@ -88,7 +88,10 @@ def slug_desde_host(host):
     # Un subdominio de varios niveles (a.b.miproducto.com) no es un cliente.
     if not etiqueta or "." in etiqueta:
         return None
-    if etiqueta in ("www", "api", "app"):
+    # Subdominios del producto, no de un cliente. `mi` es el portal del
+    # paciente: si resolviera como consultorio, buscaria un cliente con ese slug
+    # y devolveria 404 antes de llegar a las rutas del portal.
+    if etiqueta in ("www", "api", "app", "mi"):
         return None
 
     return etiqueta
@@ -113,6 +116,11 @@ RUTAS_CON_CUENTA_SUSPENDIDA = (
 
 def _permitido_estando_suspendido(path):
     return path.startswith(RUTAS_CON_CUENTA_SUSPENDIDA)
+
+
+# Lo unico que atiende una sesion de paciente. Todo lo demas es el sistema de
+# los consultorios, donde un paciente no tiene nada que hacer.
+RUTAS_DEL_PORTAL = ("/api/portal", "/api/publico/marca", "/api/health/")
 
 
 def _desde_cache(slug):
@@ -162,6 +170,32 @@ def registrar(app):
     """
 
     @app.before_request
+    def _rechazar_paciente_fuera_del_portal():
+        """Una sesion de paciente no vale en el sistema de un consultorio.
+
+        Sin esto, `load_user` devuelve un Paciente, Flask-Login lo da por
+        autenticado y @login_required lo deja pasar: comprobado, la cookie de un
+        paciente devolvia 200 en /api/pacientes de un consultorio, o sea el
+        listado completo de pacientes de esa clinica.
+
+        Son dos poblaciones de usuarios distintas sobre la misma aplicacion, y
+        `login_required` solo sabe si hay alguien autenticado, no quien. La
+        comprobacion simetrica —personal en el portal— la hace @requiere_paciente.
+
+        Se mira la sesion cruda y no `current_user` a proposito: leer
+        current_user aca forzaria a cargar el usuario antes de que este resuelto
+        el consultorio, que es justo lo que el before_request de abajo hace.
+        """
+        if request.path.startswith(RUTAS_DEL_PORTAL):
+            return None
+
+        identificador = session.get("_user_id")
+        if isinstance(identificador, str) and identificador.startswith("p:"):
+            return jsonify({"error": "No autorizado"}), 401
+
+        return None
+
+    @app.before_request
     def _resolver_cliente():
         g.cliente = None
 
@@ -179,6 +213,13 @@ def registrar(app):
         # regla general, para que agregar rutas publicas sea una decision
         # explicita y no algo que pase sin que nadie lo mire.
         if request.path.startswith("/api/registro"):
+            return None
+
+        # El portal del paciente tampoco: un paciente no pertenece a ningun
+        # consultorio, y lo que se busca es justamente que vea junto lo que le
+        # mandaron varios. Sus datos viven en el plano del portal, al que se
+        # llega por app/portal.py y nunca por la conexion del inquilino.
+        if request.path.startswith("/api/portal"):
             return None
 
         slug = slug_desde_host(request.headers.get("Host", ""))

@@ -61,6 +61,31 @@ def carpeta_evolucion(evolucion_id, crear=False):
     return carpeta
 
 
+# Carpeta de los archivos que ya son del paciente, fuera del arbol de cualquier
+# consultorio.
+#
+# Empieza con guion bajo a proposito: un slug no puede empezar asi (el patron
+# exige alfanumerico), de modo que ningun consultorio puede llamarse `_portal` y
+# terminar compartiendo carpeta con el buzon de los pacientes.
+SEGMENTO_PORTAL = "_portal"
+
+
+def carpeta_portal(token, crear=False):
+    """Directorio de un adjunto enviado a un paciente.
+
+    Se identifica por un token aleatorio y no por el documento de la persona: la
+    ruta de un archivo no puede permitir averiguar de quien es.
+
+    Vive fuera de la carpeta del consultorio que lo envio porque el archivo pasa
+    a ser del paciente. Si ese consultorio cancela y se borra su carpeta, lo que
+    ya recibio tiene que seguir estando.
+    """
+    carpeta = carpeta_base() / SEGMENTO_PORTAL / str(token)
+    if crear:
+        os.makedirs(carpeta, exist_ok=True)
+    return carpeta
+
+
 def ruta_adjunto(evolucion_id, nombre_archivo):
     """Ruta completa de un adjunto concreto."""
     return carpeta_evolucion(evolucion_id) / nombre_archivo

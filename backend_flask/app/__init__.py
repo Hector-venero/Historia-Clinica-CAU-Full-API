@@ -108,6 +108,24 @@ login_manager.login_view = None
 
 @login_manager.user_loader
 def load_user(user_id):
+    """Resuelve la sesion a un usuario del personal o a un paciente.
+
+    Son dos entidades distintas, en bases distintas, y el id 1 existe en las dos:
+    el director de un consultorio y algun paciente. Por eso el identificador que
+    viaja en la sesion lleva el prefijo `p:` cuando es un paciente.
+
+    El prefijo se decide al iniciar sesion (`Paciente.get_id()`) y no se deduce
+    del host: si dependiera del subdominio, un mismo identificador significaria
+    cosas distintas segun por donde entrara el pedido.
+    """
+    if isinstance(user_id, str) and user_id.startswith("p:"):
+        from app import portal
+
+        try:
+            return portal.buscar_por_id(int(user_id[2:]))
+        except (ValueError, TypeError):
+            return None
+
     conn = get_connection()
     try:
         cursor = conn.cursor(dictionary=True)
@@ -152,6 +170,7 @@ from app.routes.grupo_posteos_routes import bp_grupo_posteos
 from app.routes.publico_routes import bp_publico
 from app.routes.registro_routes import bp_registro
 from app.routes.cuenta_routes import bp_cuenta
+from app.routes.portal_routes import bp_portal
 
 app.register_blueprint(bp_auth)
 app.register_blueprint(bp_usuarios)
@@ -170,6 +189,7 @@ app.register_blueprint(bp_grupo_posteos)
 app.register_blueprint(bp_publico)
 app.register_blueprint(bp_registro)
 app.register_blueprint(bp_cuenta)
+app.register_blueprint(bp_portal)
 
 # -------------------------
 # Servir fotos de usuario
