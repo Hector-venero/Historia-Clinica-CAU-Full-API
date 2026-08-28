@@ -1,0 +1,109 @@
+# Desplegar la plataforma
+
+Cómo poner en marcha la versión multi-consultorio en un VPS. Es distinto del
+despliegue del CAU, que sigue siendo una instalación de un solo centro y no
+cambia.
+
+## Lo que hace falta
+
+- Un VPS con Docker. **4 GB alcanzan para decenas de consultorios**: el stack
+  entero ocupa ~510 MB y cada consultorio suma ~1 MB de esquema más sus datos.
+- Un dominio propio.
+- Un registro DNS **comodín**: `*.miproducto.com` → la IP del servidor. Es lo
+  que hace que cada consultorio tenga su dirección sin tocar el DNS por cliente.
+
+## Certificado
+
+Let's Encrypt emite certificados comodín **solo con desafío DNS-01**, no con
+HTTP-01: hay que probar el control del dominio, no el de una URL.
+
+```bash
+certbot certonly --manual --preferred-challenges=dns \
+        -d miproducto.com -d '*.miproducto.com'
+```
+
+Con `--manual` hay que repetirlo cada 90 días, que es una forma segura de que un
+día se venza sin que nadie se acuerde. Si el proveedor de DNS tiene plugin de
+certbot, conviene usarlo y dejar la renovación automática.
+
+## Puesta en marcha
+
+```bash
+cp env.example .env          # completar; ver más abajo
+cp nginx/plataforma.conf.example nginx/plataforma.conf
+sed -i 's/miproducto.com/TU-DOMINIO.com/g' nginx/plataforma.conf
+
+export NGINX_CONF_FILE=./nginx/plataforma.conf
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+```
+
+El arranque aplica las migraciones del plano de control y después las de cada
+consultorio (`migrate.py --todos`). Si alguna falla, el contenedor no levanta.
+
+### Variables que no pueden faltar
+
+| Variable | Por qué |
+|---|---|
+| `MULTI_TENANT=true` | Sin esto se comporta como una instalación de un solo centro |
+| `DOMINIO_BASE` | De `drlopez.miproducto.com` extrae `drlopez`. Sin definirlo, **cualquier** host que apunte al servidor se interpreta como un consultorio |
+| `PLATAFORMA_SECRET_KEY` | Cifra las credenciales de cada base. Sin ella el arranque falla en lugar de guardarlas en claro |
+| `MYSQL_ROOT_PASSWORD` | Lo usan el alta de consultorios y los backups |
+| `MAIL_*` | Sin remitente no salen ni la verificación del registro ni los avisos de vencimiento |
+
+## Tareas programadas
+
+```cron
+# Avisos de vencimiento y suspensión de pruebas vencidas
+0 8 * * *  cd /srv/plataforma && docker compose exec -T web sh -c 'cd / && FLASK_APP=app.main flask revisar-suscripciones'
+
+# Copia de seguridad de todo
+0 3 * * *  cd /srv/plataforma && bash scripts/backup_plataforma.sh
+```
+
+## Copias de seguridad
+
+```bash
+bash scripts/backup_plataforma.sh              # plano de control + cada consultorio
+bash scripts/backup_plataforma.sh drlopez      # uno solo
+```
+
+Se hace **una copia por consultorio** y no un volcado de todo junto. Es la
+ventaja concreta de tener una base por cliente: restaurar a uno solo no obliga a
+tocar a los demás, que es exactamente lo que se necesita cuando alguien borra
+algo por error un martes a la tarde.
+
+Cada copia se verifica al generarla: que no esté vacía y que termine con
+`Dump completed`. `mysqldump` puede salir con código 0 y dejar un volcado
+truncado si se corta la conexión, y eso solo se descubre el día que hace falta.
+
+### Restaurar
+
+```bash
+bash scripts/restaurar_cliente.sh drlopez /var/backups/plataforma/drlopez/drlopez_2026-08-29_03-00.sql.gz
+```
+
+Pide escribir el slug para confirmar, y la base la busca en el plano de control y
+no en el nombre del archivo: un archivo se puede renombrar, y restaurar sobre la
+base equivocada no tiene arreglo.
+
+**Probado de punta a punta**: se borró el paciente de un consultorio, se
+restauró desde la copia, el paciente volvió y los otros cuatro consultorios no
+se tocaron.
+
+Un backup que nunca se restauró no es un backup: es un archivo. Conviene repetir
+esta prueba cada tanto sobre un consultorio de mentira.
+
+## Lo que no está verificado
+
+Todo lo de arriba corre y está probado **salvo el DNS comodín y el certificado**,
+que necesitan un dominio real. La configuración de nginx sí se validó con
+`nginx -t` dentro de la red de Docker: la sintaxis y los upstreams están bien,
+pero nadie probó todavía un `https://consultorio.dominio-real.com`.
+
+Cuando haya dominio, lo primero a comprobar es que el encabezado `Host` llegue
+intacto al backend: es lo que decide a qué consultorio pertenece cada pedido.
+
+```bash
+curl -s https://drlopez.TU-DOMINIO.com/api/publico/marca
+# tiene que devolver el nombre de ESE consultorio
+```

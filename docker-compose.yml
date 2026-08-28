@@ -9,7 +9,11 @@ services:
     container_name: historia_web
     restart: always
     ports:
-      - "5000:5000" # Puerto para desarrollo local
+      # Atado a localhost a proposito. Sin el 127.0.0.1, Docker publica el
+      # puerto en TODAS las interfaces y abre una puerta al backend que saltea
+      # nginx, y con el, el HTTPS y el limite de tamano de subida. Sigue
+      # sirviendo para depurar desde la propia maquina.
+      - "127.0.0.1:5000:5000"
     volumes:
       - ./backend_flask/app:/app
       - uploads_data:/app/uploads # donde Flask guarda archivos subidos

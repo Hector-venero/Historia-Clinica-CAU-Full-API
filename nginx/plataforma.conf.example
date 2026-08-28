@@ -1,0 +1,120 @@
+# Nginx de la plataforma: un dominio raiz y un subdominio por consultorio.
+#
+#   miproducto.com              -> sitio publico: que es, precios, registro
+#   drlopez.miproducto.com      -> el sistema del consultorio Lopez
+#   kinesur.miproducto.com      -> el del Centro Kinesico Sur
+#
+# Los dos bloques sirven la MISMA aplicacion. Quien decide a que base conectarse
+# es el backend, a partir del encabezado Host (ver app/tenancy.py). Por eso lo
+# unico que nginx tiene que hacer bien es **no romper ese encabezado**.
+#
+# Uso: copiar a nginx/plataforma.conf, reemplazar miproducto.com por el dominio
+# real, y apuntar NGINX_CONF_FILE a ese archivo.
+#
+# Requiere:
+#   - Un registro DNS comodin:  *.miproducto.com  ->  la IP del servidor
+#   - Un certificado comodin. Let's Encrypt lo emite solo con desafio DNS-01,
+#     no con HTTP-01: hay que probar el control del dominio, no de una URL.
+#
+#       certbot certonly --manual --preferred-challenges=dns \
+#               -d miproducto.com -d '*.miproducto.com'
+#
+#     Con un proveedor de DNS soportado se automatiza la renovacion; con
+#     --manual hay que repetirlo cada 90 dias, que es una forma segura de que
+#     un dia se venza sin que nadie se acuerde.
+
+# ---------------------------------------------------------------- HTTP -> HTTPS
+
+server {
+    listen 80;
+    server_name miproducto.com *.miproducto.com;
+
+    # El desafio de certbot tiene que seguir viajando por HTTP.
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+# ------------------------------------------------- consultorios (subdominios)
+
+server {
+    listen 443 ssl;
+    http2 on;
+
+    # El comodin va primero: nginx elige el server_name mas especifico, asi que
+    # el bloque del dominio raiz de mas abajo gana para miproducto.com aunque
+    # este despues.
+    server_name *.miproducto.com;
+
+    ssl_certificate     /etc/letsencrypt/live/miproducto.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/miproducto.com/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_prefer_server_ciphers off;
+
+    client_max_body_size 20M;
+
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+    # HSTS incluye los subdominios: cada consultorio es uno.
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+
+    location /api/ {
+        proxy_pass http://web:5000/api/;
+
+        # $host y no $proxy_host: ES el dato que decide a que consultorio
+        # pertenece el pedido. Si se reescribe, todos los subdominios llegan al
+        # backend como el mismo y la separacion entre clientes desaparece.
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # La exportacion de datos arma un ZIP con toda la base y los adjuntos:
+        # con el timeout por defecto (60s) se cortaria en un consultorio grande.
+        proxy_read_timeout 300s;
+    }
+
+    # NO hay `location /uploads/`. Los adjuntos clinicos se sirven solo por
+    # Flask, que exige sesion. Servirlos desde nginx los dejaba publicos: es el
+    # agujero que se cerro en la primera fase de este trabajo.
+
+    location / {
+        proxy_pass http://frontend:80;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+
+# ------------------------------------------------------ sitio publico (raiz)
+
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name miproducto.com www.miproducto.com;
+
+    ssl_certificate     /etc/letsencrypt/live/miproducto.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/miproducto.com/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+
+    # El dominio raiz solo atiende el alta autoservicio. El resto de la API
+    # necesita un consultorio, y sin subdominio el backend responde 404.
+    location /api/registro {
+        proxy_pass http://web:5000/api/registro;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 120s;   # crear una base tarda unos segundos
+    }
+
+    location / {
+        proxy_pass http://frontend:80;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}

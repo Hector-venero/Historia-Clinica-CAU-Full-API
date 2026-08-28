@@ -392,6 +392,44 @@ Con `dentalsur` suspendido y un paciente cargado:
 En el ZIP estaba el paciente cargado, y `csv/usuarios.csv` **sin** ninguna
 columna de contraseña. Al reactivar, todo volvió a responder.
 
+## Despliegue
+
+La guía operativa está en [`deploy/PLATAFORMA.md`](../deploy/PLATAFORMA.md).
+Lo que importa saber acá:
+
+- **DNS comodín** `*.dominio` → la IP. Es lo que da una dirección a cada
+  consultorio sin tocar el DNS por cliente.
+- **Certificado comodín**: Let's Encrypt lo emite solo con desafío **DNS-01**,
+  no HTTP-01. Hay que probar el control del dominio, no el de una URL.
+- `nginx/plataforma.conf.example` sirve el dominio raíz (registro) y los
+  subdominios (los consultorios) desde la misma aplicación. Lo único que nginx
+  tiene que hacer bien es **no tocar el encabezado `Host`**: es lo que decide a
+  qué consultorio pertenece cada pedido.
+- El puerto 5000 quedó atado a `127.0.0.1`. Publicado en todas las interfaces
+  era una puerta al backend que salteaba nginx, y con él el HTTPS y el límite de
+  subida.
+
+### Copias de seguridad
+
+**Una copia por consultorio**, no un volcado de todo junto. Es la ventaja
+concreta de tener una base por cliente: restaurar a uno solo no obliga a tocar a
+los demás.
+
+Cada copia se verifica al generarla —que no esté vacía y que termine con
+`Dump completed`—. `mysqldump` puede salir con código 0 y dejar un volcado
+truncado, y eso solo se descubre el día que hace falta.
+
+**Restauración probada de punta a punta**: se borró el paciente de `dentalsur`,
+se restauró desde la copia, el paciente volvió y los otros cuatro consultorios
+no se tocaron.
+
+### Lo que NO está verificado
+
+El DNS comodín y el certificado necesitan un dominio real. La configuración de
+nginx sí se validó con `nginx -t` dentro de la red de Docker, así que la sintaxis
+y los upstreams están bien — pero nadie probó todavía un
+`https://consultorio.dominio-real.com`.
+
 ## Pendiente legal
 
 Alojar datos de salud de terceros en Argentina cae bajo la **Ley 25.326**

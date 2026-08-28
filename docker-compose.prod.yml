@@ -1,0 +1,62 @@
+# Ajustes de la plataforma en produccion.
+#
+# Se combina con docker-compose.yml, no lo reemplaza:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#
+# Lo que cambia respecto del entorno de trabajo:
+#
+#   - Multi-inquilino encendido.
+#   - El backend deja de publicar el puerto 5000. En desarrollo esta expuesto
+#     para depurar; en produccion seria una puerta al backend que se saltea a
+#     nginx, y con ella el HTTPS y los limites de tamano.
+#   - MySQL tampoco publica puertos: solo se llega desde la red interna.
+#   - nginx monta los certificados y usa la conf de subdominios comodin.
+
+services:
+    web:
+        environment:
+            - MULTI_TENANT=true
+            - FLASK_ENV=production
+            - FLASK_DEBUG=False
+        # El puerto 5000 queda atado a 127.0.0.1 en el compose base, asi que
+        # desde afuera del servidor no se llega: todo entra por nginx.
+        restart: always
+
+    db:
+        restart: always
+        # OJO: `command` en un override REEMPLAZA al del compose base, no se
+        # suma. Por eso van repetidos los cuatro parametros de alli: sin ellos
+        # produccion perderia la zona horaria —de la que depende toda la agenda—
+        # y los timeouts que matan las conexiones colgadas.
+        #
+        # Se agrega max_connections porque cada consultorio abre las suyas: con
+        # el valor por defecto (151) unas decenas de clientes activos alcanzan
+        # para agotarlas.
+        command: >
+            --default-time-zone='America/Argentina/Buenos_Aires'
+            --wait_timeout=300
+            --interactive_timeout=300
+            --innodb-lock-wait-timeout=10
+            --max_connections=300
+
+    nginx:
+        restart: always
+        volumes:
+            # La conf con los subdominios comodin. Copiar
+            # nginx/plataforma.conf.example, poner el dominio real y apuntar
+            # NGINX_CONF_FILE a ese archivo.
+            - ${NGINX_CONF_FILE:-./nginx/plataforma.conf}:/etc/nginx/conf.d/default.conf:ro
+            # Certificados y el directorio del desafio de certbot.
+            - /etc/letsencrypt:/etc/letsencrypt:ro
+            - /var/www/certbot:/var/www/certbot
+        ports:
+            - '80:80'
+            - '443:443'
+
+    frontend:
+        restart: always
+
+volumes:
+    db_data:
+    uploads_data:
