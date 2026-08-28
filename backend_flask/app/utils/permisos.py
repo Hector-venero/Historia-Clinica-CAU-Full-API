@@ -23,3 +23,32 @@ def requiere_rol(*roles_permitidos):
             return f(*args, **kwargs)
         return decorated_function
     return wrapper
+
+
+def requiere_modulo(nombre_modulo):
+    """Restringe una ruta a los consultorios cuyo plan incluye ese modulo.
+
+    El backend valida el plan igual que valida el rol: en el servidor. Que el
+    frontend oculte una opcion del menu no es un permiso, es presentacion —
+    quien conozca la URL de la API la llama igual.
+
+    En una instalacion de un solo centro no hay plan y todo esta habilitado, asi
+    que el decorador no cambia nada.
+
+    Uso:
+        @requiere_modulo('recetas')
+    """
+    def wrapper(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            from app import marca
+
+            if not marca.tiene_modulo(nombre_modulo):
+                return jsonify({
+                    "error": "El plan contratado no incluye este modulo.",
+                    "modulo": nombre_modulo,
+                }), 403
+
+            return f(*args, **kwargs)
+        return decorated_function
+    return wrapper

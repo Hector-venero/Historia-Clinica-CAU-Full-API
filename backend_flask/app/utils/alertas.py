@@ -140,7 +140,7 @@ def generar_html_correo(nombre_profesional, fecha_str, turnos_ind, turnos_grup):
             </p>
             <p style="text-align: center; margin-top: 15px;">
                 <a href="{frontend_url}" style="background-color: #1976D2; color: #ffffff; padding: 10px 20px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block;">
-                    Ir al Sistema de Historias Clínicas CAU
+                    Ir al Sistema de Historias Clínicas
                 </a>
             </p>
             <p style="font-size: 11px; color: #999; text-align: center; margin-top: 30px; border-top: 1px dashed #e0e0e0; padding-top: 10px;">
@@ -209,7 +209,7 @@ def procesar_y_enviar_alertas(dry_run=False):
             html_body = generar_html_correo(nombre, fecha_con_dia, turnos_ind, turnos_grup)
             
             msg = Message(
-                subject=f"[CAU] Agenda de Turnos - Mañana {fecha_bonita}",
+                subject=f"[{marca.nombre_corto()}] Agenda de Turnos - Mañana {fecha_bonita}",
                 recipients=[email],
                 html=html_body
             )

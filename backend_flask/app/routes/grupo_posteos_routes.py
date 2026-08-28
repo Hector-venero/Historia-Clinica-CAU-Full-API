@@ -1,5 +1,6 @@
 from flask import Blueprint, jsonify, request
 from flask_login import login_required, current_user
+from app.utils.permisos import requiere_modulo
 from app.database import db_cursor
 
 bp_grupo_posteos = Blueprint("grupo_posteos", __name__)
@@ -32,6 +33,7 @@ def _puede_acceder_grupo(cursor, grupo_id):
 
 @bp_grupo_posteos.route("/api/grupos/<int:grupo_id>/posteos", methods=["GET"])
 @login_required
+@requiere_modulo('grupos')
 def listar_posteos_grupo(grupo_id):
     with db_cursor() as (conn, cursor):
         if not _grupo_existe(cursor, grupo_id):
@@ -71,6 +73,7 @@ def listar_posteos_grupo(grupo_id):
 
 @bp_grupo_posteos.route("/api/grupos/<int:grupo_id>/posteos", methods=["POST"])
 @login_required
+@requiere_modulo('grupos')
 def crear_posteo_grupo(grupo_id):
     data = request.get_json(silent=True) or {}
     titulo = (data.get("titulo") or "").strip()
@@ -101,6 +104,7 @@ def crear_posteo_grupo(grupo_id):
 
 @bp_grupo_posteos.route("/api/grupos/<int:grupo_id>/posteos/<int:posteo_id>", methods=["DELETE"])
 @login_required
+@requiere_modulo('grupos')
 def eliminar_posteo_grupo(grupo_id, posteo_id):
     with db_cursor() as (conn, cursor):
         if not _grupo_existe(cursor, grupo_id):

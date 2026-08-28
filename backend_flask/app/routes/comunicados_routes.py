@@ -10,7 +10,7 @@ from flask_login import current_user, login_required
 
 from app.database import db_cursor
 from app.utils.mails_comunicados import enviar_aviso_comunicado
-from app.utils.permisos import requiere_rol
+from app.utils.permisos import requiere_rol, requiere_modulo
 
 bp_comunicados = Blueprint("comunicados", __name__)
 
@@ -25,6 +25,7 @@ PRIORIDAD_POR_DEFECTO = "normal"
 
 @bp_comunicados.route("/api/comunicados", methods=["GET"])
 @login_required
+@requiere_modulo('comunicados')
 def listar_comunicados():
     with db_cursor() as (_conn, cursor):
         cursor.execute("""
@@ -63,6 +64,7 @@ def listar_comunicados():
 
 @bp_comunicados.route("/api/comunicados", methods=["POST"])
 @login_required
+@requiere_modulo('comunicados')
 @requiere_rol(*ROLES_PUBLICADORES)
 def crear_comunicado():
     data = request.get_json(silent=True) or {}
@@ -119,6 +121,7 @@ def crear_comunicado():
 
 @bp_comunicados.route("/api/comunicados/no_leidos", methods=["GET"])
 @login_required
+@requiere_modulo('comunicados')
 def contar_no_leidos():
     """Cantidad para el globo de la campana. La consulta la hace cada carga de
     la barra superior, por eso devuelve solo el numero y no las filas."""
@@ -137,6 +140,7 @@ def contar_no_leidos():
 
 @bp_comunicados.route("/api/comunicados/<int:comunicado_id>/leer", methods=["POST"])
 @login_required
+@requiere_modulo('comunicados')
 def marcar_leido(comunicado_id):
     with db_cursor(dictionary=False) as (conn, cursor):
         cursor.execute("SELECT id FROM comunicados WHERE id = %s", (comunicado_id,))
@@ -156,6 +160,7 @@ def marcar_leido(comunicado_id):
 
 @bp_comunicados.route("/api/comunicados/leer_todos", methods=["POST"])
 @login_required
+@requiere_modulo('comunicados')
 def marcar_todos_leidos():
     with db_cursor(dictionary=False) as (conn, cursor):
         # Un solo INSERT ... SELECT en vez de una fila por vez: al entrar por
@@ -172,6 +177,7 @@ def marcar_todos_leidos():
 
 @bp_comunicados.route("/api/comunicados/<int:comunicado_id>", methods=["DELETE"])
 @login_required
+@requiere_modulo('comunicados')
 @requiere_rol(*ROLES_PUBLICADORES)
 def eliminar_comunicado(comunicado_id):
     with db_cursor() as (conn, cursor):

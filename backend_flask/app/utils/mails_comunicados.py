@@ -15,13 +15,15 @@ from html import escape
 from flask import current_app
 from flask_mail import Message
 
+from app import marca
 from app.utils.correo import enviar_en_segundo_plano
 
-_PIE = """
+def _pie():
+    return f"""
     <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 30px 0;">
     <p style="font-size: 13px; color: #94a3b8; text-align: center; margin: 0;">
         Recibis este aviso porque forma parte de los comunicados internos del
-        CAU UNSAM.<br>Es un mensaje automatico, no responder.
+        {marca.nombre_corto()}.<br>Es un mensaje automatico, no responder.
     </p>
 """
 
@@ -39,7 +41,7 @@ def _cuerpo_html(titulo, contenido, autor):
         <h1 style="font-size: 22px; color: #0f172a; margin: 0 0 16px;">{escape(titulo)}</h1>
         <div style="font-size: 15px; color: #334155; line-height: 1.7; white-space: pre-wrap;">{escape(contenido)}</div>
         <p style="font-size: 14px; color: #64748b; margin-top: 24px;">Publicado por {escape(autor)}.</p>
-        {_PIE}
+        {_pie()}
     </div>
     """
 
@@ -70,7 +72,7 @@ def enviar_aviso_comunicado(destinatarios, titulo, contenido, autor):
         return None
 
     mensaje = Message(
-        subject=f"[CAU UNSAM] {titulo}",
+        subject=f"[{marca.nombre_corto()}] {titulo}",
         sender=remitente,
         # El servidor necesita al menos un destinatario visible para aceptar el
         # mensaje, asi que el remitente se lo manda a si mismo y el equipo va

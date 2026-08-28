@@ -1,8 +1,13 @@
 <script setup>
-import logoUnsam from '@/assets/logo_unsam_sin_letras.png';
-import { ref, watch } from 'vue';
+import logoPorDefecto from '@/assets/logo_unsam_sin_letras.png';
+import { useMarcaStore } from '@/stores/marca';
+import { ref, watch, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { validarPasswordFuerte } from '@/utils/validators';
+
+const marca = useMarcaStore();
+// La marca se pide sin sesion: esta pantalla se ve antes de entrar.
+onMounted(() => marca.cargar());
 
 const route = useRoute();
 const router = useRouter();
@@ -73,7 +78,7 @@ async function resetear() {
             <div style="border-radius: 56px; padding: 0.3rem; background: linear-gradient(180deg, var(--primary-color) 10%, rgba(33, 150, 243, 0) 30%)">
                 <div class="w-full bg-surface-0 dark:bg-surface-900 py-20 px-8 sm:px-20" style="border-radius: 53px">
                     <div class="text-center mb-8">
-                        <img :src="logoUnsam" alt="Logo CAU" class="mb-6 w-24 mx-auto" />
+                        <img :src="marca.logo || logoPorDefecto" :alt="`Logo ${marca.nombreCorto}`" class="mb-6 w-24 mx-auto" />
                         <div class="text-surface-900 dark:text-surface-0 text-3xl font-medium mb-4">Restablecer Contraseña</div>
                         <span class="text-muted-color font-medium"> Ingresá tu nueva contraseña para continuar. </span>
                     </div>

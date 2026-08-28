@@ -32,11 +32,21 @@ class QbiError(RuntimeError):
 
 
 def get_config():
-    """Config vigente. Lanza QbiNoConfigurado si falta algo esencial."""
+    """Config vigente. Lanza QbiNoConfigurado si falta algo esencial.
+
+    Las credenciales salen del consultorio que hace el pedido, no del entorno del
+    proceso: cada uno factura con su propia cuenta ante el proveedor, asi que un
+    token compartido emitiria recetas de un consultorio a nombre de otro. Sin
+    consultorio resuelto —instalacion de un solo centro— se leen del entorno,
+    como siempre.
+    """
+    from app import marca
+
     cfg = current_app.config
-    base_url = (cfg.get("QBI_BASE_URL") or "").rstrip("/")
-    token = cfg.get("QBI_TOKEN")
-    client_id = cfg.get("QBI_CLIENT_ID")
+    credenciales = marca.qbi()
+    base_url = credenciales["base_url"]
+    token = credenciales["token"]
+    client_id = credenciales["client_id"]
 
     faltantes = [
         nombre

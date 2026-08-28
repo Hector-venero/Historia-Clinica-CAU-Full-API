@@ -2,7 +2,7 @@ from flask import Blueprint, jsonify, request
 from flask_login import login_required, current_user
 from app.database import get_connection, db_cursor
 from app.utils.fechas import a_iso_arg
-from app.utils.permisos import requiere_rol
+from app.utils.permisos import requiere_rol, requiere_modulo
 import traceback
 
 bp_grupos = Blueprint("grupos", __name__)
@@ -25,6 +25,7 @@ def extraer_ids_limpios(lista_miembros):
 # =====================================================
 @bp_grupos.route("/api/grupos", methods=["GET"])
 @login_required
+@requiere_modulo('grupos')
 def obtener_grupos():
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
@@ -52,6 +53,7 @@ def obtener_grupos():
 # =====================================================
 @bp_grupos.route("/api/grupos/<int:grupo_id>", methods=["GET"])
 @login_required
+@requiere_modulo('grupos')
 def obtener_grupo(grupo_id):
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
@@ -79,6 +81,7 @@ def obtener_grupo(grupo_id):
 # =====================================================
 @bp_grupos.route("/api/grupos", methods=["POST"])
 @login_required
+@requiere_modulo('grupos')
 @requiere_rol("director")
 def crear_grupo():
     data = request.get_json()
@@ -123,6 +126,7 @@ def crear_grupo():
 # =====================================================
 @bp_grupos.route("/api/grupos/<int:grupo_id>", methods=["PUT"])
 @login_required
+@requiere_modulo('grupos')
 @requiere_rol("director")
 def editar_grupo(grupo_id):
     data = request.get_json()
@@ -169,6 +173,7 @@ def editar_grupo(grupo_id):
 # =====================================================
 @bp_grupos.route("/api/grupos/<int:grupo_id>", methods=["DELETE"])
 @login_required
+@requiere_modulo('grupos')
 @requiere_rol("director")
 def eliminar_grupo(grupo_id):
     conn = get_connection()
@@ -189,6 +194,7 @@ def eliminar_grupo(grupo_id):
 # =====================================================
 @bp_grupos.route("/api/grupos/<int:grupo_id>/miembros", methods=["POST"])
 @login_required
+@requiere_modulo('grupos')
 @requiere_rol("director")
 def agregar_miembro(grupo_id):
     data = request.get_json()
@@ -223,6 +229,7 @@ def agregar_miembro(grupo_id):
 # =====================================================
 @bp_grupos.route("/api/grupos/<int:grupo_id>/miembros/<int:usuario_id>", methods=["DELETE"])
 @login_required
+@requiere_modulo('grupos')
 @requiere_rol("director")
 def quitar_miembro(grupo_id, usuario_id):
     conn = get_connection()
@@ -239,6 +246,7 @@ def quitar_miembro(grupo_id, usuario_id):
 
 @bp_grupos.route("/api/grupos/<int:grupo_id>/miembros", methods=["GET"])
 @login_required
+@requiere_modulo('grupos')
 def obtener_miembros(grupo_id):
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
@@ -255,6 +263,7 @@ def obtener_miembros(grupo_id):
 
 @bp_grupos.route("/api/grupos/<int:grupo_id>/ausencias", methods=["GET"])
 @login_required
+@requiere_modulo('grupos')
 def obtener_ausencias_grupo(grupo_id):
     """Ausencias de todos los miembros del grupo, para pintarlas en su agenda.
 

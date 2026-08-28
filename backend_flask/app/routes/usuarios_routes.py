@@ -87,6 +87,17 @@ def _current_user_payload():
     }
     for campo in PROFESSIONAL_FIELDS:
         payload[campo] = getattr(current_user, campo, None)
+
+    # Que modulos incluye el plan del consultorio. Viaja con sesion y no en el
+    # endpoint publico de marca: saber que contrato tiene un consultorio no es
+    # informacion para cualquiera.
+    #
+    # El frontend lo usa para no mostrar pantallas que van a dar 403. Es
+    # presentacion: quien decide es @requiere_modulo, en el servidor.
+    from app import marca
+
+    payload["modulos"] = sorted(marca.modulos())
+    payload["marca"] = marca.publica()
     return payload
 
 # ============================================================

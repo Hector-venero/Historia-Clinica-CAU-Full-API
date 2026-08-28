@@ -4,9 +4,15 @@ import AppConfigurator from './AppConfigurator.vue';
 import UserMenu from '@/components/dashboard/UserMenu.vue'; // ← nuevo menú de usuario
 import ComunicadosCampana from '@/components/ComunicadosCampana.vue';
 import { useRouter } from 'vue-router';
+import { onMounted } from 'vue';
+import { useMarcaStore } from '@/stores/marca';
+import logoPorDefecto from '@/assets/logo_unsam_sin_letras.png';
 
 const { toggleMenu, toggleDarkMode, isDarkTheme } = useLayout();
 const router = useRouter();
+const marca = useMarcaStore();
+
+onMounted(() => marca.cargar());
 
 // 👉 Ir a Agenda
 function irAgenda() {
@@ -22,11 +28,13 @@ function irAgenda() {
                 <i class="pi pi-bars"></i>
             </button>
 
+            <!-- Nombre y logo salen del backend, que los resuelve segun el
+                 subdominio del consultorio. Estaban escritos aca. -->
             <router-link to="/" class="layout-topbar-logo flex items-center gap-2">
-                <img src="@/assets/logo_unsam_sin_letras.png" alt="Logo UNSAM" class="h-8 md:h-10" />
+                <img :src="marca.logo || logoPorDefecto" :alt="`Logo ${marca.nombreCorto}`" class="h-8 md:h-10" />
                 <div class="flex flex-col leading-tight">
-                    <div class="font-bold text-lg">CAU <span class="font-normal">UNSAM</span></div>
-                    <div class="text-xs text-gray-500">Centro Asistencial Universitario</div>
+                    <div class="font-bold text-lg">{{ marca.nombreCorto }}</div>
+                    <div class="text-xs text-gray-500">{{ marca.nombre }}</div>
                 </div>
             </router-link>
         </div>

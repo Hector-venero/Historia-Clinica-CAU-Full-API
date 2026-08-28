@@ -246,6 +246,47 @@ FALLO en roto: Unknown database 'hc_no_existe'
    codigo de salida: 1
 ```
 
+## Marca, módulos y credenciales por consultorio
+
+Todo lo que cambia de un consultorio a otro se resuelve en `app/marca.py`, con
+respaldo al entorno: sin consultorio resuelto se devuelven los valores de
+siempre, y los de por defecto son los del CAU. Por eso esa instalación sigue
+funcionando sin tocar su configuración.
+
+| Antes | Ahora |
+|---|---|
+| `"CAU UNSAM"` en 28 lugares | `marca.nombre()` / `marca.nombre_corto()` |
+| Logo de la UNSAM importado en 4 pantallas | `marca.logo`, del backend |
+| `QBI_TOKEN` del proceso | credenciales del consultorio, cifradas |
+| Todo el menú para todos | módulos del plan |
+
+**El endpoint público es deliberadamente mínimo.** `GET /api/publico/marca`
+devuelve solo nombre y logo, y es lo único accesible sin sesión: la pantalla de
+entrada tiene que poder mostrar de quién es antes de que nadie se autentique. El
+estado, el plan y los módulos viajan en `/api/usuarios/me`, con sesión — saber
+qué contrato tiene un consultorio no es información para cualquiera.
+
+**Ocultar el menú no es un permiso.** `@requiere_modulo` valida en el servidor,
+en 36 rutas. El frontend oculta las entradas para no ofrecer pantallas que van a
+dar 403, pero quien conozca la URL de la API la llama igual.
+
+**El token de recetas no tiene respaldo al del sistema.** Un consultorio con el
+módulo habilitado pero sin credenciales propias recibe 503, no emite con la
+cuenta de otro. Es la diferencia entre "no configurado" y "configurado mal".
+
+### Verificado con dos consultorios
+
+| Ruta | drlopez (odontología) | drgarcia (kinesiología) |
+|---|---|---|
+| `/api/recetas/config` | **503** módulo sí, credenciales no | **403** fuera del plan |
+| `/api/blockchain/…` | **403** fuera del plan | **404** módulo sí, dato inexistente |
+| `/api/grupos` | **403** | **200** |
+| `/api/comunicados` | **403** | **200** |
+
+Y la marca pública, sin sesión, devuelve "Consultorio Odontologico Lopez" y
+"Centro Kinesico Garcia" según el subdominio. Con `MULTI_TENANT=false`, "CAU
+UNSAM" y los siete módulos.
+
 ## Pendiente legal
 
 Alojar datos de salud de terceros en Argentina cae bajo la **Ley 25.326**

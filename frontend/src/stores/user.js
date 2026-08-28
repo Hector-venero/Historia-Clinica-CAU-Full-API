@@ -60,6 +60,13 @@ export const useUserStore = defineStore('user', {
         lugar_atencion_direccion: '',
         lugar_atencion_contacto: '',
         lugar_atencion_email: '',
+        // Módulos que incluye el plan del consultorio. Los devuelve
+        // /api/usuarios/me y sirven para no mostrar pantallas que van a dar 403.
+        // Es presentación: quien decide es @requiere_modulo, en el backend.
+        //
+        // Arranca con todos habilitados para que una instalación de un solo
+        // centro, donde el backend no manda el campo, no pierda su menú.
+        modulos: ['turnos', 'pacientes', 'historias', 'recetas', 'grupos', 'comunicados', 'blockchain'],
         // Evita el rebote login -> dashboard mientras se está cerrando sesión.
         loggingOut: false
     }),
@@ -78,6 +85,10 @@ export const useUserStore = defineStore('user', {
             // formularios no arranquen en null y marquen el campo como sucio.
             for (const campo of CAMPOS_PROFESIONALES) {
                 this[campo] = data[campo] ?? '';
+            }
+
+            if (Array.isArray(data.modulos)) {
+                this.modulos = data.modulos;
             }
 
             this.loggingOut = false;
@@ -126,6 +137,7 @@ export const useUserStore = defineStore('user', {
     getters: {
         isDirector: (state) => state.rol === 'director',
         isProfesional: (state) => state.rol === 'profesional',
-        isAdministrativo: (state) => state.rol === 'administrativo'
+        isAdministrativo: (state) => state.rol === 'administrativo',
+        tieneModulo: (state) => (nombre) => state.modulos.includes(nombre)
     }
 });

@@ -79,6 +79,7 @@ class Cliente:
         self.db_nombre = fila["db_nombre"]
         self.db_usuario = fila["db_usuario"]
         self._db_password = fila["db_password"]
+        self._config = None
 
     @property
     def db_password(self):
@@ -91,6 +92,18 @@ class Cliente:
     @property
     def activo(self):
         return self.estado in ESTADOS_ACTIVOS
+
+    @property
+    def config(self):
+        """Marca, modulos y credenciales de este consultorio.
+
+        Se carga la primera vez que se pide y queda en la instancia. Como el
+        Cliente vive en el cache de tenancy, la configuracion se cachea con el y
+        no se consulta el plano de control en cada pedido.
+        """
+        if self._config is None:
+            self._config = config_de(self.id) or {}
+        return self._config
 
     def config_db(self):
         """Parametros de conexion a la base de ESTE consultorio."""

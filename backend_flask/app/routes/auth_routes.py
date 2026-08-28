@@ -1,5 +1,6 @@
 from flask import Blueprint, request, jsonify, session, url_for, current_app
 from flask_login import login_user, logout_user, login_required, current_user
+from app import marca
 from app.auth import Usuario
 from werkzeug.security import generate_password_hash
 import secrets
@@ -96,7 +97,7 @@ def api_recover():
     token = s.dumps(email, salt='reset-password')
 
     reset_url = f"{current_app.config['FRONTEND_URL']}/reset/{token}"
-    msg = Message("Recuperación de contraseña - Historia Clínica CAU", recipients=[email])
+    msg = Message(f"Recuperación de contraseña - {marca.nombre_corto()}", recipients=[email])
     msg.body = (
         f"Hola {usuario['nombre']},\n\n"
         f"Para restablecer tu contraseña ingresá al siguiente enlace:\n\n"

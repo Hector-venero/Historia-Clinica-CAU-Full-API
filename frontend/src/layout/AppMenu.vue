@@ -47,10 +47,14 @@ const model = computed(() => {
         },
         {
             label: 'Recetas y Prácticas',
+            // Los módulos los define el plan del consultorio. Ocultar la entrada
+            // es presentación: quien decide es @requiere_modulo en el backend.
+            visible: userStore.tieneModulo('recetas'),
             items: [{ label: 'Generar Receta', icon: 'pi pi-file-edit', to: '/recetas' }]
         },
         {
             label: 'Comunicados',
+            visible: userStore.tieneModulo('comunicados'),
             items: [{ label: 'Ver Comunicados', icon: 'pi pi-fw pi-megaphone', to: '/comunicados' }]
         },
         {
@@ -92,6 +96,7 @@ const model = computed(() => {
 
         {
             label: 'Agendas Grupales',
+            visible: userStore.tieneModulo('grupos'),
             items: [
                 { label: 'Ver grupos', icon: 'pi pi-fw pi-users', to: '/grupos' },
                 { label: 'Crear grupo', icon: 'pi pi-plus', to: '/grupos/crear', visible: esDirector }
@@ -99,6 +104,7 @@ const model = computed(() => {
         },
         {
             label: 'Blockchain',
+            visible: userStore.tieneModulo('blockchain'),
             items: [{ label: 'Verificar Hash', icon: 'pi pi-fw pi-search', to: '/blockchain/verificar' }]
         },
         {

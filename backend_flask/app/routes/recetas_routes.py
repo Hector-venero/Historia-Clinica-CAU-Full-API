@@ -26,7 +26,7 @@ from flask_mail import Message
 from app.database import db_cursor
 from app.utils import qbi_client
 from app.utils.correo import enviar_en_segundo_plano
-from app.utils.permisos import requiere_rol
+from app.utils.permisos import requiere_rol, requiere_modulo
 from app.utils.validacion import validar_email
 
 bp_recetas = Blueprint("recetas", __name__, url_prefix="/api/recetas")
@@ -338,6 +338,7 @@ def _enviar_email_receta(email, nombre_paciente, link_pdf, detalle):
 
 @bp_recetas.get("/config")
 @login_required
+@requiere_modulo('recetas')
 def config_recetas():
     """Permite al frontend saber si el módulo está operativo antes de mostrarlo."""
     if not qbi_client.esta_configurado():
@@ -352,6 +353,7 @@ def config_recetas():
 
 @bp_recetas.get("/buscar_paciente")
 @login_required
+@requiere_modulo('recetas')
 def buscar_paciente():
     q = (request.args.get("q") or "").strip()
     if not q:
@@ -376,6 +378,7 @@ def buscar_paciente():
 
 @bp_recetas.get("/financiadores")
 @login_required
+@requiere_modulo('recetas')
 def listar_financiadores():
     try:
         return jsonify(qbi_client.get_financiadores())
@@ -386,6 +389,7 @@ def listar_financiadores():
 @bp_recetas.get("/buscar_medicamento")
 @bp_recetas.get("/medicamentos")
 @login_required
+@requiere_modulo('recetas')
 def buscar_medicamentos():
     texto = (request.args.get("q") or "").strip()
     if len(texto) < 2:
@@ -406,6 +410,7 @@ def buscar_medicamentos():
 @bp_recetas.get("/buscar_diagnostico")
 @bp_recetas.get("/diagnosticos")
 @login_required
+@requiere_modulo('recetas')
 def buscar_diagnosticos():
     texto = (request.args.get("q") or "").strip()
     if len(texto) < 3:
@@ -418,6 +423,7 @@ def buscar_diagnosticos():
 
 @bp_recetas.delete("/anular/<hash_receta>")
 @login_required
+@requiere_modulo('recetas')
 @requiere_rol("director", "profesional")
 def anular(hash_receta):
     try:
@@ -438,6 +444,7 @@ def anular(hash_receta):
 
 @bp_recetas.post("/enviar_mail_manual")
 @login_required
+@requiere_modulo('recetas')
 def enviar_mail_manual():
     body = request.get_json(silent=True) or {}
     email = (body.get("email") or "").strip()
@@ -465,6 +472,7 @@ def enviar_mail_manual():
 @bp_recetas.post("")
 @bp_recetas.post("/emitir")
 @login_required
+@requiere_modulo('recetas')
 @requiere_rol("director", "profesional")
 def emitir():
     """Emite una receta de medicamentos o una prescripción de estudios.

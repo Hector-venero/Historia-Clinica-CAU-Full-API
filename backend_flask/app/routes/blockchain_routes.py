@@ -31,7 +31,7 @@ from app.utils.bfa_client import (
     verificar_hash_en_bfa,
 )
 from app.utils.hashing import PAYLOAD_VERSION_ACTUAL, generar_hash, generar_hash_evolucion
-from app.utils.permisos import requiere_rol
+from app.utils.permisos import requiere_rol, requiere_modulo
 
 bp_blockchain = Blueprint("blockchain", __name__)
 
@@ -175,6 +175,7 @@ def _historia_por_id_o_paciente(cursor, identificador):
 # =============================================================
 @bp_blockchain.route("/api/blockchain/registrar/<int:historia_id>", methods=["POST"])
 @login_required
+@requiere_modulo('blockchain')
 @requiere_rol("director", "profesional")
 def registrar_en_bfa(historia_id):
     """Sella el hash de una historia consolidada y registra el anclaje."""
@@ -240,6 +241,7 @@ def registrar_en_bfa(historia_id):
 # =============================================================
 @bp_blockchain.route("/api/blockchain/verificar/<int:historia_id>", methods=["GET"])
 @login_required
+@requiere_modulo('blockchain')
 def verificar_historia(historia_id):
     with db_cursor() as (conn, cursor):
         historia = _historia_por_id_o_paciente(cursor, historia_id)
@@ -256,6 +258,7 @@ def verificar_historia(historia_id):
 # =============================================================
 @bp_blockchain.route("/api/blockchain/verificar/historia/<int:paciente_id>", methods=["GET"])
 @login_required
+@requiere_modulo('blockchain')
 def verificar_historia_blockchain(paciente_id):
     with db_cursor() as (conn, cursor):
         respuesta, codigo = _verificar_paciente(conn, cursor, paciente_id)
@@ -321,6 +324,7 @@ def _verificar_paciente(conn, cursor, paciente_id):
 # =============================================================
 @bp_blockchain.route("/api/blockchain/anclajes/<int:paciente_id>", methods=["GET"])
 @login_required
+@requiere_modulo('blockchain')
 def listar_anclajes(paciente_id):
     """Todos los sellados del paciente, del mas reciente al mas viejo.
 
@@ -347,6 +351,7 @@ def listar_anclajes(paciente_id):
 # =============================================================
 @bp_blockchain.route("/api/blockchain/registrar/evolucion/<int:evolucion_id>", methods=["POST"])
 @login_required
+@requiere_modulo('blockchain')
 @requiere_rol("director", "profesional")
 def registrar_evolucion_en_bfa(evolucion_id):
     """Sella una evolucion puntual, con su propio hash y su propio recibo.
@@ -411,6 +416,7 @@ def registrar_evolucion_en_bfa(evolucion_id):
 
 @bp_blockchain.route("/api/blockchain/verificar/evolucion/<int:evolucion_id>", methods=["GET"])
 @login_required
+@requiere_modulo('blockchain')
 def verificar_evolucion_blockchain(evolucion_id):
     """Verifica una evolucion contra SU PROPIO recibo.
 
@@ -482,6 +488,7 @@ def verificar_evolucion_blockchain(evolucion_id):
 # =============================================================
 @bp_blockchain.route("/api/blockchain/auditorias", methods=["GET"])
 @login_required
+@requiere_modulo('blockchain')
 @requiere_rol("director")
 def listar_auditorias():
     with db_cursor() as (_conn, cursor):
@@ -492,6 +499,7 @@ def listar_auditorias():
 
 @bp_blockchain.route("/api/blockchain/auditorias/<int:paciente_id>", methods=["GET"])
 @login_required
+@requiere_modulo('blockchain')
 def listar_auditorias_paciente(paciente_id):
     with db_cursor() as (_conn, cursor):
         cursor.execute(
@@ -513,6 +521,7 @@ def listar_auditorias_paciente(paciente_id):
 # =============================================================
 @bp_blockchain.route("/api/blockchain/estado", methods=["GET"])
 @login_required
+@requiere_modulo('blockchain')
 @requiere_rol("director")
 def estado_bfa():
     """Disponibilidad de la TSA."""
@@ -521,6 +530,7 @@ def estado_bfa():
 
 @bp_blockchain.route("/api/blockchain/test_tx", methods=["GET"])
 @login_required
+@requiere_modulo('blockchain')
 @requiere_rol("director")
 def test_tx():
     """Sella un hash de prueba. Consume cuota real de la TSA.

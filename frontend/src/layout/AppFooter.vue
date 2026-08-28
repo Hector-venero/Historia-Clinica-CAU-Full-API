@@ -1,12 +1,19 @@
 <script setup>
-// Footer simple — sin lógica adicional
+import { computed, onMounted } from 'vue';
+import { useMarcaStore } from '@/stores/marca';
+
+const marca = useMarcaStore();
+const anio = computed(() => new Date().getFullYear());
+
+onMounted(() => marca.cargar());
 </script>
 
 <template>
+    <!-- El nombre sale de la marca del consultorio. La autoría del sistema se
+         mantiene: el software es el mismo, lo que cambia es quién lo usa. -->
     <footer class="app-footer">
         <div class="footer-content">
-            © 2025
-            <span class="brand">Historia Clínica CAU</span> — Desarrollado por <span class="author">Héctor Venero</span> | Universidad Nacional de San Martín (UNSAM)
+            © {{ anio }} <span class="brand">{{ marca.nombreCorto }}</span> — Sistema de Historia Clínica desarrollado por <span class="author">Héctor Venero</span> (UNSAM)
         </div>
     </footer>
 </template>

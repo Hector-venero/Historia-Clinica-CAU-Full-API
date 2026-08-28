@@ -1,5 +1,6 @@
 from flask import Blueprint, request, jsonify, send_from_directory, send_file, current_app
 from flask_login import login_required, current_user
+from app import marca
 from app.database import db_cursor
 from app.utils.adjuntos import carpeta_evolucion, ruta_adjunto, url_adjunto
 from werkzeug.utils import secure_filename
@@ -454,9 +455,9 @@ def exportar_historia_pdf(id):
         # 🔸 Logo apenas más grande
         logo = Image(logo_path, width=5*cm, height=2*cm)
     else:
-        logo = Paragraph("<b>CAU UNSAM</b>", styles["Normal"])
+        logo = Paragraph(f"<b>{marca.nombre_corto()}</b>", styles["Normal"])
 
-    titulo = Paragraph("<b>Centro Asistencial Universitario </b>", styles["Title"])
+    titulo = Paragraph(f"<b>{marca.nombre()}</b>", styles["Title"])
 
     # Tabla de dos columnas: título (izquierda) y logo (derecha)
     encabezado = Table([[titulo, logo]], colWidths=[11*cm, 5*cm])
@@ -587,7 +588,7 @@ def exportar_historia_pdf(id):
         canvas.setFillColorRGB(0.4, 0.4, 0.4)
 
         # Texto institucional
-        texto = "Documento emitido por el Sistema de Historia Clínica – Centro Asistencial Universitario UNSAM"
+        texto = f"Documento emitido por el Sistema de Historia Clínica – {marca.nombre()}"
         canvas.drawString(2 * cm, 1.4 * cm, texto)
 
         # Fecha y hora de emisión
@@ -696,9 +697,9 @@ def exportar_evolucion_pdf(paciente_id, evo_id):
     if os.path.exists(logo_path):
         logo = Image(logo_path, width=5*cm, height=2*cm)
     else:
-        logo = Paragraph("<b>CAU UNSAM</b>", styles["Normal"])
+        logo = Paragraph(f"<b>{marca.nombre_corto()}</b>", styles["Normal"])
 
-    titulo = Paragraph("<b>Centro Asistencial Universitario UNSAM</b>", styles["Title"])
+    titulo = Paragraph(f"<b>{marca.nombre()}</b>", styles["Title"])
 
     encabezado = Table([[titulo, logo]], colWidths=[11*cm, 5*cm])
     encabezado.setStyle(TableStyle([
@@ -799,7 +800,7 @@ def exportar_evolucion_pdf(paciente_id, evo_id):
         canvas.saveState()
         canvas.setFont("Helvetica", 8)
         canvas.drawString(2 * cm, 1.5 * cm,
-            "Documento emitido por el Sistema de Historia Clínica – CAU UNSAM")
+            f"Documento emitido por el Sistema de Historia Clínica – {marca.nombre_corto()}")
         canvas.restoreState()
 
     doc.build(elements, onFirstPage=footer, onLaterPages=footer)
@@ -831,7 +832,7 @@ def dibujar_marca_agua(canvas, doc):
     canvas.rotate(35)
 
     # Dibujar texto centrado
-    texto = "DOCUMENTO CONFIDENCIAL – CAU UNSAM"
+    texto = f"DOCUMENTO CONFIDENCIAL – {marca.nombre_corto()}"
     canvas.drawCentredString(0, 0, texto)
 
     canvas.restoreState()

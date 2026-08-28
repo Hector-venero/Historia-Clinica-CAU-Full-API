@@ -14,6 +14,7 @@ from datetime import datetime, timedelta, timezone
 from flask import current_app
 from flask_mail import Message
 
+from app import marca
 from app.utils.correo import enviar_en_segundo_plano
 
 TZ_ARG = timezone(timedelta(hours=-3))
@@ -21,10 +22,21 @@ TZ_ARG = timezone(timedelta(hours=-3))
 # Datos de contacto que van al pie del mail.
 CONTACTO_WHATSAPP = "11 3759-7667"
 CONTACTO_TELEFONO = "011 2033-1400 (Int. 6090)"
-UBICACION = "Campus Miguelete - UNSAM"
 ORGANIZADOR_EMAIL = "no-reply@unsam.edu.ar"
 
-_PIE_CONTACTO = f"""
+
+def _ubicacion():
+    """Donde atiende el consultorio.
+
+    Era una constante de modulo, evaluada al importar: con varios consultorios
+    en el mismo proceso, todos heredaban la del primero que se cargara.
+    """
+    lugar = marca.lugar_atencion()
+    return lugar.get("direccion") or lugar.get("nombre") or ""
+
+
+def _pie_contacto():
+    return f"""
     <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 30px 0;">
     <p style="font-size: 14px; color: #64748b; line-height: 1.6; margin: 0;">
         <strong>CONTACTO:</strong><br>
@@ -34,7 +46,7 @@ _PIE_CONTACTO = f"""
     </p>
     <p style="font-size: 14px; color: #64748b; text-align: center; margin-top: 30px; margin-bottom: 0;">
         Saludos cordiales,<br>
-        <strong>Equipo CAU UNSAM</strong>
+        <strong>Equipo {marca.nombre_corto()}</strong>
     </p>
 """
 
@@ -85,7 +97,7 @@ def construir_ics(paciente, profesional, inicio, fin, motivo):
 
     ics = f"""BEGIN:VCALENDAR
 VERSION:2.0
-PRODID:-//CAU UNSAM//Historia Clinica//ES
+PRODID:-//{marca.nombre_corto()}//Historia Clinica//ES
 CALSCALE:GREGORIAN
 METHOD:REQUEST
 BEGIN:VEVENT
@@ -95,9 +107,9 @@ DTSTART:{inicio_dt.astimezone(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}
 DTEND:{fin_dt.astimezone(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}
 SUMMARY:Turno Médico - Dr/Dra. {profesional.get('nombre', '')}
 DESCRIPTION:{descripcion}
-LOCATION:{UBICACION}
+LOCATION:{_ubicacion()}
 STATUS:CONFIRMED
-ORGANIZER;CN=CAU UNSAM:mailto:{ORGANIZADOR_EMAIL}
+ORGANIZER;CN={marca.nombre_corto()}:mailto:{ORGANIZADOR_EMAIL}
 ATTENDEE;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE;CN={_nombre_completo(paciente)}:mailto:{paciente.get('email', '')}
 END:VEVENT
 END:VCALENDAR"""
@@ -126,7 +138,7 @@ def enviar_confirmacion(paciente, profesional, inicio, fin, motivo=None):
             "Le confirmamos que su turno ha sido agendado correctamente.\n\n"
             f"DETALLES:\nProfesional: {profesional.get('nombre', '')}\n"
             f"Fecha: {fecha}\nHora: {hora} hs\nMotivo: {motivo_txt}\n\n"
-            "Saludos,\nEquipo CAU UNSAM"
+            f"Saludos,\nEquipo {marca.nombre_corto()}"
         )
 
         html = _envoltura(f"""
@@ -145,9 +157,9 @@ def enviar_confirmacion(paciente, profesional, inicio, fin, motivo=None):
             </div>
 
             <p style="font-size: 16px; line-height: 1.6; color: #333333;">
-            📍 <strong>UBICACIÓN:</strong> {UBICACION}<br>
+            📍 <strong>UBICACIÓN:</strong> {_ubicacion()}<br>
             ⚠️ <strong>IMPORTANTE:</strong> Por favor, asista con 10 minutos de anticipación y su DNI.</p>
-            {_PIE_CONTACTO}
+            {_pie_contacto()}
         """)
 
         mensaje = Message(
@@ -185,7 +197,7 @@ def enviar_cancelacion(paciente, profesional_nombre, inicio):
             "Le informamos que su turno ha sido CANCELADO.\n\n"
             f"DATOS DEL TURNO CANCELADO:\nProfesional: {profesional_nombre}\n"
             f"Fecha: {fecha}\nHora: {hora} hs\n\n"
-            "Saludos,\nEquipo CAU UNSAM"
+            f"Saludos,\nEquipo {marca.nombre_corto()}"
         )
 
         html = _envoltura(f"""
@@ -203,7 +215,7 @@ def enviar_cancelacion(paciente, profesional_nombre, inicio):
             </div>
 
             <p style="font-size: 16px; line-height: 1.6; color: #333333;">Si usted no solicitó esta cancelación o desea reprogramar un nuevo turno, por favor ingrese al sistema o comuníquese con nosotros.</p>
-            {_PIE_CONTACTO}
+            {_pie_contacto()}
         """)
 
         enviar_en_segundo_plano(
