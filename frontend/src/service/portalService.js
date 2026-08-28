@@ -1,0 +1,54 @@
+import api from '@/api/axios';
+
+/**
+ * Portal del paciente. Vive en el subdominio `mi.<dominio>`, no en el de un
+ * consultorio: un paciente no pertenece a ninguno, y lo que se busca es que vea
+ * junto lo que le mandaron varios.
+ */
+export default {
+    registrar(datos) {
+        return api.post('/portal/registro', datos);
+    },
+
+    /** Confirma el correo, crea la cuenta e inicia sesión en un solo paso. */
+    verificar(token) {
+        return api.post(`/portal/verificar/${token}`);
+    },
+
+    login(email, password) {
+        return api.post('/portal/login', { email, password });
+    },
+
+    logout() {
+        return api.post('/portal/logout');
+    },
+
+    me() {
+        return api.get('/portal/me');
+    },
+
+    actualizarPerfil(datos) {
+        return api.post('/portal/perfil', datos);
+    },
+
+    /** Todo lo que le enviaron, de todos los consultorios. */
+    documentos() {
+        return api.get('/portal/documentos');
+    },
+
+    sinLeer() {
+        return api.get('/portal/documentos/sin_leer');
+    },
+
+    marcarLeido(id) {
+        return api.post(`/portal/documentos/${id}/leer`);
+    },
+
+    /**
+     * Descarga el adjunto. Va por id y no por el token del archivo: el backend
+     * valida la pertenencia en el WHERE de la consulta.
+     */
+    descargarArchivo(id) {
+        return api.get(`/portal/documentos/${id}/archivo`, { responseType: 'blob' });
+    }
+};

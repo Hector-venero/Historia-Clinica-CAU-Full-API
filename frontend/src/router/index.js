@@ -1,6 +1,7 @@
 import AppLayout from '@/layout/AppLayout.vue';
 import { createRouter, createWebHistory } from 'vue-router';
 import { useUserStore } from '@/stores/user';
+import { usePacienteStore } from '@/stores/paciente';
 
 const router = createRouter({
     history: createWebHistory(),
@@ -221,6 +222,42 @@ const router = createRouter({
             ]
         },
 
+        // 👤 Portal del paciente.
+        //
+        // Vive en el subdominio `mi.<dominio>`, pero el SPA es el mismo build
+        // servido en todos los hosts, así que las rutas llevan prefijo `/portal`
+        // para no chocar con las del sistema del consultorio (donde `/` es el
+        // dashboard). El guard de más abajo redirige `/` a `/portal` cuando se
+        // entra por ese subdominio, así la dirección que ve el paciente queda
+        // limpia.
+        {
+            path: '/portal/login',
+            name: 'PortalLogin',
+            component: () => import('@/views/pages/portal/PortalLogin.vue')
+        },
+        {
+            path: '/portal/registro',
+            name: 'PortalRegistro',
+            component: () => import('@/views/pages/portal/PortalRegistro.vue')
+        },
+        {
+            path: '/portal/verificar/:token',
+            name: 'PortalVerificar',
+            component: () => import('@/views/pages/portal/PortalVerificar.vue')
+        },
+        {
+            path: '/portal',
+            component: () => import('@/layout/PortalLayout.vue'),
+            children: [
+                {
+                    path: '',
+                    name: 'PortalDocumentos',
+                    component: () => import('@/views/pages/portal/MisDocumentos.vue'),
+                    meta: { paciente: true }
+                }
+            ]
+        },
+
         // 🚫 Ruta no encontrada
         {
             path: '/:pathMatch(.*)*',
@@ -241,6 +278,35 @@ const router = createRouter({
 // backend antes de decidir. Ese pedido se hace una sola vez por sesión, porque
 // después el store ya tiene el usuario.
 router.beforeEach(async (to) => {
+    // El portal del paciente se resuelve aparte y se corta acá.
+    //
+    // Son dos poblaciones de usuarios distintas: validar a un paciente contra
+    // /api/usuarios/me daría 401 siempre, porque esa ruta es del personal del
+    // consultorio. Es la misma separación que en el backend, donde mezclarlas
+    // dejaba a un paciente leer el listado de pacientes de una clínica.
+    if (to.path.startsWith('/portal')) {
+        const pacienteStore = usePacienteStore();
+
+        const publicasDelPortal = ['/portal/login', '/portal/registro'];
+        const esVerificacion = to.path.startsWith('/portal/verificar/');
+        if (publicasDelPortal.includes(to.path) || esVerificacion) return true;
+
+        if (!pacienteStore.autenticado && !pacienteStore.cerrandoSesion) {
+            try {
+                await pacienteStore.cargar();
+            } catch {
+                return '/portal/login';
+            }
+        }
+        return pacienteStore.autenticado ? true : '/portal/login';
+    }
+
+    // Entrar por el subdominio del portal lleva al portal, no al dashboard del
+    // consultorio: en `mi.<dominio>` no hay consultorio que mostrar.
+    if (to.path === '/' && window.location.host.split('.')[0] === 'mi') {
+        return '/portal';
+    }
+
     const publicPages = ['/auth/login', '/recuperar', '/logout', '/registro', '/cuenta/suspendida'];
     // El token va en la URL, así que la ruta no puede exigir sesión: quien
     // verifica su correo todavía no tiene cuenta.
