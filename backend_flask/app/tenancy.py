@@ -94,6 +94,27 @@ def slug_desde_host(host):
     return etiqueta
 
 
+# Lo unico que sigue atendiendo con la cuenta suspendida.
+#
+# Suspender por falta de pago no puede significar secuestrar historias clinicas:
+# son datos del paciente, no del proveedor. Asi que se deja entrar, ver que pasa
+# y llevarse todo. Lo que se corta es usar el sistema para trabajar.
+#
+# Es una lista explicita y no un patron: cada ruta que siga viva estando
+# suspendido tiene que ser una decision consciente.
+RUTAS_CON_CUENTA_SUSPENDIDA = (
+    "/api/login",
+    "/api/logout",
+    "/api/usuarios/me",
+    "/api/publico/marca",
+    "/api/cuenta/",
+)
+
+
+def _permitido_estando_suspendido(path):
+    return path.startswith(RUTAS_CON_CUENTA_SUSPENDIDA)
+
+
 def _desde_cache(slug):
     entrada = _cache.get(slug)
     if not entrada:
@@ -173,14 +194,21 @@ def registrar(app):
             # permitiria averiguar que consultorios existen probando nombres.
             return jsonify({"error": "El consultorio no existe."}), 404
 
+        # El cliente queda resuelto aunque este suspendido: sin esto la conexion
+        # no sabria a que base ir, y un consultorio suspendido no podria ni
+        # siquiera exportar sus datos.
+        g.cliente = cliente
+
         if not cliente.activo:
-            # Los datos no se borran: son del paciente, no del proveedor. Se
-            # corta el acceso y se dice como reactivar.
-            return jsonify({
-                "error": "La cuenta esta suspendida.",
-                "estado": cliente.estado,
-                "detalle": "Contactate con soporte para reactivarla.",
-            }), 402
+            # Los datos no se borran ni se vuelven inaccesibles: son del
+            # paciente, no del proveedor. Se corta el uso normal del sistema,
+            # pero se deja entrar, ver el estado y llevarse la historia clinica.
+            if not _permitido_estando_suspendido(request.path):
+                return jsonify({
+                    "error": "La cuenta esta suspendida.",
+                    "estado": cliente.estado,
+                    "detalle": "Podes exportar tus datos o reactivar la cuenta.",
+                }), 402
 
         # Una sesion abierta en otro consultorio no vale aca, aunque la cookie
         # este bien firmada y el id de usuario exista en esta base.

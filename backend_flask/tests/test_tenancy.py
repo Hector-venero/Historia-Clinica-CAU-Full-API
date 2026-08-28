@@ -159,10 +159,21 @@ def test_el_interruptor_solo_acepta_true(monkeypatch, valor, esperado):
 
 
 class _ClienteFalso:
-    def __init__(self, slug, estado="activo"):
+    """Doble del Cliente del plano de control.
+
+    Expone lo mismo que la clase real: si le falta algo que el codigo consulta
+    —`config` y `nombre` los lee app/marca.py— el test falla por AttributeError
+    y no por lo que pretendia comprobar.
+    """
+
+    def __init__(self, slug, estado="activo", nombre=None, config=None):
         self.slug = slug
         self.estado = estado
         self.activo = estado in ("prueba", "activo")
+        self.nombre = nombre or f"Consultorio {slug}"
+        self.plan = "basico"
+        self.prueba_hasta = None
+        self.config = config or {}
 
 
 def _modo_multi(monkeypatch, clientes):
@@ -199,14 +210,38 @@ def test_la_sesion_vale_en_su_propio_consultorio(client, monkeypatch):
     assert respuesta.status_code == 200
 
 
-def test_un_consultorio_suspendido_no_entra(client, monkeypatch):
-    """Los datos no se borran, pero no se puede operar."""
+def test_un_consultorio_suspendido_no_puede_operar(client, monkeypatch):
+    """Se corta el uso del sistema para trabajar."""
     _modo_multi(monkeypatch, {"a": _ClienteFalso("a", estado="suspendido")})
 
-    respuesta = client.get("/api/usuarios/me", headers={"Host": "a.localhost"})
+    respuesta = client.get("/api/pacientes", headers={"Host": "a.localhost"})
 
     assert respuesta.status_code == 402
     assert respuesta.get_json()["estado"] == "suspendido"
+
+
+def test_un_consultorio_suspendido_igual_puede_llevarse_sus_datos(client, monkeypatch):
+    """Suspender por falta de pago no puede significar secuestrar historias
+    clinicas: son datos del paciente, no del proveedor.
+
+    Estas rutas siguen atendiendo con la cuenta suspendida. Que devuelvan 401 sin
+    sesion y no 402 es justamente lo que se comprueba: llegaron al control de
+    autenticacion en vez de rebotar antes por el estado de la cuenta."""
+    _modo_multi(monkeypatch, {"a": _ClienteFalso("a", estado="suspendido")})
+
+    for ruta in ("/api/cuenta/estado", "/api/cuenta/exportar", "/api/usuarios/me"):
+        respuesta = client.get(ruta, headers={"Host": "a.localhost"})
+        assert respuesta.status_code != 402, f"{ruta} quedo bloqueada por el estado"
+
+
+def test_la_marca_se_ve_aunque_la_cuenta_este_suspendida(client, monkeypatch):
+    """La pantalla que explica la suspension tiene que poder mostrar de quien
+    es el consultorio."""
+    _modo_multi(monkeypatch, {"a": _ClienteFalso("a", estado="suspendido")})
+
+    respuesta = client.get("/api/publico/marca", headers={"Host": "a.localhost"})
+
+    assert respuesta.status_code == 200
 
 
 def test_un_consultorio_inexistente_da_404(client, monkeypatch):

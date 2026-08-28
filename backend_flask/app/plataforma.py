@@ -81,6 +81,14 @@ class Cliente:
         self._db_password = fila["db_password"]
         self._config = None
 
+        # Ciclo de la suscripcion. Con .get() y no con [] porque el Cliente se
+        # construye tambien desde consultas que no traen todas las columnas.
+        self.ultimo_acceso = fila.get("ultimo_acceso")
+        self.aviso_vencimiento_en = fila.get("aviso_vencimiento_en")
+        self.suspendido_en = fila.get("suspendido_en")
+        self.cancelado_en = fila.get("cancelado_en")
+        self.motivo_estado = fila.get("motivo_estado")
+
     @property
     def db_password(self):
         """Se descifra al usarla, no al cargar el cliente.

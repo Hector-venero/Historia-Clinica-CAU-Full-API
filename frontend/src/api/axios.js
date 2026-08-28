@@ -28,6 +28,18 @@ api.interceptors.response.use(
                 router.push('/auth/login');
             }
         }
+
+        // 402: la cuenta del consultorio está suspendida. No es un problema de
+        // permisos del usuario sino del estado de la suscripción, así que en vez
+        // de un error suelto se lleva a la pantalla que explica qué pasó y deja
+        // descargar los datos.
+        if (error.response?.status === 402) {
+            const { default: router } = await import('@/router');
+            if (router.currentRoute?.value?.path !== '/cuenta/suspendida') {
+                router.push('/cuenta/suspendida');
+            }
+        }
+
         return Promise.reject(error);
     }
 );

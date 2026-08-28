@@ -38,6 +38,14 @@ const router = createRouter({
             name: 'VerificarRegistro',
             component: () => import('@/views/pages/registro/Verificar.vue')
         },
+        // Cuenta suspendida. No lleva AppLayout: el menú de una aplicación que
+        // no se puede usar sería una burla. Y no exige sesión en el guard porque
+        // se llega acá justamente cuando las peticiones devuelven 402.
+        {
+            path: '/cuenta/suspendida',
+            name: 'CuentaSuspendida',
+            component: () => import('@/views/pages/cuenta/CuentaSuspendida.vue')
+        },
         // 🌐 App principal (protegida)
         {
             path: '/',
@@ -233,7 +241,7 @@ const router = createRouter({
 // backend antes de decidir. Ese pedido se hace una sola vez por sesión, porque
 // después el store ya tiene el usuario.
 router.beforeEach(async (to) => {
-    const publicPages = ['/auth/login', '/recuperar', '/logout', '/registro'];
+    const publicPages = ['/auth/login', '/recuperar', '/logout', '/registro', '/cuenta/suspendida'];
     // El token va en la URL, así que la ruta no puede exigir sesión: quien
     // verifica su correo todavía no tiene cuenta.
     const isResetRoute = to.path.startsWith('/reset/') || to.path.startsWith('/verificar/');

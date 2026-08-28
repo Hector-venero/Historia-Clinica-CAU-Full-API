@@ -333,6 +333,65 @@ su marca → "Consultorio Dental Sur"
 su sesión en otro consultorio → 401
 ```
 
+## Ciclo de la suscripción
+
+```
+prueba  --vence-->  suspendido  --se cancela-->  cancelado  --90 días-->  borrado
+   |                     |
+   +--paga--> activo <---+ reactivar
+```
+
+**Suspender no es borrar, y tampoco es secuestrar.** Es la regla que ordena todo
+lo demás: un consultorio que dejó de pagar pierde el uso del sistema, pero las
+historias clínicas siguen siendo de sus pacientes y tiene que poder llevárselas.
+
+Por eso `RUTAS_CON_CUENTA_SUSPENDIDA` en `tenancy.py` deja vivas la entrada, el
+estado de la cuenta, la marca y la exportación. Es una lista explícita y no un
+patrón: cada ruta que siga atendiendo estando suspendido es una decisión
+consciente.
+
+La exportación entrega un ZIP con un CSV por tabla, un JSON completo y los
+adjuntos. **En CSV y no en un volcado de MySQL** porque el destinatario es el
+profesional, no otro sistema: tiene que poder abrirlo en una planilla. No incluye
+los hashes de contraseña — no le sirven a nadie fuera del sistema.
+
+### Comandos
+
+```bash
+flask clientes                                  # listado con estado y vencimiento
+flask cliente-estado <slug> suspendido --motivo "..."
+flask revisar-suscripciones [--dry-run]         # cron diario: avisa y suspende
+flask cancelados-vencidos                       # los que pasaron la retención
+```
+
+`cancelados-vencidos` **solo lista**. Borrar la base de un consultorio con
+historias clínicas es irreversible y no puede ser el efecto secundario de una
+tarea automática: que lo decida una persona mirando la lista.
+
+### Un límite conocido
+
+Los cambios de estado tardan **hasta 60 segundos** en surtir efecto, porque el
+catálogo de clientes está cacheado en memoria (`TTL_CACHE_CLIENTES`). El comando
+invalida el caché, pero corre en otro proceso que el servidor web, así que esa
+invalidación no lo alcanza. Medido: la suspensión se hizo efectiva a los ~30 s.
+
+No se corrigió porque suspender por falta de pago no es una acción de emergencia.
+Si alguna vez hiciera falta que fuera inmediato, el punto de cambio es
+`tenancy._cache`.
+
+### Verificado con un consultorio real
+
+Con `dentalsur` suspendido y un paciente cargado:
+
+| | |
+|---|---|
+| `/api/pacientes`, `/api/comunicados`, `/api/recetas/config` | **402** |
+| `/api/cuenta/estado`, `/api/publico/marca`, login | **200** |
+| `/api/cuenta/exportar` | **200**, ZIP de 3671 bytes |
+
+En el ZIP estaba el paciente cargado, y `csv/usuarios.csv` **sin** ninguna
+columna de contraseña. Al reactivar, todo volvió a responder.
+
 ## Pendiente legal
 
 Alojar datos de salud de terceros en Argentina cae bajo la **Ley 25.326**

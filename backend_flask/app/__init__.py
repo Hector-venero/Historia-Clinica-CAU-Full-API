@@ -151,6 +151,7 @@ from app.routes.comunicados_routes import bp_comunicados
 from app.routes.grupo_posteos_routes import bp_grupo_posteos
 from app.routes.publico_routes import bp_publico
 from app.routes.registro_routes import bp_registro
+from app.routes.cuenta_routes import bp_cuenta
 
 app.register_blueprint(bp_auth)
 app.register_blueprint(bp_usuarios)
@@ -168,6 +169,7 @@ app.register_blueprint(bp_comunicados)
 app.register_blueprint(bp_grupo_posteos)
 app.register_blueprint(bp_publico)
 app.register_blueprint(bp_registro)
+app.register_blueprint(bp_cuenta)
 
 # -------------------------
 # Servir fotos de usuario
@@ -215,3 +217,85 @@ def enviar_alertas_command(dry_run):
     # Exit code distinto de cero para que el cron detecte el fallo.
     if resultado["errores"]:
         raise click.ClickException("El proceso de alertas terminó con errores.")
+
+
+# -------------------------
+# Plataforma: suscripciones
+# -------------------------
+@app.cli.command("revisar-suscripciones")
+@click.option("--dry-run", is_flag=True, help="Calcula sin avisar ni suspender.")
+def revisar_suscripciones_command(dry_run):
+    """Avisa a los que estan por vencer y suspende a los vencidos.
+
+    Lo dispara un cron diario. Suspender corta el uso del sistema, no el acceso
+    a los datos: el consultorio sigue pudiendo entrar y exportar sus historias.
+    """
+    from app import suscripcion
+
+    resumen = suscripcion.revisar(dry_run=dry_run)
+    click.echo(
+        f"Avisados: {resumen['avisados']}. "
+        f"Suspendidos: {resumen['suspendidos']}. "
+        f"Errores: {resumen['errores']}."
+    )
+    if resumen["errores"]:
+        raise click.ClickException("La revision termino con errores.")
+
+
+@app.cli.command("clientes")
+@click.option("--estado", default=None, help="Filtra por estado.")
+def clientes_command(estado):
+    """Lista los consultorios de la plataforma."""
+    from app import plataforma, suscripcion
+
+    filas = plataforma.listar([estado] if estado else None)
+    if not filas:
+        click.echo("No hay consultorios.")
+        return
+
+    click.echo(f"{'SLUG':<20} {'ESTADO':<12} {'PLAN':<10} {'PRUEBA HASTA':<14} ULTIMO ACCESO")
+    for cliente in filas:
+        dias = suscripcion.dias_restantes(cliente)
+        vence = str(cliente.prueba_hasta or "-")
+        if dias is not None:
+            vence = f"{vence} ({dias}d)"
+        click.echo(
+            f"{cliente.slug:<20} {cliente.estado:<12} {cliente.plan:<10} "
+            f"{vence:<14} {cliente.ultimo_acceso or '-'}"
+        )
+
+
+@app.cli.command("cliente-estado")
+@click.argument("slug")
+@click.argument("estado", type=click.Choice(["prueba", "activo", "suspendido", "cancelado"]))
+@click.option("--motivo", default=None, help="Queda registrado para el soporte.")
+def cliente_estado_command(slug, estado, motivo):
+    """Cambia el estado de un consultorio.
+
+    Cancelar NO borra la base: arranca el plazo de retencion.
+    """
+    from app import suscripcion
+
+    if suscripcion.cambiar_estado(slug, estado, motivo) == 0:
+        raise click.ClickException(f"No existe el consultorio '{slug}'.")
+    click.echo(f"{slug}: {estado}")
+
+
+@app.cli.command("cancelados-vencidos")
+def cancelados_vencidos_command():
+    """Cancelados cuyo plazo de retencion ya paso.
+
+    Solo los lista. Borrar la base de un consultorio con historias clinicas es
+    irreversible y no puede ser el efecto secundario de una tarea automatica.
+    """
+    from app import suscripcion
+
+    filas = suscripcion.cancelados_para_borrar()
+    if not filas:
+        click.echo(f"Ninguno supera los {suscripcion.DIAS_RETENCION} dias de retencion.")
+        return
+
+    click.echo(f"Cancelados hace mas de {suscripcion.DIAS_RETENCION} dias:")
+    for fila in filas:
+        click.echo(f"  {fila['slug']:<20} cancelado el {fila['cancelado_en']}  base={fila['db_nombre']}")
+    click.echo("\nRevisalos y borralos a mano si corresponde.")
