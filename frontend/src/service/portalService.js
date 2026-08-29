@@ -74,5 +74,14 @@ export default {
 
     reservar(datos) {
         return api.post('/portal/reservar', datos);
+    },
+
+    /** Los turnos del paciente, ya verificados contra cada consultorio. */
+    misTurnos() {
+        return api.get('/portal/mis-turnos');
+    },
+
+    cancelarTurno(reservaId) {
+        return api.delete(`/portal/mis-turnos/${reservaId}`);
     }
 };

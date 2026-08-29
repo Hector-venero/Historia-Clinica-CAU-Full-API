@@ -292,3 +292,49 @@ def reservar():
         return jsonify({"error": "No pudimos confirmar el turno."}), 500
 
     return jsonify(resultado), 201
+
+
+@bp_portal.get("/mis-turnos")
+@login_required
+@requiere_paciente
+def mis_turnos():
+    """Los turnos del paciente, verificados contra cada consultorio.
+
+    No se confia en la copia del portal: si el consultorio cancelo el turno desde
+    su sistema, el paciente tiene que verlo cancelado y no seguir contando con el.
+    """
+    from app import reservas
+    from app.utils.fechas import a_iso_arg
+
+    filas = reservas.mis_turnos(current_user)
+
+    # Las fechas van en ISO con offset argentino, no con el jsonify por defecto.
+    #
+    # Ese serializa los DATETIME al formato de fecha HTTP **etiquetado como GMT**
+    # aunque esten guardados en hora local, y el navegador los lee tres horas
+    # corridos: un turno de las 14:00 se mostraria a las 11:00. Es exactamente el
+    # mismo error que ya habia en /api/ausencias.
+    for fila in filas:
+        for campo in ("fecha_inicio", "creado_en", "cancelado_en"):
+            if campo in fila:
+                fila[campo] = a_iso_arg(fila[campo])
+
+    return jsonify(filas)
+
+
+@bp_portal.delete("/mis-turnos/<int:reserva_id>")
+@login_required
+@requiere_paciente
+def cancelar_turno(reserva_id):
+    """Cancela un turno. El horario queda libre para otro paciente en el acto."""
+    from app import reservas
+
+    try:
+        reservas.cancelar(current_user, reserva_id)
+    except reservas.ErrorReserva as exc:
+        return jsonify({"error": str(exc)}), 409
+    except Exception:
+        current_app.logger.exception("Fallo la cancelacion desde el portal")
+        return jsonify({"error": "No pudimos cancelar el turno."}), 500
+
+    return jsonify({"mensaje": "Turno cancelado"})

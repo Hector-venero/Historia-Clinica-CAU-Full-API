@@ -35,6 +35,13 @@ DIAS_MAXIMOS_ANTICIPACION = 60
 # minutos no le da tiempo al consultorio a verlo.
 HORAS_MINIMAS_ANTICIPACION = 2
 
+# Hasta cuando se puede cancelar online.
+#
+# Pasado ese punto se pide llamar al consultorio, y no es burocracia: una
+# cancelacion de ultimo momento que entra al sistema y nadie mira es peor que un
+# llamado, porque el consultorio sigue esperando al paciente igual.
+HORAS_MINIMAS_CANCELACION = 4
+
 
 class ErrorReserva(Exception):
     """Algo que el paciente puede corregir. El mensaje se le muestra tal cual."""
@@ -310,6 +317,9 @@ def reservar(paciente, cliente_id, usuario_id, fecha_inicio, motivo=None):
                 )
 
     _registrar_en_portal(paciente, ficha, inicio, turno_id)
+    _anotar_turno_del_paciente(
+        paciente, ficha, cliente_id, usuario_id, turno_id, inicio, motivo
+    )
 
     return {
         "turno_id": turno_id,
@@ -319,6 +329,155 @@ def reservar(paciente, cliente_id, usuario_id, fecha_inicio, motivo=None):
         "consultorio": ficha["consultorio_nombre"],
         "lugar": ficha.get("lugar_direccion"),
     }
+
+
+def _anotar_turno_del_paciente(paciente, ficha, cliente_id, usuario_id,
+                               turno_id, inicio, motivo):
+    """Deja el puntero al turno para que el paciente pueda verlo y cancelarlo.
+
+    Es un puntero, no la verdad: el turno vive en la base del consultorio. Se
+    guarda igual el detalle para poder mostrar la lista sin ir a buscarlo.
+    """
+    with portal.cursor_portal(commit=True) as (_conn, cur):
+        cur.execute(
+            """
+            INSERT INTO turnos_reservados
+                (tipo_documento, numero_documento, cliente_id, consultorio_slug,
+                 consultorio_nombre, turno_id, usuario_id, profesional_nombre,
+                 lugar, motivo, fecha_inicio)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """,
+            (
+                paciente.tipo_documento, paciente.numero_documento, cliente_id,
+                ficha["consultorio_slug"], ficha["consultorio_nombre"], turno_id,
+                usuario_id,
+                f"{ficha['nombre']} {ficha.get('apellido') or ''}".strip(),
+                ficha.get("lugar_direccion"), (motivo or "").strip()[:255] or None,
+                inicio,
+            ),
+        )
+
+
+def mis_turnos(paciente, incluir_pasados=False):
+    """Los turnos del paciente, verificados contra cada consultorio.
+
+    No se confia en la copia del portal: el consultorio es quien manda, y si
+    cancelo o reprogramo el turno desde su sistema, la copia quedo vieja. Se
+    verifica con **una consulta por consultorio** con el que el paciente tenga
+    turnos, que en la practica es uno o dos.
+    """
+    condicion = "" if incluir_pasados else "AND (fecha_inicio >= NOW() OR estado = 'cancelado')"
+
+    with portal.cursor_portal() as (_conn, cur):
+        cur.execute(
+            f"""
+            SELECT * FROM turnos_reservados
+            WHERE tipo_documento = %s AND numero_documento = %s {condicion}
+            ORDER BY fecha_inicio DESC
+            """,
+            (paciente.tipo_documento, paciente.numero_documento),
+        )
+        filas = cur.fetchall()
+
+    # Se agrupan por consultorio para no abrir una conexion por turno.
+    por_consultorio = {}
+    for fila in filas:
+        if fila["estado"] == "reservado":
+            por_consultorio.setdefault(fila["consultorio_slug"], []).append(fila["turno_id"])
+
+    vigentes = set()
+    for slug, ids in por_consultorio.items():
+        cliente = plataforma.buscar_por_slug(slug)
+        if cliente is None:
+            # El consultorio se dio de baja: sus turnos ya no existen, pero el
+            # paciente tiene que seguir viendo que los tuvo.
+            continue
+        try:
+            from app.database import db_cursor
+
+            with como_consultorio(cliente):
+                with db_cursor() as (_conn, cur):
+                    marcas = ", ".join(["%s"] * len(ids))
+                    cur.execute(
+                        f"SELECT id FROM turnos WHERE id IN ({marcas})", tuple(ids)
+                    )
+                    vigentes.update((slug, f["id"]) for f in cur.fetchall())
+        except Exception:
+            # Un consultorio caido no puede dejar al paciente sin ver su lista.
+            # Se asume vigente: es lo que dice la copia.
+            vigentes.update((slug, i) for i in ids)
+
+    resultado = []
+    for fila in filas:
+        clave = (fila["consultorio_slug"], fila["turno_id"])
+        if fila["estado"] == "reservado" and clave not in vigentes:
+            # Lo cancelo el consultorio desde su sistema.
+            fila["estado"] = "cancelado"
+            fila["cancelado_por"] = "consultorio"
+        fila["puede_cancelar"] = _puede_cancelarse(fila)
+        resultado.append(fila)
+
+    return resultado
+
+
+def _puede_cancelarse(fila):
+    if fila["estado"] != "reservado":
+        return False
+    inicio = fila["fecha_inicio"]
+    if not isinstance(inicio, datetime):
+        return False
+    return inicio > datetime.now() + timedelta(hours=HORAS_MINIMAS_CANCELACION)
+
+
+def cancelar(paciente, reserva_id):
+    """Cancela un turno reservado desde el portal.
+
+    Borra el turno en la base del consultorio —que es como se cancela ahi, no hay
+    columna de estado— y marca la copia del portal. El horario queda libre para
+    otro paciente en el acto, que es justamente el sentido de que pueda
+    cancelarse.
+    """
+    with portal.cursor_portal() as (_conn, cur):
+        # El dueño va en el WHERE, no en una comprobacion posterior: asi no hay
+        # forma de escribirla al reves y dejar que alguien cancele el turno de otro.
+        cur.execute(
+            "SELECT * FROM turnos_reservados "
+            "WHERE id = %s AND tipo_documento = %s AND numero_documento = %s",
+            (reserva_id, paciente.tipo_documento, paciente.numero_documento),
+        )
+        fila = cur.fetchone()
+
+    if fila is None:
+        raise ErrorReserva("No encontramos ese turno.")
+
+    if fila["estado"] != "reservado":
+        raise ErrorReserva("Ese turno ya estaba cancelado.")
+
+    if not _puede_cancelarse(fila):
+        raise ErrorReserva(
+            f"Para cancelar con menos de {HORAS_MINIMAS_CANCELACION} horas de "
+            "anticipacion, llama al consultorio."
+        )
+
+    cliente = plataforma.buscar_por_slug(fila["consultorio_slug"])
+    if cliente is None:
+        raise ErrorReserva("El consultorio ya no esta disponible.")
+
+    from app.database import db_cursor
+
+    with como_consultorio(cliente):
+        with db_cursor(dictionary=False) as (conn, cur):
+            cur.execute("DELETE FROM turnos WHERE id = %s", (fila["turno_id"],))
+            conn.commit()
+
+    with portal.cursor_portal(commit=True) as (_conn, cur):
+        cur.execute(
+            "UPDATE turnos_reservados SET estado = 'cancelado', "
+            "cancelado_en = NOW(), cancelado_por = 'paciente' WHERE id = %s",
+            (reserva_id,),
+        )
+
+    return fila
 
 
 def _buscar_o_crear_paciente(cur, conn, paciente):

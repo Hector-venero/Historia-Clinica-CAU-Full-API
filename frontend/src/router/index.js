@@ -293,6 +293,12 @@ const router = createRouter({
                     name: 'PortalDocumentos',
                     component: () => import('@/views/pages/portal/MisDocumentos.vue'),
                     meta: { paciente: true }
+                },
+                {
+                    path: 'turnos',
+                    name: 'PortalMisTurnos',
+                    component: () => import('@/views/pages/portal/MisTurnos.vue'),
+                    meta: { paciente: true }
                 }
             ]
         },

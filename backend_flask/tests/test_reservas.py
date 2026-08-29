@@ -157,3 +157,78 @@ def test_los_limites_de_anticipacion_son_coherentes():
     assert reservas.HORAS_MINIMAS_ANTICIPACION > 0
     assert reservas.DIAS_MAXIMOS_ANTICIPACION > 0
     assert reservas.HORAS_MINIMAS_ANTICIPACION < reservas.DIAS_MAXIMOS_ANTICIPACION * 24
+
+
+# ------------------------------------------------------------ cancelacion
+
+
+def test_no_se_cancela_un_turno_ya_cancelado(monkeypatch):
+    fila = {"estado": "cancelado", "fecha_inicio": None}
+    monkeypatch.setattr(reservas, "_puede_cancelarse", lambda f: False)
+
+    class _Ctx:
+        def __enter__(self):
+            class _Cur:
+                def execute(self, *a, **k):
+                    pass
+
+                def fetchone(self):
+                    return fila
+            return (None, _Cur())
+
+        def __exit__(self, *a):
+            return False
+
+    monkeypatch.setattr(reservas.portal, "cursor_portal", lambda commit=False: _Ctx())
+
+    with flask_app.test_request_context("/"):
+        with pytest.raises(reservas.ErrorReserva) as exc:
+            reservas.cancelar(_PacienteFalso(), 1)
+
+    assert "ya estaba cancelado" in str(exc.value)
+
+
+def test_no_se_cancela_sobre_la_hora():
+    """Una cancelacion de ultimo momento que entra al sistema y nadie mira es
+    peor que un llamado: el consultorio sigue esperando al paciente igual."""
+    from datetime import datetime, timedelta
+
+    sobre_la_hora = {
+        "estado": "reservado",
+        "fecha_inicio": datetime.now() + timedelta(hours=1),
+    }
+    assert reservas._puede_cancelarse(sobre_la_hora) is False
+
+
+def test_si_se_cancela_con_anticipacion():
+    from datetime import datetime, timedelta
+
+    con_tiempo = {
+        "estado": "reservado",
+        "fecha_inicio": datetime.now() + timedelta(days=3),
+    }
+    assert reservas._puede_cancelarse(con_tiempo) is True
+
+
+def test_un_turno_cancelado_no_se_puede_volver_a_cancelar():
+    from datetime import datetime, timedelta
+
+    cancelado = {
+        "estado": "cancelado",
+        "fecha_inicio": datetime.now() + timedelta(days=3),
+    }
+    assert reservas._puede_cancelarse(cancelado) is False
+
+
+def test_la_ventana_de_cancelacion_es_mayor_que_la_de_reserva():
+    """Poder reservar algo que ya no se puede cancelar seria una trampa."""
+    assert reservas.HORAS_MINIMAS_CANCELACION >= reservas.HORAS_MINIMAS_ANTICIPACION
+
+
+class _PacienteFalso:
+    tipo_documento = "DNI"
+    numero_documento = "30111222"
+    nombre = "Ana"
+    apellido = "Perez"
+    email = "ana@ejemplo.com"
+    telefono = None
