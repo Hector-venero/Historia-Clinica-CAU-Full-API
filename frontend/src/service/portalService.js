@@ -83,5 +83,22 @@ export default {
 
     cancelarTurno(reservaId) {
         return api.delete(`/portal/mis-turnos/${reservaId}`);
+    },
+
+    /**
+     * Pide el enlace para restablecer la contraseña.
+     *
+     * Responde lo mismo exista o no la cuenta: el formulario es público y
+     * distinguirlo dejaría averiguar quién es paciente de la plataforma.
+     */
+    recuperar(email) {
+        return api.post('/portal/recuperar', { email });
+    },
+
+    resetear(token, password, passwordRepetida) {
+        return api.post(`/portal/reset/${token}`, {
+            password,
+            password_repetida: passwordRepetida
+        });
     }
 };

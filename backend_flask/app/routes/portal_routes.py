@@ -338,3 +338,97 @@ def cancelar_turno(reserva_id):
         return jsonify({"error": "No pudimos cancelar el turno."}), 500
 
     return jsonify({"mensaje": "Turno cancelado"})
+
+
+# ------------------------------------------------- recuperar la contrasena
+
+# Sal propia, distinta de la del personal (`reset-password` en auth_routes).
+#
+# La SECRET_KEY es la misma para toda la plataforma, asi que sin separar la sal
+# un enlace de recuperacion emitido para un usuario de consultorio serviria en el
+# portal y al reves: dos poblaciones distintas compartiendo tokens.
+SAL_RESET_PACIENTE = "reset-password-paciente"
+
+# Una hora, igual que para el personal. Suficiente para leer el correo y corto
+# para que un enlace olvidado en la bandeja no sirva un mes despues.
+VALIDEZ_RESET_SEGUNDOS = 3600
+
+
+@bp_portal.post("/recuperar")
+def recuperar():
+    """Manda el enlace para restablecer la contrasena.
+
+    **Responde lo mismo exista o no la cuenta.** El circuito del personal
+    devuelve 404 cuando el correo no esta registrado, y aca eso seria peor: el
+    formulario es publico, asi que cualquiera podria averiguar si una persona es
+    paciente de la plataforma probando correos. Es informacion de salud.
+    """
+    from itsdangerous import URLSafeTimedSerializer
+
+    from app.utils.mails_portal import mail_reset_paciente
+    from app.utils.validacion import validar_email
+
+    datos = request.get_json(silent=True) or {}
+    email = (datos.get("email") or "").strip().lower()
+
+    respuesta = jsonify({
+        "mensaje": "Si ese correo tiene una cuenta, te mandamos el enlace.",
+    })
+
+    if not validar_email(email):
+        return respuesta
+
+    fila = portal.buscar_por_email(email)
+    if fila:
+        serializador = URLSafeTimedSerializer(current_app.secret_key)
+        token = serializador.dumps(email, salt=SAL_RESET_PACIENTE)
+
+        mensaje = mail_reset_paciente(
+            destinatario=email,
+            nombre=fila["nombre"],
+            token=token,
+            url_portal=_url_portal(),
+        )
+        if mensaje is not None:
+            # En segundo plano: un SMTP lento no puede demorar la respuesta, y
+            # ademas un tiempo de respuesta distinto segun exista o no la cuenta
+            # delataria justo lo que el mensaje unico oculta.
+            enviar_en_segundo_plano(mensaje)
+
+    return respuesta
+
+
+@bp_portal.post("/reset/<token>")
+def reset(token):
+    """Fija la contrasena nueva a partir del enlace del correo."""
+    from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
+
+    serializador = URLSafeTimedSerializer(current_app.secret_key)
+
+    try:
+        email = serializador.loads(
+            token, salt=SAL_RESET_PACIENTE, max_age=VALIDEZ_RESET_SEGUNDOS
+        )
+    except SignatureExpired:
+        return jsonify({"error": "El enlace vencio. Pedi uno nuevo."}), 400
+    except BadSignature:
+        return jsonify({"error": "El enlace no es valido."}), 400
+
+    datos = request.get_json(silent=True) or {}
+    nueva = datos.get("password") or ""
+    repetida = datos.get("password_repetida") or ""
+
+    if nueva != repetida:
+        return jsonify({"error": "Las contrasenas no coinciden."}), 400
+
+    fila = portal.buscar_por_email(email)
+    if not fila:
+        # La cuenta se dio de baja entre que se pidio el enlace y se uso.
+        return jsonify({"error": "El enlace no es valido."}), 400
+
+    try:
+        portal.cambiar_password(fila["id"], nueva)
+    except portal.ErrorPortal as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    return jsonify({"mensaje": "Listo, ya podes entrar con tu contrasena nueva."})

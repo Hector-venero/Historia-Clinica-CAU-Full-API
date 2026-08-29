@@ -335,6 +335,22 @@ def verificar_registro(token):
     )
 
 
+def cambiar_password(cuenta_id, password):
+    """Fija una contrasena nueva. La valida antes: es la puerta a datos de salud."""
+    if not password_valida(password):
+        raise ErrorPortal(
+            "La contrasena debe tener entre 8 y 64 caracteres, con mayuscula, "
+            "minuscula, numero y simbolo."
+        )
+
+    with cursor_portal(commit=True) as (_conn, cur):
+        cur.execute(
+            "UPDATE pacientes_cuenta SET password_hash = %s WHERE id = %s",
+            (generate_password_hash(password, method="scrypt"), cuenta_id),
+        )
+        return cur.rowcount
+
+
 def actualizar_perfil(cuenta_id, datos):
     """Los datos que el paciente puede cambiar de si mismo.
 

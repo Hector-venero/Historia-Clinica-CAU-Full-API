@@ -166,3 +166,91 @@ def test_el_token_del_archivo_no_deriva_del_documento():
     for token in tokens:
         assert "30111222" not in token
         assert len(token) == 32
+
+
+# ------------------------------------------- recuperar la contrasena
+
+
+def test_recuperar_responde_lo_mismo_exista_o_no_la_cuenta(client, monkeypatch):
+    """El formulario es publico. Distinguir "no existe" de "te lo mandamos"
+    dejaria averiguar si una persona es paciente de la plataforma probando
+    correos, que es informacion de salud."""
+    monkeypatch.setattr(portal, "buscar_por_email", lambda e: None)
+    sin_cuenta = client.post("/api/portal/recuperar", json={"email": "nadie@x.com"})
+
+    monkeypatch.setattr(
+        portal, "buscar_por_email",
+        lambda e: {"id": 1, "nombre": "Ana", "email": "ana@x.com"},
+    )
+    monkeypatch.setattr(
+        "app.utils.mails_portal.mail_reset_paciente", lambda **k: None
+    )
+    con_cuenta = client.post("/api/portal/recuperar", json={"email": "ana@x.com"})
+
+    assert sin_cuenta.status_code == con_cuenta.status_code == 200
+    assert sin_cuenta.get_json() == con_cuenta.get_json()
+
+
+def test_un_correo_invalido_tampoco_delata(client):
+    """Ni siquiera un formato invalido cambia la respuesta: cualquier diferencia
+    sirve para deducir algo."""
+    respuesta = client.post("/api/portal/recuperar", json={"email": "no-es-correo"})
+
+    assert respuesta.status_code == 200
+    assert "mensaje" in respuesta.get_json()
+
+
+def test_un_token_del_personal_no_sirve_en_el_portal(client):
+    """La SECRET_KEY es la misma para toda la plataforma, asi que sin separar la
+    sal un enlace emitido para un usuario de consultorio serviria para cambiar la
+    contrasena de un paciente."""
+    from itsdangerous import URLSafeTimedSerializer
+
+    from app import app as flask_app
+
+    with flask_app.app_context():
+        # La sal del personal, la de auth_routes.
+        token = URLSafeTimedSerializer(flask_app.secret_key).dumps(
+            "ana@ejemplo.com", salt="reset-password"
+        )
+
+    respuesta = client.post(
+        f"/api/portal/reset/{token}",
+        json={"password": "NuevaClave1!", "password_repetida": "NuevaClave1!"},
+    )
+
+    assert respuesta.status_code == 400
+    assert "no es valido" in respuesta.get_json()["error"]
+
+
+def test_las_sales_de_reset_son_distintas():
+    from app.routes import portal_routes
+
+    assert portal_routes.SAL_RESET_PACIENTE != "reset-password"
+
+
+def test_un_token_invalido_se_rechaza(client):
+    respuesta = client.post(
+        "/api/portal/reset/inventado",
+        json={"password": "NuevaClave1!", "password_repetida": "NuevaClave1!"},
+    )
+    assert respuesta.status_code == 400
+
+
+def test_las_contrasenas_tienen_que_coincidir(client, monkeypatch):
+    from itsdangerous import URLSafeTimedSerializer
+
+    from app import app as flask_app
+
+    with flask_app.app_context():
+        token = URLSafeTimedSerializer(flask_app.secret_key).dumps(
+            "ana@ejemplo.com", salt="reset-password-paciente"
+        )
+
+    respuesta = client.post(
+        f"/api/portal/reset/{token}",
+        json={"password": "NuevaClave1!", "password_repetida": "Otra2!"},
+    )
+
+    assert respuesta.status_code == 400
+    assert "no coinciden" in respuesta.get_json()["error"]

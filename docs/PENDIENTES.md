@@ -123,13 +123,16 @@ verificadas.
   se encolan, pero nadie vio llegar uno. Es lo primero a comprobar cuando haya
   credenciales de correo del producto (hoy las del `.env` son del CAU).
 
-- **El portal no tiene recuperación de contraseña.** Un paciente que la olvide
-  hoy no tiene cómo entrar. El circuito existe para el personal
-  (`auth_routes.py`) y habría que replicarlo contra el plano del portal.
+- ~~**El portal no tiene recuperación de contraseña.**~~ ✅ resuelto el
+  02/09/2026. Con dos diferencias deliberadas respecto del circuito del personal,
+  que conviene portar allá algún día: responde **lo mismo exista o no la
+  cuenta** (el de `auth_routes.py` devuelve 404 y con eso delata qué correos
+  están registrados) y manda el correo **en segundo plano** (allá es síncrono, y
+  además un tiempo de respuesta distinto delata lo mismo que el mensaje único
+  oculta). La sal del token es propia: sin eso, un enlace emitido para el
+  personal serviría para cambiar la contraseña de un paciente.
 
-- **Nadie canceló un turno desde el portal.** El paciente puede reservar, pero no
-  cancelar: hoy eso lo hace el consultorio. Es lo primero que va a pedir alguien
-  que se equivocó de horario.
+- ~~**Nadie canceló un turno desde el portal.**~~ ✅ resuelto el 02/09/2026.
 
 ---
 

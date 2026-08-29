@@ -64,6 +64,10 @@ async function entrar() {
                     {{ entrando ? 'Entrando…' : 'Entrar' }}
                 </button>
 
+                <p class="text-center text-sm m-0">
+                    <router-link to="/portal/recuperar" class="text-surface-500 dark:text-surface-400 hover:underline">¿Olvidaste tu contraseña?</router-link>
+                </p>
+
                 <p class="text-center text-sm text-surface-500 dark:text-surface-400 m-0">
                     ¿No tenés cuenta?
                     <router-link to="/portal/registro" class="text-primary-600 dark:text-primary-400 font-semibold hover:underline">Creá una</router-link>

@@ -134,3 +134,45 @@ def mail_documento_enviado(destinatario, nombre_paciente, consultorio, tipo,
         "Por tu seguridad el documento no viaja en este correo."
     )
     return mensaje
+
+
+def mail_reset_paciente(destinatario, nombre, token, url_portal):
+    """Enlace para restablecer la contrasena.
+
+    El correo no dice si la cuenta existe ni menciona datos de salud: puede
+    llegar a una casilla equivocada, o a la de alguien que pidio el enlace sin
+    tener cuenta.
+    """
+    remitente = _remitente()
+    if not remitente or not destinatario:
+        return None
+
+    enlace = f"{url_portal}/portal/reset/{token}"
+
+    cuerpo = f"""
+    <div style="font-family: system-ui, -apple-system, sans-serif; max-width: 560px; margin: 0 auto; color:#0f172a;">
+        <h2 style="margin:0 0 16px;">Restablecé tu contraseña</h2>
+        <p style="font-size:15px; line-height:1.6; margin:0 0 24px;">
+            Hola {nombre}. Hacé clic para elegir una contraseña nueva.
+        </p>
+        <p style="margin:0 0 28px;">
+            <a href="{enlace}" style="{_ESTILO_BOTON}">Elegir contraseña nueva</a>
+        </p>
+        <p style="font-size:13px; color:#64748b; line-height:1.6; margin:0;">
+            El enlace vence en una hora.<br>
+            Si no lo pediste, ignorá este mensaje: tu contraseña no cambió.
+        </p>
+    </div>
+    """
+
+    mensaje = Message(
+        subject=f"Restablecé tu contraseña — {marca.NOMBRE_PRODUCTO}",
+        sender=remitente,
+        recipients=[destinatario],
+    )
+    mensaje.html = cuerpo
+    mensaje.body = (
+        f"Hola {nombre}. Para elegir una contrasena nueva:\n\n{enlace}\n\n"
+        "El enlace vence en una hora. Si no lo pediste, ignora este mensaje."
+    )
+    return mensaje

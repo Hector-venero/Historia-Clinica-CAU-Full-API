@@ -267,6 +267,16 @@ const router = createRouter({
             component: () => import('@/views/pages/portal/PortalRegistro.vue')
         },
         {
+            path: '/portal/recuperar',
+            name: 'PortalRecuperar',
+            component: () => import('@/views/pages/portal/PortalRecuperar.vue')
+        },
+        {
+            path: '/portal/reset/:token',
+            name: 'PortalReset',
+            component: () => import('@/views/pages/portal/PortalReset.vue')
+        },
+        {
             path: '/portal/verificar/:token',
             name: 'PortalVerificar',
             component: () => import('@/views/pages/portal/PortalVerificar.vue')
@@ -332,8 +342,10 @@ router.beforeEach(async (to) => {
     if (to.path.startsWith('/portal')) {
         const pacienteStore = usePacienteStore();
 
-        const publicasDelPortal = ['/portal/login', '/portal/registro', '/portal/buscar'];
-        const esVerificacion = to.path.startsWith('/portal/verificar/');
+        const publicasDelPortal = ['/portal/login', '/portal/registro', '/portal/buscar', '/portal/recuperar'];
+        // El token va en la URL: quien recupera su contraseña no tiene sesión,
+        // que es justamente el problema que viene a resolver.
+        const esVerificacion = to.path.startsWith('/portal/verificar/') || to.path.startsWith('/portal/reset/');
         // Elegir horario se ve sin cuenta; confirmarlo no. El backend es quien
         // exige la sesión al reservar, así que acá no hace falta guardarla.
         const esReserva = to.path.startsWith('/portal/reservar/');
