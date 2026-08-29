@@ -581,40 +581,32 @@ def api_turnos():
 @login_required
 @requiere_rol(*ROLES_TURNOS)
 def eliminar_turno(id):
-    conn = get_connection()
-    cursor = conn.cursor(dictionary=True)
+    with db_cursor(commit=True) as (_conn, cursor):
+        cursor.execute(
+            """
+            SELECT t.usuario_id, t.paciente_id, t.fecha_inicio, t.fecha_fin, u.nombre AS profesional
+            FROM turnos t
+            JOIN usuarios u ON u.id = t.usuario_id
+            WHERE t.id = %s
+        """,
+            (id,),
+        )
+        turno = cursor.fetchone()
 
-    cursor.execute(
-        """
-        SELECT t.usuario_id, t.paciente_id, t.fecha_inicio, t.fecha_fin, u.nombre AS profesional
-        FROM turnos t
-        JOIN usuarios u ON u.id = t.usuario_id
-        WHERE t.id = %s
-    """,
-        (id,),
-    )
-    turno = cursor.fetchone()
+        if not turno:
+            return jsonify({"error": "Turno no encontrado"}), 404
 
-    if not turno:
-        cursor.close()
-        conn.close()
-        return jsonify({"error": "Turno no encontrado"}), 404
+        if current_user.rol == "profesional" and turno["usuario_id"] != current_user.id:
+            return jsonify({"error": "No autorizado"}), 403
 
-    if current_user.rol == "profesional" and turno["usuario_id"] != current_user.id:
-        cursor.close()
-        conn.close()
-        return jsonify({"error": "No autorizado"}), 403
+        cursor.execute("SELECT nombre, apellido, email FROM pacientes WHERE id=%s", (turno["paciente_id"],))
+        paciente = cursor.fetchone()
+        cursor.execute("DELETE FROM turnos WHERE id=%s", (id,))
 
-    cursor.execute("SELECT nombre, apellido, email FROM pacientes WHERE id=%s", (turno["paciente_id"],))
-    paciente = cursor.fetchone()
-    cursor.execute("DELETE FROM turnos WHERE id=%s", (id,))
-    conn.commit()
-
-    # Mail HTML de cancelacion (ver utils/mails_turnos.py).
+    # El mail va fuera del bloque, ya cerrada la conexion: enviar_cancelacion
+    # lanza un hilo y no tiene sentido tener la conexion tomada mientras tanto.
     enviar_cancelacion(paciente, turno["profesional"], turno["fecha_inicio"])
 
-    cursor.close()
-    conn.close()
     return jsonify({"message": "Turno eliminado correctamente"})
 
 

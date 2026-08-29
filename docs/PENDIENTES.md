@@ -138,10 +138,26 @@ verificadas.
 
 ## 7. Menores
 
-- **`finally` en las conexiones de las rutas restantes.** Seis archivos de
-  `routes/` siguen con el patrón manual `get_connection()` … `close()`. Cierran
-  en todos los `return`, así que solo filtran ante una excepción. La forma
-  preferida es `db_cursor()`.
+- **Quedan 6 conexiones manuales en `turnos_routes.py`.** El resto se convirtió
+  a `db_cursor()` el 29/08/2026, y el pendiente original estaba mal planteado:
+  decía "seis archivos", pero `dashboard_routes` ya tenía `try/finally` en sus
+  dos conexiones, y la mayoría de las de `turnos` también. Solo filtraban diez, y
+  esas están hechas.
+
+  Las seis que quedan (`api_turnos`, `turnos_profesional`,
+  `turnos_profesional_completo`, `turnos_por_grupo`, `listar_turnos_grupales`,
+  `crear_turno_grupal`) son rutas de 30 a 60 líneas con ramas y `return`
+  tempranos. Un transformador automático rompió la sintaxis del archivo y hubo
+  que restaurarlo.
+
+  **Se dejaron a propósito.** Cierran en todos sus `return`, así que solo filtran
+  ante una excepción no controlada, y reindentar mal una ruta de la agenda es más
+  probable y más grave que esa fuga. Si se hacen, conviene una por vez y
+  probando los tres caminos de cada una, como se hizo con `eliminar_turno`.
+
+  ⚠️ Al convertirlas, ojo con `commit=True`: un `return` temprano dentro del
+  `with` **también hace commit** (está documentado en `database.py`), así que una
+  ruta que escriba y después devuelva un error confirmaría la escritura a medias.
 - **Node 20 en la máquina.** Vite 7 exige ≥ 20.19 y hay 18.19, así que
   `npm run dev` y `npm run build` locales fallan con `crypto.hash is not a
   function`. Mientras tanto se trabaja con el perfil `docker-compose.dev.yml`,
