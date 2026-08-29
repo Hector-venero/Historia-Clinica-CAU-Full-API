@@ -6,7 +6,7 @@ from werkzeug.security import generate_password_hash
 import secrets
 from app import mail
 from flask_mail import Message
-from app.database import get_connection
+from app.database import db_cursor
 from itsdangerous import URLSafeTimedSerializer, SignatureExpired, BadSignature
 from app.utils.validacion import password_valida, validar_email
 
@@ -85,11 +85,9 @@ def api_recover():
     if not validar_email(email):
         return jsonify({'error': 'Email inválido'}), 400
 
-    conn = get_connection()
-    cursor = conn.cursor(dictionary=True)
-    cursor.execute("SELECT * FROM usuarios WHERE email = %s", (email,))
-    usuario = cursor.fetchone()
-    conn.close()
+    with db_cursor() as (_conn, cursor):
+        cursor.execute("SELECT * FROM usuarios WHERE email = %s", (email,))
+        usuario = cursor.fetchone()
 
     if not usuario:
         return jsonify({'error': 'No se encontró un usuario con ese email'}), 404
@@ -140,10 +138,7 @@ def api_reset_password(token):
     #  Hash seguro
     password_hash = generate_password_hash(new_password, method="scrypt")
 
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("UPDATE usuarios SET password_hash = %s WHERE email = %s", (password_hash, email))
-    conn.commit()
-    conn.close()
+    with db_cursor(dictionary=False, commit=True) as (_conn, cursor):
+        cursor.execute("UPDATE usuarios SET password_hash = %s WHERE email = %s", (password_hash, email))
 
     return jsonify({'message': 'Contraseña actualizada correctamente ✅'}), 200

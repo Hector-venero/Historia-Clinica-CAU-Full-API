@@ -258,74 +258,74 @@ def _generar_fechas_tanda(fecha_inicio_raw, raw_weekdays, cantidad_raw, raw_hora
 
 
 def medico_disponible(usuario_id, fecha_inicio, fecha_fin, turno_excluir_id=None, permitir_solape=False):
-    conn = get_connection()
-    cursor = conn.cursor(dictionary=True)
+    # `medico_disponible` la llaman tanto las rutas de turnos como la reserva
+    # online del portal, asi que una conexion filtrada aca se multiplica por
+    # cada intento de reservar.
+    with db_cursor() as (_conn, cursor):
 
-    cursor.execute("SELECT rol FROM usuarios WHERE id = %s", (usuario_id,))
-    user_data = cursor.fetchone()
-    es_area = user_data and user_data["rol"] == "area"
+        cursor.execute("SELECT rol FROM usuarios WHERE id = %s", (usuario_id,))
+        user_data = cursor.fetchone()
+        es_area = user_data and user_data["rol"] == "area"
 
-    inicio = datetime.fromisoformat(fecha_inicio)
-    fin = datetime.fromisoformat(fecha_fin)
-    hora_ini = inicio.strftime("%H:%M:%S")
-    hora_fin = fin.strftime("%H:%M:%S")
+        inicio = datetime.fromisoformat(fecha_inicio)
+        fin = datetime.fromisoformat(fecha_fin)
+        hora_ini = inicio.strftime("%H:%M:%S")
+        hora_fin = fin.strftime("%H:%M:%S")
 
-    dia_semana = inicio.strftime("%A")
-    dias = {
-        "Monday": "Lunes",
-        "Tuesday": "Martes",
-        "Wednesday": "Miercoles",
-        "Thursday": "Jueves",
-        "Friday": "Viernes",
-        "Saturday": "Sabado",
-        "Sunday": "Domingo",
-    }
-    dia_es = dias.get(dia_semana, "Lunes")
+        dia_semana = inicio.strftime("%A")
+        dias = {
+            "Monday": "Lunes",
+            "Tuesday": "Martes",
+            "Wednesday": "Miercoles",
+            "Thursday": "Jueves",
+            "Friday": "Viernes",
+            "Saturday": "Sabado",
+            "Sunday": "Domingo",
+        }
+        dia_es = dias.get(dia_semana, "Lunes")
 
-    cursor.execute(
-        """
-        SELECT 1 FROM disponibilidades
-        WHERE usuario_id = %s
-        AND dia_semana = %s
-        AND %s >= hora_inicio
-        AND %s <= hora_fin
-        AND activo = 1
-    """,
-        (usuario_id, dia_es, hora_ini, hora_fin),
-    )
-    disponible = cursor.fetchone()
-
-    cursor.execute(
-        """
-        SELECT 1 FROM ausencias
-        WHERE usuario_id = %s
-        AND fecha_inicio < %s
-        AND fecha_fin > %s
-    """,
-        (usuario_id, fecha_fin, fecha_inicio),
-    )
-    ausente = cursor.fetchone()
-
-    ocupado = None
-    if not es_area and not permitir_solape:
-        params = [usuario_id, fecha_fin, fecha_inicio, fecha_inicio, fecha_fin]
-        query = """
-           SELECT 1 FROM turnos
+        cursor.execute(
+            """
+            SELECT 1 FROM disponibilidades
             WHERE usuario_id = %s
-            AND (
-                (fecha_inicio < %s AND fecha_fin > %s)
-                OR
-                (fecha_inicio < %s AND fecha_fin > %s)
-            )
-        """
-        if turno_excluir_id is not None:
-            query += " AND id <> %s"
-            params.append(turno_excluir_id)
-        cursor.execute(query, tuple(params))
-        ocupado = cursor.fetchone()
+            AND dia_semana = %s
+            AND %s >= hora_inicio
+            AND %s <= hora_fin
+            AND activo = 1
+        """,
+            (usuario_id, dia_es, hora_ini, hora_fin),
+        )
+        disponible = cursor.fetchone()
 
-    cursor.close()
-    conn.close()
+        cursor.execute(
+            """
+            SELECT 1 FROM ausencias
+            WHERE usuario_id = %s
+            AND fecha_inicio < %s
+            AND fecha_fin > %s
+        """,
+            (usuario_id, fecha_fin, fecha_inicio),
+        )
+        ausente = cursor.fetchone()
+
+        ocupado = None
+        if not es_area and not permitir_solape:
+            params = [usuario_id, fecha_fin, fecha_inicio, fecha_inicio, fecha_fin]
+            query = """
+               SELECT 1 FROM turnos
+                WHERE usuario_id = %s
+                AND (
+                    (fecha_inicio < %s AND fecha_fin > %s)
+                    OR
+                    (fecha_inicio < %s AND fecha_fin > %s)
+                )
+            """
+            if turno_excluir_id is not None:
+                query += " AND id <> %s"
+                params.append(turno_excluir_id)
+            cursor.execute(query, tuple(params))
+            ocupado = cursor.fetchone()
+
     return bool(disponible) and not ausente and not ocupado
 
 

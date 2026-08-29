@@ -49,43 +49,40 @@ def normalizar_dia(dia):
 @requiere_rol('director', 'profesional', 'administrativo', 'area')
 def listar_disponibilidades():
 
-    conn = get_connection()
-    cursor = conn.cursor(dictionary=True)
+    with db_cursor() as (_conn, cursor):
 
-    # 👇 CAMBIO: 'area' se comporta como 'profesional' (ve solo lo suyo)
-    if current_user.rol in ['profesional', 'area']:
-        cursor.execute(f"""
-            SELECT id, usuario_id, dia_semana, hora_inicio, hora_fin, activo
-            FROM disponibilidades
-            WHERE usuario_id = %s
-            ORDER BY FIELD(dia_semana, {orden_sql})
-        """, (current_user.id,))
-    else:
-        # Directores y administrativos ven las de todos
-        # Agregamos filtro opcional por usuario_id si viene en la URL (?usuario_id=5)
-        filtro_usuario = request.args.get('usuario_id')
-        
-        if filtro_usuario:
+        # 👇 CAMBIO: 'area' se comporta como 'profesional' (ve solo lo suyo)
+        if current_user.rol in ['profesional', 'area']:
             cursor.execute(f"""
-                SELECT d.id, d.usuario_id, u.nombre AS profesional,
-                       d.dia_semana, d.hora_inicio, d.hora_fin, d.activo
-                FROM disponibilidades d
-                JOIN usuarios u ON d.usuario_id = u.id
-                WHERE d.usuario_id = %s
-                ORDER BY u.nombre ASC, FIELD(d.dia_semana, {orden_sql})
-            """, (filtro_usuario,))
+                SELECT id, usuario_id, dia_semana, hora_inicio, hora_fin, activo
+                FROM disponibilidades
+                WHERE usuario_id = %s
+                ORDER BY FIELD(dia_semana, {orden_sql})
+            """, (current_user.id,))
         else:
-            cursor.execute(f"""
-                SELECT d.id, d.usuario_id, u.nombre AS profesional,
-                       d.dia_semana, d.hora_inicio, d.hora_fin, d.activo
-                FROM disponibilidades d
-                JOIN usuarios u ON d.usuario_id = u.id
-                ORDER BY u.nombre ASC, FIELD(d.dia_semana, {orden_sql})
-            """)
+            # Directores y administrativos ven las de todos
+            # Agregamos filtro opcional por usuario_id si viene en la URL (?usuario_id=5)
+            filtro_usuario = request.args.get('usuario_id')
+        
+            if filtro_usuario:
+                cursor.execute(f"""
+                    SELECT d.id, d.usuario_id, u.nombre AS profesional,
+                           d.dia_semana, d.hora_inicio, d.hora_fin, d.activo
+                    FROM disponibilidades d
+                    JOIN usuarios u ON d.usuario_id = u.id
+                    WHERE d.usuario_id = %s
+                    ORDER BY u.nombre ASC, FIELD(d.dia_semana, {orden_sql})
+                """, (filtro_usuario,))
+            else:
+                cursor.execute(f"""
+                    SELECT d.id, d.usuario_id, u.nombre AS profesional,
+                           d.dia_semana, d.hora_inicio, d.hora_fin, d.activo
+                    FROM disponibilidades d
+                    JOIN usuarios u ON d.usuario_id = u.id
+                    ORDER BY u.nombre ASC, FIELD(d.dia_semana, {orden_sql})
+                """)
 
-    disponibilidades = cursor.fetchall()
-    cursor.close()
-    conn.close()
+        disponibilidades = cursor.fetchall()
 
     # 🟢 Normalizar resultados
     for d in disponibilidades:
@@ -166,34 +163,25 @@ def editar_disponibilidad(id):
     if not data:
         return jsonify({"error": "Faltan datos"}), 400
 
-    conn = get_connection()
-    cursor = conn.cursor(dictionary=True)
+    # Los cierres a mano en cada `return` eran el problema: alcanzaba con que uno
+    # se olvidara, o con una excepcion entre medio, para dejar la conexion abierta
+    # hasta que MySQL la matara por timeout.
+    with db_cursor(commit=True) as (_conn, cursor):
+        cursor.execute("SELECT usuario_id FROM disponibilidades WHERE id=%s", (id,))
+        disp = cursor.fetchone()
+        if not disp:
+            return jsonify({"error": "Disponibilidad no encontrada"}), 404
 
-    cursor.execute("SELECT usuario_id FROM disponibilidades WHERE id=%s", (id,))
-    disp = cursor.fetchone()
-    if not disp:
-        cursor.close(); conn.close()
-        return jsonify({"error": "Disponibilidad no encontrada"}), 404
+        # Un profesional o un area solo puede editar lo suyo; el director,
+        # lo de cualquiera.
+        if current_user.rol in ['profesional', 'area'] and disp["usuario_id"] != current_user.id:
+            return jsonify({"error": "No autorizado"}), 403
 
-    # Si es profesional/area, solo puede editar lo suyo. 
-    # Si es director, puede editar lo de cualquiera.
-    if current_user.rol in ['profesional', 'area'] and disp["usuario_id"] != current_user.id:
-        cursor.close(); conn.close()
-        return jsonify({"error": "No autorizado"}), 403
-
-    hora_inicio = data.get("hora_inicio")
-    hora_fin = data.get("hora_fin")
-    activo = data.get("activo")
-
-    cursor.execute("""
-        UPDATE disponibilidades
-        SET hora_inicio=%s, hora_fin=%s, activo=%s
-        WHERE id=%s
-    """, (hora_inicio, hora_fin, activo, id))
-
-    conn.commit()
-    cursor.close()
-    conn.close()
+        cursor.execute("""
+            UPDATE disponibilidades
+            SET hora_inicio=%s, hora_fin=%s, activo=%s
+            WHERE id=%s
+        """, (data.get("hora_inicio"), data.get("hora_fin"), data.get("activo"), id))
 
     return jsonify({"message": "Disponibilidad actualizada correctamente"})
 
@@ -207,26 +195,18 @@ def editar_disponibilidad(id):
 @requiere_rol('director', 'profesional', 'administrativo', 'area')
 def eliminar_disponibilidad(id):
 
-    conn = get_connection()
-    cursor = conn.cursor(dictionary=True)
+    with db_cursor(commit=True) as (_conn, cursor):
+        cursor.execute("SELECT usuario_id FROM disponibilidades WHERE id=%s", (id,))
+        disp = cursor.fetchone()
 
-    cursor.execute("SELECT usuario_id FROM disponibilidades WHERE id=%s", (id,))
-    disp = cursor.fetchone()
+        if not disp:
+            return jsonify({"error": "Disponibilidad no encontrada"}), 404
 
-    if not disp:
-        cursor.close(); conn.close()
-        return jsonify({"error": "Disponibilidad no encontrada"}), 404
+        if current_user.rol in ['profesional', 'area'] and disp["usuario_id"] != current_user.id:
+            return jsonify({"error": "No autorizado"}), 403
 
-    # Validación de permiso
-    if current_user.rol in ['profesional', 'area'] and disp["usuario_id"] != current_user.id:
-        cursor.close(); conn.close()
-        return jsonify({"error": "No autorizado"}), 403
+        cursor.execute("DELETE FROM disponibilidades WHERE id=%s", (id,))
 
-    cursor.execute("DELETE FROM disponibilidades WHERE id=%s", (id,))
-    conn.commit()
-
-    cursor.close()
-    conn.close()
     return jsonify({"message": "Disponibilidad eliminada correctamente"})
 
 

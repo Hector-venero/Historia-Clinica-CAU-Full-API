@@ -71,6 +71,12 @@ def db_cursor(dictionary=True, commit=False):
             cursor.execute(...)
 
     Con commit=True hace commit al salir sin excepcion, y rollback si hubo una.
+
+    OJO con los `return` tempranos: salir del bloque con un return **tambien
+    hace commit**, porque para el context manager es una salida sin excepcion.
+    Comprobado. En la practica eso significa que un handler que escriba algo y
+    despues devuelva un error con `return` va a confirmar esa escritura a medias.
+    Si hace falta abortar, hay que lanzar una excepcion, no retornar.
     """
     conn = get_connection()
     cursor = conn.cursor(dictionary=dictionary)

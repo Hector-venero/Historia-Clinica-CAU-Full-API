@@ -248,16 +248,14 @@ def quitar_miembro(grupo_id, usuario_id):
 @login_required
 @requiere_modulo('grupos')
 def obtener_miembros(grupo_id):
-    conn = get_connection()
-    cursor = conn.cursor(dictionary=True)
-    cursor.execute("""
-        SELECT u.id, u.nombre, u.rol
-        FROM grupo_miembros gm
-        JOIN usuarios u ON gm.usuario_id = u.id
-        WHERE gm.grupo_id = %s
-    """, (grupo_id,))
-    miembros = cursor.fetchall()
-    cursor.close(); conn.close()
+    with db_cursor() as (conn, cursor):
+        cursor.execute("""
+            SELECT u.id, u.nombre, u.rol
+            FROM grupo_miembros gm
+            JOIN usuarios u ON gm.usuario_id = u.id
+            WHERE gm.grupo_id = %s
+        """, (grupo_id,))
+        miembros = cursor.fetchall()
     return jsonify(miembros)
 
 

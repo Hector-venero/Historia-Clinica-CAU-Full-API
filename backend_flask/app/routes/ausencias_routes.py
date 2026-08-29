@@ -1,7 +1,7 @@
 # app/routes/ausencias_routes.py
 from flask import Blueprint, request, jsonify
 from flask_login import login_required, current_user
-from app.database import get_connection
+from app.database import db_cursor
 from app.utils.fechas import a_iso_arg
 from app.utils.permisos import requiere_rol
 from datetime import datetime
@@ -34,16 +34,12 @@ def crear_ausencia():
     if current_user.rol in ["profesional", "area"] and usuario_id != current_user.id:
         return jsonify({"error": "No puede bloquear agenda de otros profesionales"}), 403
 
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("""
-        INSERT INTO ausencias (usuario_id, fecha_inicio, fecha_fin, motivo, creado_por)
-        VALUES (%s, %s, %s, %s, %s)
-    """, (usuario_id, fecha_inicio, fecha_fin, motivo, current_user.id))
-    conn.commit()
-    ausencia_id = cursor.lastrowid
-    cursor.close()
-    conn.close()
+    with db_cursor(dictionary=False, commit=True) as (_conn, cursor):
+        cursor.execute("""
+            INSERT INTO ausencias (usuario_id, fecha_inicio, fecha_fin, motivo, creado_por)
+            VALUES (%s, %s, %s, %s, %s)
+        """, (usuario_id, fecha_inicio, fecha_fin, motivo, current_user.id))
+        ausencia_id = cursor.lastrowid
 
     return jsonify({"message": "Ausencia registrada ✅", "id": ausencia_id}), 201
 
@@ -55,30 +51,26 @@ def crear_ausencia():
 @login_required
 @requiere_rol("director", "profesional", "administrativo", "area")
 def listar_ausencias():
-    conn = get_connection()
-    cursor = conn.cursor(dictionary=True)
+    with db_cursor() as (_conn, cursor):
+        # "area" solo ve lo suyo, igual que profesional
+        if current_user.rol in ["profesional", "area"]:
+            cursor.execute("""
+                SELECT a.*, u.nombre AS nombre_usuario
+                FROM ausencias a
+                JOIN usuarios u ON a.usuario_id = u.id
+                WHERE a.usuario_id = %s
+                ORDER BY fecha_inicio
+            """, (current_user.id,))
+        else:
+            # Director / Admin ven todo
+            cursor.execute("""
+                SELECT a.*, u.nombre AS nombre_usuario
+                FROM ausencias a
+                JOIN usuarios u ON a.usuario_id = u.id
+                ORDER BY fecha_inicio
+            """)
 
-    # 👇 CAMBIO: "area" solo ve lo suyo, igual que profesional
-    if current_user.rol in ["profesional", "area"]:
-        cursor.execute("""
-            SELECT a.*, u.nombre AS nombre_usuario
-            FROM ausencias a
-            JOIN usuarios u ON a.usuario_id = u.id
-            WHERE a.usuario_id = %s
-            ORDER BY fecha_inicio
-        """, (current_user.id,))
-    else:
-        # Director / Admin ven todo
-        cursor.execute("""
-            SELECT a.*, u.nombre AS nombre_usuario
-            FROM ausencias a
-            JOIN usuarios u ON a.usuario_id = u.id
-            ORDER BY fecha_inicio
-        """)
-    
-    ausencias = cursor.fetchall()
-    cursor.close()
-    conn.close()
+        ausencias = cursor.fetchall()
 
     # jsonify serializa los DATETIME al formato de fecha HTTP y los etiqueta
     # "GMT", aunque estan guardados en hora argentina:
@@ -103,22 +95,20 @@ def listar_ausencias():
 @login_required
 @requiere_rol("director", "profesional", "administrativo", "area")
 def eliminar_ausencia(ausencia_id):
-    conn = get_connection()
-    cursor = conn.cursor(dictionary=True)
+    # Los `return` tempranos de acá eran justamente el motivo del cambio: cada uno
+    # tenía que acordarse de cerrar la conexión a mano, y el que se olvidara —o
+    # cualquier excepción entre medio— la dejaba abierta hasta que MySQL la matara
+    # por timeout.
+    with db_cursor(commit=True) as (_conn, cursor):
+        cursor.execute("SELECT usuario_id FROM ausencias WHERE id=%s", (ausencia_id,))
+        ausencia = cursor.fetchone()
+        if not ausencia:
+            return jsonify({"error": "Ausencia no encontrada"}), 404
 
-    cursor.execute("SELECT usuario_id FROM ausencias WHERE id=%s", (ausencia_id,))
-    ausencia = cursor.fetchone()
-    if not ausencia:
-        cursor.close(); conn.close()
-        return jsonify({"error": "Ausencia no encontrada"}), 404
+        # Un profesional o un area solo puede eliminar sus propias ausencias.
+        if current_user.rol in ["profesional", "area"] and ausencia["usuario_id"] != current_user.id:
+            return jsonify({"error": "No autorizado"}), 403
 
-    # Restricción: un médico/area solo puede eliminar sus propias ausencias
-    # 👇 CAMBIO: Agregamos "area" a la restricción
-    if current_user.rol in ["profesional", "area"] and ausencia["usuario_id"] != current_user.id:
-        cursor.close(); conn.close()
-        return jsonify({"error": "No autorizado"}), 403
+        cursor.execute("DELETE FROM ausencias WHERE id=%s", (ausencia_id,))
 
-    cursor.execute("DELETE FROM ausencias WHERE id=%s", (ausencia_id,))
-    conn.commit()
-    cursor.close(); conn.close()
     return jsonify({"message": "Ausencia eliminada ✅"})
