@@ -178,11 +178,13 @@ def test_la_contrasena_no_se_guarda_en_claro(monkeypatch, plataforma_falsa):
         }
     )
 
-    insertados = [p for p in guardados if len(p) == 6]
-    assert insertados, "no se registro el INSERT"
-    hash_guardado = insertados[0][3]
-    assert "Prueba123!" not in str(hash_guardado)
-    assert str(hash_guardado).startswith("scrypt:")
+    # Se busca el hash entre los parametros en lugar de contarlos por posicion:
+    # el INSERT gano una columna al agregar el tipo de alta, y un test que cuenta
+    # parametros se rompe con cada campo nuevo sin que nada este mal.
+    valores = [str(v) for params in guardados for v in params]
+
+    assert not any("Prueba123!" == v for v in valores), "la contrasena viaja en claro"
+    assert any(v.startswith("scrypt:") for v in valores), "no se guardo el hash"
 
 
 def test_un_enlace_invalido_no_revela_nada(monkeypatch):
@@ -234,3 +236,121 @@ def test_si_alguien_tomo_la_direccion_mientras_tanto_se_avisa(monkeypatch):
     with pytest.raises(registro.ErrorRegistro) as exc:
         registro.verificar_y_crear("token")
     assert "otra" in str(exc.value)
+
+
+# --------------------------------------------------- alta de instituciones
+
+
+def test_el_tipo_de_alta_se_valida(plataforma_falsa):
+    with pytest.raises(registro.ErrorRegistro):
+        registro.registrar({
+            "tipo": "inventado", "slug": "clinicanorte", "nombre": "Clinica Norte",
+            "email": "a@b.com", "password": "Prueba123!",
+        })
+
+
+def test_una_institucion_necesita_un_contacto(plataforma_falsa):
+    """Es una conversacion comercial: hay que saber con quien hablar."""
+    with pytest.raises(registro.ErrorRegistro) as exc:
+        registro._validar_institucion({"contacto_telefono": "11 5555-1234"})
+    assert "con quien hablar" in str(exc.value)
+
+
+def test_una_institucion_necesita_un_telefono(plataforma_falsa):
+    with pytest.raises(registro.ErrorRegistro) as exc:
+        registro._validar_institucion({"contacto_nombre": "Laura Diaz"})
+    assert "telefono" in str(exc.value)
+
+
+def test_la_cantidad_de_profesionales_tiene_que_ser_un_numero(plataforma_falsa):
+    with pytest.raises(registro.ErrorRegistro):
+        registro._validar_institucion({
+            "contacto_nombre": "Laura", "contacto_telefono": "11 5555-1234",
+            "cantidad_profesionales": "muchos",
+        })
+
+
+def test_verificar_una_institucion_no_crea_la_base(monkeypatch):
+    """El punto entero del circuito de aprobacion.
+
+    Crear la base al verificar el correo significaria que cualquiera con una
+    casilla puede llenar el servidor, que es justo lo que la verificacion evita
+    en el alta de un medico. Aca la verificacion demuestra la casilla; la
+    aprobacion decide si el consultorio existe.
+    """
+    from datetime import datetime, timedelta
+
+    fila = {
+        "estado": "pendiente",
+        "tipo": "institucion",
+        "slug": "clinicanorte",
+        "token": "t",
+        "expira_en": datetime.now() + timedelta(hours=1),
+    }
+    monkeypatch.setattr(registro, "buscar_por_token", lambda t: fila)
+    monkeypatch.setattr(registro, "_marcar", lambda *a, **k: None)
+    monkeypatch.setattr(registro.plataforma, "slug_disponible", lambda s: True)
+
+    def no_llamar(*a, **k):
+        raise AssertionError("una institucion no obtiene su base al verificar")
+
+    monkeypatch.setattr("app.alta_cliente.dar_de_alta", no_llamar, raising=False)
+
+    registro.verificar_y_crear("t")
+
+
+def test_verificar_un_medico_si_crea_la_base(monkeypatch):
+    """El camino de un profesional independiente no cambia: no hay nada que
+    evaluar, asi que verificar el correo alcanza."""
+    from datetime import datetime, timedelta
+
+    fila = {
+        "estado": "pendiente",
+        "tipo": "medico",
+        "slug": "drasosa",
+        "nombre": "Dra. Sosa",
+        "email": "sosa@ejemplo.com",
+        "password_hash": "scrypt:x",
+        "token": "t",
+        "expira_en": datetime.now() + timedelta(hours=1),
+    }
+    llamadas = []
+
+    monkeypatch.setattr(registro, "buscar_por_token", lambda t: fila)
+    monkeypatch.setattr(registro, "_marcar", lambda *a, **k: None)
+    monkeypatch.setattr(registro.plataforma, "slug_disponible", lambda s: True)
+    monkeypatch.setattr(
+        registro.plataforma, "cursor_plataforma",
+        lambda commit=False: _ContextoNulo(),
+    )
+    monkeypatch.setattr(
+        "app.alta_cliente.dar_de_alta",
+        lambda **k: llamadas.append(k) or {"cliente_id": 1},
+        raising=False,
+    )
+
+    registro.verificar_y_crear("t")
+    assert llamadas, "el alta de un medico tiene que crear la base"
+
+
+class _ContextoNulo:
+    def __enter__(self):
+        class _Cur:
+            def execute(self, *a, **k):
+                pass
+        return (None, _Cur())
+
+    def __exit__(self, *a):
+        return False
+
+
+def test_reabrir_el_enlace_de_una_institucion_aprobada_no_la_duplica(monkeypatch):
+    fila = {"estado": "pendiente_aprobacion", "tipo": "institucion", "slug": "x"}
+    monkeypatch.setattr(registro, "buscar_por_token", lambda t: fila)
+
+    def no_llamar(*a, **k):
+        raise AssertionError("no se debe crear nada")
+
+    monkeypatch.setattr("app.alta_cliente.dar_de_alta", no_llamar, raising=False)
+
+    assert registro.verificar_y_crear("t")["estado"] == "pendiente_aprobacion"

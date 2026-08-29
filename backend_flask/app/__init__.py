@@ -319,3 +319,81 @@ def cancelados_vencidos_command():
     for fila in filas:
         click.echo(f"  {fila['slug']:<20} cancelado el {fila['cancelado_en']}  base={fila['db_nombre']}")
     click.echo("\nRevisalos y borralos a mano si corresponde.")
+
+
+@app.cli.command("solicitudes")
+def solicitudes_command():
+    """Instituciones que esperan aprobacion.
+
+    Reemplaza al formulario externo: la solicitud ya esta en el plano de control,
+    asi que no hay que copiar datos de una planilla al sistema.
+    """
+    from app import registro
+
+    filas = registro.solicitudes_pendientes()
+    if not filas:
+        click.echo("No hay solicitudes pendientes.")
+        return
+
+    for f in filas:
+        click.echo(f"\n{'=' * 60}")
+        click.echo(f"  {f['nombre']}   ({f['slug']})")
+        click.echo(f"  Solicitada:    {f['creado_en']}")
+        click.echo(f"  Contacto:      {f.get('contacto_nombre') or '-'}  {f.get('contacto_telefono') or ''}")
+        click.echo(f"  Email:         {f['email']}")
+        if f.get("localidad"):
+            click.echo(f"  Donde:         {f.get('direccion') or ''} — {f['localidad']}")
+        click.echo(f"  Profesionales: {f.get('cantidad_profesionales') or '?'}"
+                   f"   Consultorios: {f.get('cantidad_consultorios') or '?'}")
+        if f.get("atencion_online") is not None:
+            click.echo(f"  Atencion online: {'si' if f['atencion_online'] else 'no'}")
+        if f.get("sitio_web"):
+            click.echo(f"  Sitio:         {f['sitio_web']}")
+        if f.get("como_nos_conocio"):
+            click.echo(f"  Nos conocio:   {f['como_nos_conocio']}")
+        if f.get("comentarios"):
+            click.echo(f"  Comentarios:   {f['comentarios']}")
+
+    click.echo(f"\n{'=' * 60}")
+    click.echo("Para aprobar:  flask aprobar-solicitud <slug>")
+    click.echo("Para rechazar: flask rechazar-solicitud <slug> --motivo '...'")
+
+
+@app.cli.command("aprobar-solicitud")
+@click.argument("slug")
+def aprobar_solicitud_command(slug):
+    """Crea el consultorio de una institucion aprobada."""
+    from app import registro
+    from app.utils.correo import enviar_en_segundo_plano
+    from app.utils.mails_registro import mail_bienvenida
+
+    try:
+        fila = registro.aprobar(slug)
+    except registro.ErrorRegistro as exc:
+        raise click.ClickException(str(exc))
+
+    dominio = (os.getenv("DOMINIO_BASE") or "").strip().strip(".")
+    url = f"https://{fila['slug']}.{dominio}" if dominio else f"http://{fila['slug']}.localhost:5173"
+
+    mensaje = mail_bienvenida(destinatario=fila["email"], nombre=fila["nombre"], url=url)
+    if mensaje is not None:
+        enviar_en_segundo_plano(mensaje)
+
+    click.echo(f"Aprobada: {fila['nombre']} -> {url}")
+    click.echo("Entra con el usuario 'admin' y la contrasena que eligio al registrarse.")
+
+
+@app.cli.command("rechazar-solicitud")
+@click.argument("slug")
+@click.option("--motivo", default=None, help="Queda registrado; no se envia automaticamente.")
+def rechazar_solicitud_command(slug, motivo):
+    """Marca una solicitud como rechazada.
+
+    No borra nada: queda el registro de que alguien pidio una cuenta y por que no
+    se le dio. Avisarle es una conversacion, no un correo automatico.
+    """
+    from app import registro
+
+    if registro.rechazar(slug, motivo) == 0:
+        raise click.ClickException(f"No hay solicitud pendiente para '{slug}'.")
+    click.echo(f"Rechazada: {slug}")
