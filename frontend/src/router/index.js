@@ -2,6 +2,7 @@ import AppLayout from '@/layout/AppLayout.vue';
 import { createRouter, createWebHistory } from 'vue-router';
 import { useUserStore } from '@/stores/user';
 import { usePacienteStore } from '@/stores/paciente';
+import { esPortalPaciente, esSitioPublico } from '@/utils/dominio';
 
 const router = createRouter({
     history: createWebHistory(),
@@ -29,10 +30,27 @@ const router = createRouter({
         },
         // 🆕 Alta autoservicio. Vive en el dominio raíz de la plataforma, no en
         // el de un consultorio: quien se registra todavía no tiene subdominio.
+        // 🌐 Sitio público. Vive en el dominio raíz; el guard redirige `/` acá
+        // cuando no se entró por el subdominio de un consultorio ni del portal.
+        {
+            path: '/inicio',
+            name: 'Inicio',
+            component: () => import('@/views/pages/publico/Inicio.vue')
+        },
         {
             path: '/registro',
-            name: 'Registro',
+            name: 'ElegirRegistro',
+            component: () => import('@/views/pages/publico/ElegirRegistro.vue')
+        },
+        {
+            path: '/registro/medico',
+            name: 'RegistroMedico',
             component: () => import('@/views/pages/registro/Registro.vue')
+        },
+        {
+            path: '/registro/institucion',
+            name: 'RegistroInstitucion',
+            component: () => import('@/views/pages/publico/RegistroInstitucion.vue')
         },
         {
             path: '/verificar/:token',
@@ -325,13 +343,16 @@ router.beforeEach(async (to) => {
         return pacienteStore.autenticado ? true : '/portal/login';
     }
 
-    // Entrar por el subdominio del portal lleva al portal, no al dashboard del
-    // consultorio: en `mi.<dominio>` no hay consultorio que mostrar.
-    if (to.path === '/' && window.location.host.split('.')[0] === 'mi') {
-        return '/portal';
+    // `/` significa una cosa distinta en cada plano, así que se resuelve por
+    // dónde entró el visitante y no por la ruta.
+    if (to.path === '/') {
+        if (esPortalPaciente()) return '/portal';
+        // Dominio raíz: el sitio público. Sin esto caía en el login de un
+        // consultorio que no existe.
+        if (esSitioPublico()) return '/inicio';
     }
 
-    const publicPages = ['/auth/login', '/recuperar', '/logout', '/registro', '/cuenta/suspendida'];
+    const publicPages = ['/auth/login', '/recuperar', '/logout', '/logout', '/cuenta/suspendida', '/inicio', '/registro', '/registro/medico', '/registro/institucion'];
     // El token va en la URL, así que la ruta no puede exigir sesión: quien
     // verifica su correo todavía no tiene cuenta.
     const isResetRoute = to.path.startsWith('/reset/') || to.path.startsWith('/verificar/');
