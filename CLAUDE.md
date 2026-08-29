@@ -134,14 +134,38 @@ Key frontend libraries: PrimeVue 4, FullCalendar 5 (turnos/grupos), vee-validate
 
 Hay una sola fixture, `client`; para lo que necesite contexto de aplicación se importa `from app import app as flask_app` y se usa `with flask_app.app_context():`.
 
-Al 28/08/2026 son **319 tests** y corren en menos de un segundo.
+Al 28/08/2026 son **354 tests** y corren en menos de un segundo.
 
-## Plataforma multi-consultorio (rama `saas/multi-tenant`)
+## Ficha Salud — la plataforma (rama `saas/multi-tenant`)
 
 `main` es la instalación del CAU: **un solo centro**. La rama `saas/multi-tenant`
-convierte el mismo código en una plataforma que atiende a varios consultorios,
-cada uno en su subdominio. Decisiones completas en [`docs/SAAS.md`](docs/SAAS.md);
-despliegue en [`deploy/PLATAFORMA.md`](deploy/PLATAFORMA.md).
+convierte el mismo código en **Ficha Salud**, una plataforma que atiende a varios
+consultorios y además le da cuenta propia al paciente. Decisiones completas en
+[`docs/SAAS.md`](docs/SAAS.md); despliegue en
+[`deploy/PLATAFORMA.md`](deploy/PLATAFORMA.md).
+
+### Tres planos, tres subdominios
+
+```
+fichasalud.com.ar            sitio público: qué es y los 3 registros
+drlopez.fichasalud.com.ar    el sistema del consultorio
+mi.fichasalud.com.ar         el portal del paciente
+```
+
+Y **tres bases de datos con roles distintos**:
+
+| Base | Qué guarda | Quién la toca |
+|---|---|---|
+| `plataforma` | catálogo de consultorios, su estado y el directorio público | `app/plataforma.py` |
+| `hc_<slug>` | la historia clínica de **un** consultorio | `app/database.py`, vía las ~184 consultas |
+| `portal` | cuentas de pacientes y el buzón de lo que les enviaron | `app/portal.py` |
+
+`plataforma` y `portal` **no contienen historia clínica**. El buzón del paciente
+guarda copias de lo que un profesional decidió enviarle, que es lo que permite
+que sea una sola base compartida sin romper el aislamiento entre consultorios.
+
+`/` significa algo distinto en cada plano, así que el frontend lo resuelve por
+dónde entró el visitante (`frontend/src/utils/dominio.js`), no por la ruta.
 
 **Está apagado por defecto.** Sin `MULTI_TENANT=true` todo se comporta como
 siempre y la base sale de `DB_NAME`. Es lo que mantiene al CAU funcionando con
@@ -180,6 +204,10 @@ solo sobre su base, así una inyección SQL queda encerrada en ese consultorio.
 - **`registro.py`** — alta autoservicio con verificación por correo.
 - **`suscripcion.py`** — ciclo prueba → activo → suspendido → cancelado.
 - **`utils/secretos.py`** — cifrado Fernet de las credenciales por cliente.
+- **`portal.py`** — el plano del paciente: su cuenta, identificada por documento,
+  y el buzón. Es lo único que habla con la base `portal`.
+- **`reservas.py`** — turnos online. **El único lugar donde el portal escribe en
+  la base de un consultorio.**
 
 ### Reglas que son fáciles de romper sin querer
 
@@ -197,6 +225,53 @@ solo sobre su base, así una inyección SQL queda encerrada en ese consultorio.
 - **El token de QBI no cae al del sistema.** Un consultorio sin credenciales
   propias recibe 503 en vez de emitir con la cuenta de otro.
 
+### Las dos poblaciones de usuarios
+
+Personal de consultorios y pacientes conviven sobre la misma aplicación y el
+mismo Flask-Login, que **solo sabe si hay alguien autenticado, no de cuál de las
+dos es**. Eso ya falló una vez: la cookie de un paciente devolvía 200 en
+`/api/pacientes` de un consultorio, o sea el listado completo de esa clínica.
+
+Se separan en tres puntos, y los tres tienen que seguir en pie:
+
+- El identificador de sesión de un paciente lleva el prefijo **`p:`**. Lo decide
+  `Paciente.get_id()` al iniciar sesión, **no se deduce del host**: si dependiera
+  del subdominio, un mismo identificador significaría cosas distintas según por
+  dónde entrara el pedido.
+- Un `before_request` en `tenancy.py` rechaza una sesión de paciente fuera de
+  `RUTAS_DEL_PORTAL`.
+- `@requiere_paciente` hace lo simétrico: corta al personal dentro del portal.
+
+⚠️ **Al probar esto con curl, la cookie hay que mandarla a mano.** `curl -b`
+respeta el dominio de la cookie, así que una prueba entre subdominios distintos
+pasa sin haber enviado nada. La primera versión de ese test dio "todo 401" y era
+mentira.
+
+### Turnos online
+
+- **`agenda_publica` viene apagada.** Publicar la agenda de alguien sin que lo
+  pida sería repartir su tiempo. Se enciende desde *Turnos → Turnos online*, y al
+  guardarse se **rehace entero** el directorio de ese consultorio: con un UPDATE
+  fila por fila, apagarla dejaría al profesional figurando para siempre.
+- **El directorio (`profesionales_publicos`) es una proyección**, no la verdad.
+  La verdad está en la tabla `usuarios` de cada consultorio y la proyección se
+  puede reconstruir desde ahí. Existe porque buscar recorriendo N bases sería la
+  consulta más usada del sitio público hecha de la peor forma posible.
+- **Reservar cruza planos.** `reservas.como_consultorio(cliente)` pone el
+  consultorio destino en `flask.g` y reutiliza `medico_disponible()`,
+  `_alinear_turno_individual()` y `proximos_slots_libres()` sin tocarlas. Restaura
+  siempre, con `finally`: sin eso una excepción dejaría el resto del pedido
+  apuntando a la base de otro consultorio.
+- **La doble reserva la ataja la base**, con un UNIQUE `(usuario_id,
+  fecha_inicio)`. La comprobación de la aplicación se conserva porque da el
+  mensaje útil, pero entre su SELECT y el INSERT hay una ventana que con reserva
+  pública se vuelve alcanzable. Un UNIQUE simple alcanza **porque cancelar un
+  turno lo borra**: si algún día la cancelación pasa a ser un estado, hay que
+  rehacerlo.
+
+⚠️ **Probar la doble reserva en paralelo, no secuencial.** Dos peticiones una
+después de la otra pasan aunque la restricción no exista.
+
 ### Comandos
 
 ```bash
@@ -207,7 +282,15 @@ flask revisar-suscripciones [--dry-run]                  # cron diario
 flask cancelados-vencidos                                # solo lista; borrar es a mano
 bash scripts/backup_plataforma.sh [slug]                 # copia por consultorio
 bash scripts/restaurar_cliente.sh <slug> <archivo.sql.gz>
+
+flask solicitudes                                        instituciones a aprobar
+flask aprobar-solicitud <slug>                           crea su consultorio
+flask rechazar-solicitud <slug> --motivo "..."
 ```
+
+**El alta de una institución NO crea la base al verificar el correo.** La
+verificación demuestra la casilla; la aprobación decide si el consultorio existe.
+Un médico independiente sí obtiene el suyo al verificar: no hay nada que evaluar.
 
 Los comandos `flask` corren desde `/` con `FLASK_APP=app.main`.
 

@@ -437,6 +437,126 @@ nginx sí se validó con `nginx -t` dentro de la red de Docker, así que la sint
 y los upstreams están bien — pero nadie probó todavía un
 `https://consultorio.dominio-real.com`.
 
+## El portal del paciente
+
+El tercer plano. Un paciente se registra y ve en un solo lugar los estudios,
+recetas e informes que le enviaron **profesionales de consultorios distintos**.
+
+**La llave es el documento, no el correo.** Es lo que permite que dos
+consultorios que no se conocen entre sí le envíen algo a la misma persona: cada
+uno tiene su propia fila de paciente en su propia base, pero el número de
+documento es el mismo en los dos lados. Se normaliza al guardarlo —sin eso
+"30.111.222" y "30111222" serían dos personas y un estudio enviado con puntos no
+llegaría nunca.
+
+**Este plano no contiene historia clínica.** Contiene lo que alguien decidió
+enviarle. Esa distinción es la que permite que sea una sola base compartida sin
+romper el aislamiento: nadie publica nada que no haya decidido publicar.
+
+Lo que se envía **se copia, no se referencia**:
+
+- El archivo va a `uploads/_portal/<token>/`, fuera de la carpeta del
+  consultorio. El token es aleatorio y no deriva del documento del paciente: la
+  ruta de un archivo no puede permitir averiguar de quién es.
+- El nombre del consultorio y del profesional viajan como texto. Si ese
+  consultorio cancela y se borra su base, el paciente tiene que seguir sabiendo
+  quién le mandó su estudio.
+
+Un documento enviado a alguien que todavía no tiene cuenta **queda esperando** por
+su número de documento y aparece cuando se registra.
+
+### Las dos poblaciones de usuarios
+
+Personal y pacientes comparten aplicación y Flask-Login, que solo sabe si hay
+alguien autenticado, no de cuál de las dos es. **Eso falló**: con la cookie de un
+paciente forzada sobre el subdominio de un consultorio, `/api/pacientes` devolvía
+**200** — el listado completo de esa clínica.
+
+Se separan con el prefijo `p:` en el identificador de sesión, un `before_request`
+que rechaza pacientes fuera del portal, y `@requiere_paciente` para el caso
+simétrico. Ahora dan 401 y 403.
+
+> La primera versión de esa prueba dijo "todo 401" y era mentira: `curl -b`
+> respeta el dominio de la cookie y no la estaba mandando. Hubo que extraer el
+> valor y enviarlo a mano para que la prueba probara algo.
+
+---
+
+## Turnos online
+
+Un paciente busca un profesional, ve sus horarios libres y reserva. El turno
+queda en la agenda del consultorio como cualquier otro.
+
+**`agenda_publica` viene apagada.** Publicar la agenda de alguien sin que lo pida
+sería repartir su tiempo: un desconocido podría ocuparle un horario sin hablar
+antes. Se enciende desde *Turnos → Turnos online*, donde el profesional además ve
+cómo lo va a ver un paciente antes de publicarse.
+
+**El directorio es una proyección** en el plano de control, no una consulta a las
+bases de los consultorios: recorrerlas serían N consultas por búsqueda, en la
+consulta más usada del sitio público y hecha por alguien sin sesión. Se
+reconstruye entera desde la base del consultorio si se desincroniza.
+
+### El cruce de planos
+
+El paciente vive en el portal; su turno tiene que existir en `hc_<slug>` y apuntar
+a un `pacientes.id` de esa base. La solución no fue reimplementar la lógica de
+agenda contra otra conexión, sino **cambiar de contexto**:
+`reservas.como_consultorio(cliente)` pone el consultorio destino en `flask.g` y
+reutiliza `medico_disponible()`, `_alinear_turno_individual()` y
+`proximos_slots_libres()` sin tocarlas.
+
+Que el cálculo de horarios sea el mismo para los dos canales no es comodidad: dos
+implementaciones divergirían y ofrecerían horarios distintos para la misma agenda.
+
+El contexto se restaura con `finally`. Sin eso, una excepción dejaría el resto del
+pedido apuntando a la base de otro consultorio.
+
+### La doble reserva
+
+El choque de horarios se validaba con un `SELECT` y después un `INSERT`. Entre
+esas dos sentencias hay una ventana que con el personal reservando desde una
+pantalla era improbable, y con reserva pública **va a pasar**.
+
+Lo ataja una restricción `UNIQUE (usuario_id, fecha_inicio)`. Verificado con las
+dos peticiones **en paralelo** —secuenciales pasan aunque la restricción no
+exista—:
+
+```
+Ana   -> 201  turno 1
+Bruno -> 409  "Alguien acaba de tomar ese horario"
+turnos en ese horario: 1
+```
+
+Un UNIQUE simple alcanza **porque cancelar un turno lo borra**: no hay columna de
+estado. Si algún día la cancelación pasa a ser un estado, hay que rehacerlo.
+
+---
+
+## Los tres registros
+
+| Formulario | Qué obtiene | Aprobación |
+|---|---|---|
+| **Paciente** | cuenta en el portal | automática |
+| **Médico** | su propio consultorio, con subdominio | automática |
+| **Institución** | lo mismo, para un equipo | **manual** |
+
+**Verificar el correo NO crea la base de una institución.** Crearla ahí
+significaría que cualquiera con una casilla puede llenar el servidor, que es justo
+lo que la verificación evita en el alta de un médico. La verificación demuestra la
+casilla; la aprobación decide si el consultorio existe.
+
+**No hace falta un formulario externo.** El sistema de referencia usa Google Forms
+y un correo aparte; acá la solicitud es una fila en el plano de control y se
+gestiona con `flask solicitudes` / `flask aprobar-solicitud`, así que no hay que
+copiar datos de una planilla al sistema.
+
+El formulario pide **5 campos obligatorios**; el de referencia pide 14. Cada campo
+obligatorio de más es gente que abandona a mitad, y lo que no se pregunta se
+conversa después igual.
+
+---
+
 ## Pendiente legal
 
 Alojar datos de salud de terceros en Argentina cae bajo la **Ley 25.326**

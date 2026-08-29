@@ -10,7 +10,8 @@ cambia.
   entero ocupa ~510 MB y cada consultorio suma ~1 MB de esquema más sus datos.
 - Un dominio propio.
 - Un registro DNS **comodín**: `*.miproducto.com` → la IP del servidor. Es lo
-  que hace que cada consultorio tenga su dirección sin tocar el DNS por cliente.
+  que hace que cada consultorio tenga su dirección sin tocar el DNS por cliente,
+  y también lo que resuelve `mi.<dominio>`, el portal del paciente.
 
 ## Certificado
 
@@ -47,6 +48,7 @@ consultorio (`migrate.py --todos`). Si alguna falla, el contenedor no levanta.
 | `MULTI_TENANT=true` | Sin esto se comporta como una instalación de un solo centro |
 | `DOMINIO_BASE` | De `drlopez.miproducto.com` extrae `drlopez`. Sin definirlo, **cualquier** host que apunte al servidor se interpreta como un consultorio |
 | `PLATAFORMA_SECRET_KEY` | Cifra las credenciales de cada base. Sin ella el arranque falla en lugar de guardarlas en claro |
+| `PORTAL_DB_*` | El plano del paciente. Es **una sola base compartida**, a diferencia de las de los consultorios |
 | `MYSQL_ROOT_PASSWORD` | Lo usan el alta de consultorios y los backups |
 | `MAIL_*` | Sin remitente no salen ni la verificación del registro ni los avisos de vencimiento |
 
@@ -66,6 +68,14 @@ consultorio (`migrate.py --todos`). Si alguna falla, el contenedor no levanta.
 bash scripts/backup_plataforma.sh              # plano de control + cada consultorio
 bash scripts/backup_plataforma.sh drlopez      # uno solo
 ```
+
+Copia el plano de control, **el plano del paciente** y la base y los adjuntos de
+cada consultorio.
+
+El plano del paciente merece una nota: no es una base "de sistema" como el de
+control. Guarda copias de estudios y recetas que **ya son del paciente**, y a
+diferencia de la base de un consultorio, no hay otro lugar de donde recuperarlas.
+Sus archivos (`uploads/_portal/`) entran en la misma copia.
 
 Se hace **una copia por consultorio** y no un volcado de todo junto. Es la
 ventaja concreta de tener una base por cliente: restaurar a uno solo no obliga a

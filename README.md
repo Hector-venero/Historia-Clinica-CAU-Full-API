@@ -184,12 +184,24 @@ También puede anclarse una **evolución individual**, con su propio hash y su p
 
 ---
 
-## 🏢 Versión plataforma (multi-consultorio)
+## 🏢 Ficha Salud — la versión plataforma
 
 `main` es la instalación del **CAU**: un solo centro médico. La rama
-`saas/multi-tenant` convierte el mismo código en una plataforma que atiende a
-varios consultorios independientes, cada uno con su subdominio, su base de datos
-y su marca.
+`saas/multi-tenant` convierte el mismo código en **Ficha Salud**, una plataforma
+que atiende a varios consultorios independientes —cada uno con su subdominio, su
+base de datos y su marca— y que además le da cuenta propia al paciente.
+
+Tres planos:
+
+```
+fichasalud.com.ar            sitio público: qué es y los tres registros
+drlopez.fichasalud.com.ar    el sistema del consultorio
+mi.fichasalud.com.ar         el portal del paciente
+```
+
+El paciente ve en un solo lugar los estudios y recetas que le enviaron
+profesionales **de consultorios distintos**, y puede sacar turno sin llamar por
+teléfono. La llave que lo hace posible es su número de documento, no el correo.
 
 La decisión que la ordena: **una base por consultorio, aplicación compartida.**
 Cuesta prácticamente lo mismo que una base compartida con `cliente_id` —una base

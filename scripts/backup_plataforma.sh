@@ -52,6 +52,7 @@ if [ -z "$DB_ADMIN_PASS" ]; then
     exit 2
 fi
 PLATAFORMA_DB="${PLATAFORMA_DB_NAME:-plataforma}"
+PORTAL_DB="${PORTAL_DB_NAME:-portal}"
 
 SOLO="${1:-}"
 
@@ -103,6 +104,31 @@ if [ -z "$SOLO" ]; then
         gzip -f "$destino"
     else
         errores=$((errores + 1))
+    fi
+    echo
+
+    # El plano del paciente: sus cuentas y los documentos que le enviaron.
+    #
+    # No es una base "de sistema" como el plano de control: guarda copias de
+    # estudios y recetas que ya son del paciente. Perderla significa que la gente
+    # pierde lo que recibio, y a diferencia de la base de un consultorio, no hay
+    # otro lugar de donde recuperarlo.
+    echo "  [plano del paciente] $PORTAL_DB"
+    destino="$BACKUP_DIR/portal_$FECHA.sql"
+    if respaldar_base "$PORTAL_DB" "$destino"; then
+        gzip -f "$destino"
+    else
+        errores=$((errores + 1))
+    fi
+
+    # Y los archivos del buzon, que viven fuera de la carpeta de cualquier
+    # consultorio justamente porque son del paciente.
+    adjuntos_portal="$BACKUP_DIR/portal_adjuntos_$FECHA.tar.gz"
+    if docker exec "$CONTENEDOR_WEB" test -d "/app/uploads/_portal" 2>/dev/null; then
+        docker exec "$CONTENEDOR_WEB" tar -czf - -C /app/uploads _portal > "$adjuntos_portal" 2>/dev/null
+        echo "      adjuntos: $(du -h "$adjuntos_portal" | cut -f1)"
+    else
+        echo "      adjuntos: (sin archivos)"
     fi
     echo
 fi

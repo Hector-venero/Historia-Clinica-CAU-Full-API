@@ -1,6 +1,6 @@
 # Pendientes
 
-Lo que está abierto al **28/08/2026**. Cada punto trae cómo se detectó y cómo
+Lo que está abierto al **28/08/2026**, con Ficha Salud (G1–G5) terminado. Cada punto trae cómo se detectó y cómo
 reproducirlo, para no tener que volver a investigarlo desde cero.
 
 Los ítems tachados quedan un tiempo con la explicación de cómo se cerraron: en
@@ -71,7 +71,23 @@ de la conexión y de la carga inicial.
 
 ---
 
-## 5. Plataforma: lo que quedó sin verificar
+## 5. Antes de vender — depende de Hector, no del código
+
+- **Verificar `fichasalud.com.ar`** y hacer una búsqueda en el INPI antes de
+  fijar el nombre. Si no está libre, el cambio es barato: la marca está
+  centralizada en `marca.py` y `stores/marca.js`.
+- **Reemplazar el logo.** `frontend/src/assets/logo-ficha-salud.svg` es un
+  provisorio hecho para no mostrar el escudo de la UNSAM a un consultorio ajeno.
+- **Definir los precios.** La página de inicio no publica importes a propósito:
+  poner un número inventado sería comprometer a Hector con algo que no decidió.
+  Cuando estén, van en la sección de precios de `views/pages/publico/Inicio.vue`.
+- **Términos y política de privacidad.** Ahora hay cuentas de pacientes, así que
+  la Ley 25.326 pesa más que cuando solo había consultorios. Hacen falta textos
+  reales antes del primer usuario, no después.
+
+---
+
+## 6. Plataforma: lo que quedó sin verificar
 
 La rama `saas/multi-tenant` está completa (F0–F8) pero hay cosas que **no se
 pueden probar sin un dominio real**. Están anotadas acá para que nadie las dé por
@@ -102,9 +118,22 @@ verificadas.
   servicio. Conviene averiguar qué implica **antes** de facturarle al primer
   cliente.
 
+- **El correo del portal no está probado con un SMTP real.** La verificación de
+  cuenta de un paciente, la bienvenida y el aviso de documento nuevo se arman y
+  se encolan, pero nadie vio llegar uno. Es lo primero a comprobar cuando haya
+  credenciales de correo del producto (hoy las del `.env` son del CAU).
+
+- **El portal no tiene recuperación de contraseña.** Un paciente que la olvide
+  hoy no tiene cómo entrar. El circuito existe para el personal
+  (`auth_routes.py`) y habría que replicarlo contra el plano del portal.
+
+- **Nadie canceló un turno desde el portal.** El paciente puede reservar, pero no
+  cancelar: hoy eso lo hace el consultorio. Es lo primero que va a pedir alguien
+  que se equivocó de horario.
+
 ---
 
-## 6. Menores
+## 7. Menores
 
 - **`finally` en las conexiones de las rutas restantes.** Seis archivos de
   `routes/` siguen con el patrón manual `get_connection()` … `close()`. Cierran
