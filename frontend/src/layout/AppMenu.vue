@@ -73,6 +73,13 @@ const model = computed(() => {
                     items: [
                         { label: 'Disponibilidad', icon: 'pi pi-fw pi-clock', to: '/disponibilidad' },
                         {
+                            label: 'Turnos online',
+                            icon: 'pi pi-fw pi-globe',
+                            to: '/turnos/agenda-publica',
+                            // Solo quien atiende pacientes tiene agenda que publicar.
+                            visible: ['profesional', 'director'].includes(userStore.rol)
+                        },
+                        {
                             label: 'Duración de turnos',
                             icon: 'pi pi-fw pi-sliders-h',
                             to: '/turnos/configuracion',

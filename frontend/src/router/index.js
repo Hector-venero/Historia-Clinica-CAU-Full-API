@@ -102,6 +102,14 @@ const router = createRouter({
                     component: () => import('@/views/pages/historias/NuevoTurno.vue')
                 },
                 {
+                    path: 'turnos/agenda-publica',
+                    name: 'AgendaPublica',
+                    component: () => import('@/views/pages/turnos/AgendaPublica.vue'),
+                    // Solo quien atiende pacientes: un administrativo no tiene
+                    // agenda propia que publicar.
+                    meta: { roles: ['profesional', 'director'] }
+                },
+                {
                     path: 'turnos/configuracion',
                     name: 'configuracionTurnos',
                     component: () => import('@/views/pages/turnos/ConfiguracionTurnos.vue'),
