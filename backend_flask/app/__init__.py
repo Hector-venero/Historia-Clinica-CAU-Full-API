@@ -10,7 +10,7 @@ from itsdangerous import URLSafeTimedSerializer
 from flask_talisman import Talisman
 from app.config import Config
 from app.auth import Usuario
-from app.database import get_connection
+from app.database import db_cursor
 from datetime import timedelta
 from flask import send_from_directory
 from werkzeug.middleware.proxy_fix import ProxyFix
@@ -126,9 +126,7 @@ def load_user(user_id):
         except (ValueError, TypeError):
             return None
 
-    conn = get_connection()
-    try:
-        cursor = conn.cursor(dictionary=True)
+    with db_cursor() as (_conn, cursor):
         # activo = 1 tambien aca: sin el filtro, dar de baja a un usuario no
         # cerraba su sesion en curso, porque la cookie seguia resolviendo.
         cursor.execute(
@@ -136,8 +134,6 @@ def load_user(user_id):
             (user_id,),
         )
         data = cursor.fetchone()
-    finally:
-        conn.close()
 
     return Usuario.desde_fila(data)
 

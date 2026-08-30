@@ -1,9 +1,8 @@
 from flask import Blueprint, jsonify, request
 from flask_login import login_required, current_user
-from app.database import get_connection, db_cursor
+from app.database import db_cursor
 from app.utils.fechas import a_iso_arg
 from app.utils.permisos import requiere_rol, requiere_modulo
-import traceback
 
 bp_grupos = Blueprint("grupos", __name__)
 
@@ -27,9 +26,7 @@ def extraer_ids_limpios(lista_miembros):
 @login_required
 @requiere_modulo('grupos')
 def obtener_grupos():
-    conn = get_connection()
-    cursor = conn.cursor(dictionary=True)
-    try:
+    with db_cursor() as (_conn, cursor):
         cursor.execute("SELECT id, nombre, descripcion, color FROM grupos_profesionales ORDER BY nombre ASC")
         grupos = cursor.fetchall()
 
@@ -41,12 +38,8 @@ def obtener_grupos():
                 WHERE gm.grupo_id = %s
             """, (g["id"],))
             g["miembros"] = cursor.fetchall()
-            
-        return jsonify(grupos)
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-    finally:
-        cursor.close(); conn.close()
+
+    return jsonify(grupos)
 
 # =====================================================
 # 🔹 Obtener un grupo por ID
@@ -55,9 +48,7 @@ def obtener_grupos():
 @login_required
 @requiere_modulo('grupos')
 def obtener_grupo(grupo_id):
-    conn = get_connection()
-    cursor = conn.cursor(dictionary=True)
-    try:
+    with db_cursor() as (_conn, cursor):
         cursor.execute("SELECT id, nombre, descripcion, color FROM grupos_profesionales WHERE id = %s", (grupo_id,))
         grupo = cursor.fetchone()
 
@@ -72,9 +63,7 @@ def obtener_grupo(grupo_id):
         """, (grupo_id,))
         grupo["miembros"] = cursor.fetchall()
 
-        return jsonify(grupo)
-    finally:
-        cursor.close(); conn.close()
+    return jsonify(grupo)
 
 # =====================================================
 # ➕ Crear un nuevo grupo
@@ -94,10 +83,7 @@ def crear_grupo():
 
     if not nombre: return jsonify({"error": "Nombre obligatorio"}), 400
 
-    conn = get_connection()
-    cursor = conn.cursor()
-
-    try:
+    with db_cursor(dictionary=False, commit=True) as (_conn, cursor):
         cursor.execute("INSERT INTO grupos_profesionales (nombre, descripcion, color) VALUES (%s, %s, %s)", (nombre, descripcion, color))
         grupo_id = cursor.lastrowid
 
@@ -107,19 +93,12 @@ def crear_grupo():
             ids_str = ','.join(str(uid) for uid in ids_limpios)
             cursor.execute(f"SELECT id FROM usuarios WHERE id IN ({ids_str})")
             usuarios_db = cursor.fetchall()
-            
+
             values = [(grupo_id, u[0]) for u in usuarios_db]
             if values:
                 cursor.executemany("INSERT INTO grupo_miembros (grupo_id, usuario_id) VALUES (%s, %s)", values)
 
-        conn.commit()
         return jsonify({"message": "Grupo creado", "id": grupo_id}), 201
-    except Exception as e:
-        conn.rollback()
-        print(f"❌ Error CREAR: {traceback.format_exc()}")
-        return jsonify({"error": str(e)}), 500
-    finally:
-        cursor.close(); conn.close()
 
 # =====================================================
 # 📝 Editar grupo
@@ -137,10 +116,7 @@ def editar_grupo(grupo_id):
     color = data.get("color")
     miembros_raw = data.get("miembros") 
 
-    conn = get_connection()
-    cursor = conn.cursor()
-
-    try:
+    with db_cursor(dictionary=False, commit=True) as (_conn, cursor):
         if nombre: cursor.execute("UPDATE grupos_profesionales SET nombre=%s WHERE id=%s", (nombre, grupo_id))
         if descripcion is not None: cursor.execute("UPDATE grupos_profesionales SET descripcion=%s WHERE id=%s", (descripcion, grupo_id))
         if color: cursor.execute("UPDATE grupos_profesionales SET color=%s WHERE id=%s", (color, grupo_id))
@@ -159,14 +135,7 @@ def editar_grupo(grupo_id):
                 if values:
                     cursor.executemany("INSERT INTO grupo_miembros (grupo_id, usuario_id) VALUES (%s, %s)", values)
 
-        conn.commit()
         return jsonify({"message": "Grupo actualizado"})
-    except Exception as e:
-        conn.rollback()
-        print(f"❌ Error EDITAR: {traceback.format_exc()}")
-        return jsonify({"error": str(e)}), 500
-    finally:
-        cursor.close(); conn.close()
 
 # =====================================================
 # ❌ Eliminar grupo
@@ -176,18 +145,10 @@ def editar_grupo(grupo_id):
 @requiere_modulo('grupos')
 @requiere_rol("director")
 def eliminar_grupo(grupo_id):
-    conn = get_connection()
-    cursor = conn.cursor()
-    try:
+    with db_cursor(dictionary=False, commit=True) as (_conn, cursor):
         cursor.execute("DELETE FROM grupo_miembros WHERE grupo_id = %s", (grupo_id,))
         cursor.execute("DELETE FROM grupos_profesionales WHERE id = %s", (grupo_id,))
-        conn.commit()
         return jsonify({"message": "Eliminado"})
-    except Exception as e:
-        conn.rollback()
-        return jsonify({"error": str(e)}), 500
-    finally:
-        cursor.close(); conn.close()
 
 # =====================================================
 # 👤 Agregar un miembro (Individual)
@@ -201,28 +162,20 @@ def agregar_miembro(grupo_id):
     usuario_id = data.get("usuario_id")
     if not usuario_id: return jsonify({"error": "Falta usuario_id"}), 400
 
-    conn = get_connection()
-    cursor = conn.cursor()
-
-    try:
+    with db_cursor(dictionary=False, commit=True) as (_conn, cursor):
         # 🔓 YA NO VERIFICAMOS EL ROL, SOLO QUE EXISTA
         cursor.execute("SELECT id FROM usuarios WHERE id = %s", (usuario_id,))
         if not cursor.fetchone():
+            # Salir con `return` tambien hace commit, pero aca todavia no se
+            # escribio nada: la transaccion que se confirma esta vacia.
             return jsonify({"error": "Usuario no encontrado"}), 404
-            
+
         cursor.execute("""
             INSERT INTO grupo_miembros (grupo_id, usuario_id) VALUES (%s, %s)
             ON DUPLICATE KEY UPDATE usuario_id = usuario_id
         """, (grupo_id, usuario_id))
-        
-        conn.commit()
+
         return jsonify({"message": "Miembro agregado"}), 201
-    except Exception as e:
-        conn.rollback()
-        print(f"❌ Error AGREGAR MIEMBRO: {traceback.format_exc()}")
-        return jsonify({"error": str(e)}), 500
-    finally:
-        cursor.close(); conn.close()
 
 # =====================================================
 # ❌ Quitar un miembro
@@ -232,17 +185,9 @@ def agregar_miembro(grupo_id):
 @requiere_modulo('grupos')
 @requiere_rol("director")
 def quitar_miembro(grupo_id, usuario_id):
-    conn = get_connection()
-    cursor = conn.cursor()
-    try:
+    with db_cursor(dictionary=False, commit=True) as (_conn, cursor):
         cursor.execute("DELETE FROM grupo_miembros WHERE grupo_id = %s AND usuario_id = %s", (grupo_id, usuario_id))
-        conn.commit()
         return jsonify({"message": "Miembro eliminado"})
-    except Exception as e:
-        conn.rollback()
-        return jsonify({"error": str(e)}), 500
-    finally:
-        cursor.close(); conn.close()
 
 @bp_grupos.route("/api/grupos/<int:grupo_id>/miembros", methods=["GET"])
 @login_required

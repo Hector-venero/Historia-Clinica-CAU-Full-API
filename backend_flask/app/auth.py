@@ -1,7 +1,7 @@
 from flask_login import UserMixin
 from werkzeug.security import check_password_hash
 
-from .database import get_connection
+from .database import db_cursor
 
 # Campos de perfil que viajan en el usuario de sesion, mas alla de los de
 # identidad. El modulo de recetas necesita casi todos: sin matricula ni lugar de
@@ -65,9 +65,7 @@ class Usuario(UserMixin):
 
     @staticmethod
     def obtener_por_username(username):
-        conn = get_connection()
-        try:
-            cursor = conn.cursor(dictionary=True)
+        with db_cursor() as (_conn, cursor):
             # activo = 1 es parte del criterio de autenticacion, no un filtro de
             # presentacion: sin el, un usuario dado de baja seguia pudiendo loguearse
             # (los usuarios se borran con soft-delete, nunca se eliminan de la tabla).
@@ -76,8 +74,6 @@ class Usuario(UserMixin):
                 (username,),
             )
             data = cursor.fetchone()
-        finally:
-            conn.close()
 
         return Usuario.desde_fila(data)
 

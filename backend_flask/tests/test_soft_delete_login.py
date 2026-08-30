@@ -13,7 +13,7 @@ import pytest
 
 import app as app_module
 from app import auth as auth_module
-from conftest import FakeConnection, FakeCursor
+from conftest import FakeConnection, FakeCursor, patch_db_cursor
 
 FILA_USUARIO = {
     "id": 1,
@@ -35,8 +35,14 @@ FILA_USUARIO = {
 
 
 def _enganchar(monkeypatch, modulo, cursor):
+    """Los dos caminos de login pasan por db_cursor(), no por get_connection().
+
+    Antes cerraban la conexion con un try/finally propio que dejaba el cursor
+    abierto; ahora usan el context manager, y el doble tiene que engancharse
+    ahi para que el test siga mirando lo mismo.
+    """
     conexion = FakeConnection(cursor)
-    monkeypatch.setattr(modulo, "get_connection", lambda *a, **kw: conexion)
+    patch_db_cursor(monkeypatch, modulo, conexion)
     return conexion
 
 

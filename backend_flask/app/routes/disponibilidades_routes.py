@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify
 from flask_login import login_required, current_user
-from app.database import get_connection, db_cursor
+from app.database import db_cursor
 from app.utils.permisos import requiere_rol
 from datetime import datetime, timedelta
 
@@ -128,26 +128,13 @@ def crear_disponibilidad():
     if not dia_semana:
         return jsonify({"error": "Día inválido"}), 400
     
-    conn = get_connection()
-    cursor = conn.cursor(dictionary=True)
-
-    try:
+    with db_cursor(commit=True) as (_conn, cursor):
         cursor.execute("""
             INSERT INTO disponibilidades (usuario_id, dia_semana, hora_inicio, hora_fin, activo)
             VALUES (%s, %s, %s, %s, %s)
         """, (usuario_id, dia_semana, hora_inicio, hora_fin, activo))
 
-        conn.commit()
-        new_id = cursor.lastrowid
-        return jsonify({"id": new_id, "message": "Disponibilidad creada correctamente"}), 201
-    
-    except Exception as e:
-        conn.rollback()
-        return jsonify({"error": str(e)}), 500
-        
-    finally:
-        cursor.close()
-        conn.close()
+        return jsonify({"id": cursor.lastrowid, "message": "Disponibilidad creada correctamente"}), 201
 
 
 # ==========================================================
