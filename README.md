@@ -15,6 +15,11 @@ La solución integra un backend API en Flask, un frontend en Vue 3 (Vite + Prime
   - Agenda por profesional.
   - **Agendas grupales**: turnos asociados a un **grupo profesional** (por especialidad/área).
   - Visualización tipo calendario con **FullCalendar** y listado/gestión.
+  - **Videoconsulta**: el turno se marca como presencial o virtual, y el enlace
+    de la videollamada le llega al paciente por correo, en la invitación de
+    calendario y en su portal. El enlace lo pone el profesional con la
+    herramienta que ya usa; el sistema no aloja ni graba la videollamada
+    ([por qué](docs/VIDEOCONSULTA.md)).
 - **Disponibilidades**: configuración de días y horarios de atención por profesional.
 - **Bloqueos de agenda / ausencias**: impedir turnos en fechas específicas.
 - **Seguridad**:
@@ -212,7 +217,14 @@ otro. Con bases separadas ese error es imposible: la conexión no ve la otra bas
 Está **apagada por defecto** (`MULTI_TENANT=false`), así que el mismo código
 sigue sirviendo la instalación del CAU sin cambios.
 
+El sitio público del dominio raíz —portada, funcionalidades, precios y una
+página por cada funcionalidad— sale entero de una sola lista de funciones
+(`views/pages/publico/datos.js`): el menú, la portada, las páginas de detalle y
+la tabla comparativa leen la misma. Lo que todavía no existe se muestra rotulado
+**"En camino"**, no con un tilde.
+
 - Arquitectura y decisiones: [`docs/SAAS.md`](docs/SAAS.md)
+- Videoconsulta: [`docs/VIDEOCONSULTA.md`](docs/VIDEOCONSULTA.md)
 - Despliegue: [`deploy/PLATAFORMA.md`](deploy/PLATAFORMA.md)
 
 ---

@@ -130,3 +130,8 @@ historia_clinica_bfa back antes de intentar migrar a react/
 frontend/.vite/
 .env
 .claude/
+
+# Nodo Geth de BFA: ya no se usa. El anclaje va por la API TSA
+# (utils/bfa_client.py). El directorio sigue en disco porque contiene un
+# keystore de wallet; borrarlo es decision de Hector, no del repositorio.
+bfa-node/

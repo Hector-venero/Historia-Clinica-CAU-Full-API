@@ -134,7 +134,7 @@ Key frontend libraries: PrimeVue 4, FullCalendar 5 (turnos/grupos), vee-validate
 
 Hay una sola fixture, `client`; para lo que necesite contexto de aplicación se importa `from app import app as flask_app` y se usa `with flask_app.app_context():`.
 
-Al 28/08/2026 son **354 tests** y corren en menos de un segundo.
+Al 30/08/2026 son **378 tests** y corren en menos de un segundo.
 
 ## Ficha Salud — la plataforma (rama `saas/multi-tenant`)
 
@@ -271,6 +271,37 @@ mentira.
 
 ⚠️ **Probar la doble reserva en paralelo, no secuencial.** Dos peticiones una
 después de la otra pasan aunque la restricción no exista.
+
+### El sitio público
+
+Vive en el dominio raíz: `/inicio`, `/funcionalidades`, `/precios`, `/ingresar`,
+los tres registros y **una página propia por funcionalidad**
+(`/funcionalidades/<slug>`). Están en `views/pages/publico/`.
+
+- **Todo sale de `publico/datos.js`.** El menú desplegable, la portada, la página
+  de funcionalidades, las diez páginas de detalle y la tabla comparativa de
+  precios leen la misma lista. Una lista escrita en cada pantalla se contradice
+  sola delante de alguien que está por pagar.
+- **Las diez páginas de funcionalidad las dibuja un solo componente**,
+  `Funcionalidad.vue`, con el contenido en `PAGINAS`. Diez `.vue` casi idénticos
+  serían diez lugares donde arreglar el mismo detalle de diseño.
+- **Lo que todavía no existe se muestra rotulado "En camino"**, no con un tilde.
+  Ocultarlo no evita la pregunta: la adelanta al primer mes de uso, cuando ya
+  pagó.
+- **Los precios dicen "Consultanos" hasta que estén definidos.** `precio: null`
+  en `PLANES`; poner un número de relleno es peor que no mostrar ninguno.
+- **`/ingresar` no es un formulario de usuario y contraseña.** La sesión del
+  profesional vive en el subdominio de su consultorio, así que un login en el
+  dominio raíz autenticaría contra ninguna base: se pide el nombre del
+  consultorio y se redirige (`utils/dominio.js` → `urlConsultorio()`).
+- El guard del router deja pasar estas rutas **por prefijo** en el caso de
+  `/funcionalidades`, no por igualdad: si no, cada página de detalle pediría
+  sesión.
+- Los mockups son **dibujos**, no capturas: pesan nada, siguen el modo oscuro y
+  no quedan viejos cuando cambie una pantalla real.
+
+⚠️ El build local falla con Node 18 (`crypto.hash is not a function`). Se corre
+dentro del contenedor: `docker compose exec -T frontend-dev npm run build`.
 
 ### Comandos
 
@@ -435,7 +466,7 @@ Key tables and non-obvious design decisions:
 - **`anclajes_blockchain`** (antes `anclajes_historia`) — **append-only**: histórico de sellados en blockchain. Nunca se actualiza ni se borra. `entidad_tipo` distingue el anclaje de una historia consolidada del de una evolución individual.
 - **`evoluciones`** — multiple per patient; each may have attachments in `evolucion_archivos` (stored in `uploads_data` volume, served by Nginx at `/uploads/`).
 - **`disponibilidades`** — franjas semanales por profesional. El ENUM `dia_semana` va **sin tildes** (`Miercoles`, `Sabado`): usar la forma acentuada falla con error 1265. `normalizar_dia()` acepta ambas y canonicaliza.
-- **`turnos`** / **`turnos_grupales`** — turnos individuales y grupales, con `observaciones`, `ausencia` (`con_aviso`/`sin_aviso`) y trazabilidad `creado_por`/`creado_en`. Ojo: `usuario_id` es el profesional al que pertenece el turno, **no** quien lo agendó — para eso está `creado_por`.
+- **`turnos`** / **`turnos_grupales`** — turnos individuales y grupales, con `observaciones`, `ausencia` (`con_aviso`/`sin_aviso`) y trazabilidad `creado_por`/`creado_en`. `modalidad` (`presencial`|`virtual`) y `enlace_video` son de la videoconsulta: el enlace lo pone el profesional y **el sistema no genera ni aloja la videollamada** (ver [`docs/VIDEOCONSULTA.md`](docs/VIDEOCONSULTA.md)). Es `VARCHAR` y no `ENUM`, como `comunicados.prioridad`. Ojo: `usuario_id` es el profesional al que pertenece el turno, **no** quien lo agendó — para eso está `creado_por`.
 - **`comunicados`** / **`grupo_posteos`** — avisos institucionales y posteos internos por grupo. `comunicados.prioridad` (`normal` | `importante`) decide los canales: **normal solo llega por la campana de la barra superior; importante además manda un mail** a todos los usuarios activos. La distinción es deliberada — un mail por cada aviso convierte la casilla en ruido y logra que no se lean los que sí importan. Es `VARCHAR` y no `ENUM`, y se valida en la aplicación.
 - **`comunicado_lecturas`** — estado de leído **por usuario**. La ausencia de fila significa no leído: no se escribe una fila por cada usuario al publicar. El autor se marca como lector en el mismo INSERT, si no el contador le queda en 1 apenas publica.
 - **`grupos_profesionales`** / **`grupo_miembros`** — grupos para agendas compartidas; `es_rehabilitacion` los distingue en la agenda. Los roles `director` y `area` gestionan la membresía.

@@ -557,6 +557,44 @@ conversa después igual.
 
 ---
 
+## El sitio público
+
+Vive en el dominio raíz, y es lo único que ve alguien que todavía no es cliente.
+Portada, funcionalidades, precios, ingreso, los tres registros y **una página
+propia por funcionalidad**, en `frontend/src/views/pages/publico/`.
+
+### Una sola lista de funciones
+
+El menú desplegable, la portada, la página de funcionalidades, las diez páginas
+de detalle y la tabla comparativa de precios salen todos de `publico/datos.js`.
+No es prolijidad: una lista escrita en cada pantalla se desincroniza, y el día
+que una queda vieja el sitio **se contradice a sí mismo delante de alguien que
+está por pagar**. Por el mismo motivo las diez páginas de detalle las dibuja un
+único componente, `Funcionalidad.vue`.
+
+### Se nombra lo que no está
+
+Lo que todavía no existe —WhatsApp, facturación con ARCA, sincronización de
+calendario— aparece rotulado **"En camino"**, no con un tilde en la tabla.
+Ocultarlo no evita la pregunta: la adelanta al primer mes de uso, cuando el
+cliente ya pagó. Y los precios dicen "Consultanos" hasta que estén definidos:
+una cifra de relleno en la página de precios compromete a algo que nadie decidió.
+
+### El ingreso del profesional no puede ser un formulario acá
+
+Es una consecuencia directa de la arquitectura. La sesión de un consultorio vive
+en **su** subdominio, atada al host exacto, así que un usuario y contraseña en el
+dominio raíz autenticaría contra ninguna base. `/ingresar` manda a cada uno a su
+puerta: al paciente al portal, y al profesional a la dirección de su consultorio,
+que se arma con `urlConsultorio()`.
+
+Ese helper **no adivina el dominio raíz recortando etiquetas**: `fichasalud.com.ar`
+tiene tres y `drlopez.localhost` dos, así que contar no distingue el subdominio
+del TLD compuesto. Como la función solo se usa desde el sitio público, ahí el
+host **es** la raíz y alcanza con sacarle el `www.`.
+
+---
+
 ## Pendiente legal
 
 Alojar datos de salud de terceros en Argentina cae bajo la **Ley 25.326**

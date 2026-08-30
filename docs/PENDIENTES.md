@@ -1,6 +1,7 @@
 # Pendientes
 
-Lo que está abierto al **28/08/2026**, con Ficha Salud (G1–G5) terminado. Cada punto trae cómo se detectó y cómo
+Lo que está abierto al **30/08/2026**, con Ficha Salud (G1–G5) terminado, el
+sitio público publicado y la videoconsulta funcionando. Cada punto trae cómo se detectó y cómo
 reproducirlo, para no tener que volver a investigarlo desde cero.
 
 Los ítems tachados quedan un tiempo con la explicación de cómo se cerraron: en
@@ -58,16 +59,35 @@ completo. Verificado bajo `America/Argentina/Buenos_Aires`.
 
 ---
 
-## 4. Datos con doble codificación UTF-8 en la base
+## 4. ~~Datos con doble codificación UTF-8 en la base~~ ✅ cerrado el 30/08/2026
 
-`/api/usuarios/me` devuelve `"profesion": "MÃ©dico"` para el usuario `admin`:
-es "Médico" codificado dos veces. Se va a imprimir mal en la receta, porque el
-bloque `medico` sale de esa fila.
+**Corrección sobre el reporte original:** decía "es un problema de datos, no de
+código", y era cierto, pero faltaba la causa —que es lo que impedía cerrarlo—.
 
-Es un problema de **datos**, no de código, pero conviene averiguar por dónde
-entró antes de cargar usuarios de verdad: si hay una ruta de importación o un
-formulario que guarda mal, cada usuario nuevo va a repetirlo. Revisar el charset
-de la conexión y de la carga inicial.
+`HEX(profesion)` del usuario `admin` daba `4D C383 C2A9 6469636F`: los bytes
+UTF-8 de "MÃ©dico". La conexión de la aplicación ya negociaba `utf8mb4` y las
+tablas también. **El único eslabón en latin1 era el cliente de MySQL que ejecuta
+`db/init.sql` al crear el datadir**, que en el contenedor arranca en latin1 y
+por lo tanto lee el archivo UTF-8 como si fuera latin1.
+
+Por eso solo estaba afectada `hc_bfa`: los consultorios que se dan de alta con
+`alta_cliente.py` escriben con mysql-connector y siempre estuvieron bien. Medido:
+3 columnas de 1 fila. Nada de lo cargado desde la aplicación tenía el problema.
+
+Se arregló por las dos puntas: `SET NAMES utf8mb4` en `init.sql` para que no
+vuelva a pasar, y `20260901_reparar_doble_utf8.sql` para las filas ya escritas,
+filtrando por `'Ã'` para que una fila correcta no se toque.
+
+**Y apareció un segundo caso, peor.** `scripts/comparar_esquemas.sh` —que existe
+justamente para esto— mostró que en las bases viejas
+`pacientes.cert_discapacidad` no estaba definida como `ENUM('Sí','No')` sino como
+`ENUM('SÃ­','No')`. No es un dato feo: es la **definición de la columna**, así
+que guardar `'Sí'` no coincidía con ningún valor válido.
+Lo corrige `20260901_enum_cert_discapacidad_utf8.sql`.
+
+⚠️ Al aplicarlas quedó claro que **`migrate.py --todos` recorre los consultorios
+del plano de control pero NO la base del entorno**: `hc_bfa` necesitó
+`migrate.py` a secas. Con las dos bases conviviendo hay que correr los dos.
 
 ---
 
@@ -78,10 +98,16 @@ de la conexión y de la carga inicial.
   centralizada en `marca.py` y `stores/marca.js`.
 - **Reemplazar el logo.** `frontend/src/assets/logo-ficha-salud.svg` es un
   provisorio hecho para no mostrar el escudo de la UNSAM a un consultorio ajeno.
-- **Definir los precios.** La página de inicio no publica importes a propósito:
-  poner un número inventado sería comprometer a Hector con algo que no decidió.
-  Cuando estén, van en la sección de precios de `views/pages/publico/Inicio.vue`.
-- **Términos y política de privacidad.** Ahora hay cuentas de pacientes, así que
+- **Definir los precios.** El sitio no publica importes a propósito: poner un
+  número inventado sería comprometer a Hector con algo que no decidió. La página
+  `/precios` ya está armada y muestra "Consultanos"; cuando estén, es una línea
+  por plan en `PLANES`, dentro de `views/pages/publico/datos.js`.
+- **Un correo de contacto del producto.** El pie del sitio muestra
+  `hola@fichasalud.com.ar`, que todavía no existe. Está en una sola constante,
+  `CORREO_CONTACTO` en `publico/SitioLayout.vue`.
+- **Términos y política de privacidad.** El pie del sitio **no los enlaza**,
+  porque enlazar a páginas que no existen es peor que no tenerlas.
+  Ahora hay cuentas de pacientes, así que
   la Ley 25.326 pesa más que cuando solo había consultorios. Hacen falta textos
   reales antes del primer usuario, no después.
 
@@ -138,26 +164,36 @@ verificadas.
 
 ## 7. Menores
 
-- **Quedan 6 conexiones manuales en `turnos_routes.py`.** El resto se convirtió
-  a `db_cursor()` el 29/08/2026, y el pendiente original estaba mal planteado:
-  decía "seis archivos", pero `dashboard_routes` ya tenía `try/finally` en sus
-  dos conexiones, y la mayoría de las de `turnos` también. Solo filtraban diez, y
-  esas están hechas.
+- ~~**Quedan 6 conexiones manuales en `turnos_routes.py`.**~~ ✅ hecho el
+  30/08/2026, y con ellas las 20 que quedaban en todo el backend
+  (`turnos_routes`, `grupos_routes`, `disponibilidades_routes`, más la carga del
+  usuario en `__init__` y `auth`).
 
-  Las seis que quedan (`api_turnos`, `turnos_profesional`,
-  `turnos_profesional_completo`, `turnos_por_grupo`, `listar_turnos_grupales`,
-  `crear_turno_grupal`) son rutas de 30 a 60 líneas con ramas y `return`
-  tempranos. Un transformador automático rompió la sintaxis del archivo y hubo
-  que restaurarlo.
+  Handler por handler y corriendo `pytest` después de cada archivo: el
+  transformador automático ya había roto `turnos_routes` una vez.
 
-  **Se dejaron a propósito.** Cierran en todos sus `return`, así que solo filtran
-  ante una excepción no controlada, y reindentar mal una ruta de la agenda es más
-  probable y más grave que esa fuga. Si se hacen, conviene una por vez y
-  probando los tres caminos de cada una, como se hizo con `eliminar_turno`.
+  Dos cosas que aparecieron al convertir, y que conviene recordar:
 
-  ⚠️ Al convertirlas, ojo con `commit=True`: un `return` temprano dentro del
-  `with` **también hace commit** (está documentado en `database.py`), así que una
-  ruta que escriba y después devuelva un error confirmaría la escritura a medias.
+  - En `crear_turno_grupal` y `editar_turno_grupal` el `try/except` tuvo que
+    quedar **por fuera** del `with`. Con el `except` adentro, la excepción no
+    atraviesa el context manager y **una tanda a medias se confirmaría igual**.
+  - `api_turnos` y `editar_turno` abrían su conexión y después llamaban a
+    `medico_disponible()`, que abre la suya: dos conexiones tomadas para un solo
+    pedido. Ahora la comprobación va antes de abrir nada.
+
+  Efecto lateral bienvenido: desaparecen los `except Exception -> 500` con
+  `str(e)`, que devolvían el mensaje de MySQL al cliente.
+
+- **Videoconsulta: hoy es un enlace, no video embebido.** Decisión tomada el
+  30/08/2026 y explicada en [VIDEOCONSULTA.md](VIDEOCONSULTA.md). Lo que quedó
+  fuera de alcance —Jitsi autoalojado, salas firmadas por turno, sala de
+  espera— se reevalúa cuando un consultorio real use videoconsulta seguido, no
+  antes. **Grabar consultas: no**, y eso no es un pendiente sino una decisión.
+
+- **El correo de la videoconsulta no se vio llegar.** El bloque HTML, el botón y
+  el `LOCATION` del `.ics` están verificados por unidad y contra el stack, pero
+  el envío real depende del SMTP, que es el mismo pendiente de más arriba.
+
 - **Node 20 en la máquina.** Vite 7 exige ≥ 20.19 y hay 18.19, así que
   `npm run dev` y `npm run build` locales fallan con `crypto.hash is not a
   function`. Mientras tanto se trabaja con el perfil `docker-compose.dev.yml`,
@@ -168,7 +204,11 @@ verificadas.
 - **`ModuloRehabilitacion.vue`** (700 líneas, con su ruta) sigue solo en el fork.
   Se decidió no traerlo. Depende de `calendar-medical.css`, que sí está, así que
   portarlo es viable si alguna vez hace falta.
-- **El directorio `bfa-node/` sigue ahí, y borrarlo es decisión del usuario.**
+- **El directorio `bfa-node/` sigue en disco, y borrarlo es decisión del
+  usuario.** El 30/08/2026 se sacó de git el único archivo versionado y se
+  agregó `bfa-node/` al `.gitignore`, así que ya no forma parte del repositorio.
+  Los archivos **no se borraron**: contienen material de una wallet y eso no es
+  una decisión que corresponda tomar por cuenta propia.
   Quedó de cuando el anclaje usaba un nodo Geth local: no hay servicio ni código
   que lo use, solo comentarios que explican por qué se dejó de usar.
 
