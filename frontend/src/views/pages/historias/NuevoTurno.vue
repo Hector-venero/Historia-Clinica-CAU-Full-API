@@ -14,6 +14,10 @@ const pacienteSeleccionado = ref('');
 const usuarioId = ref('');
 const fecha = ref(null);
 const motivo = ref('');
+// Videoconsulta. El enlace lo pone el profesional con la herramienta que ya usa
+// (Meet, Zoom, la que sea): el sistema no genera ni aloja la videollamada.
+const modalidad = ref('presencial');
+const enlaceVideo = ref('');
 const mensaje = ref('');
 const error = ref('');
 const guardando = ref(false);
@@ -234,7 +238,11 @@ async function crearTurno() {
         usuario_id: usuarioId.value,
         fecha_inicio: fechaInicioStr,
         fecha_fin: calcularFin(fecha.value, duracion.value),
-        motivo: motivo.value
+        motivo: motivo.value,
+        modalidad: modalidad.value,
+        // Se manda solo en virtual: el backend descarta el enlace de un turno
+        // presencial, y mandarlo igual seria pedirle que limpie lo nuestro.
+        enlace_video: modalidad.value === 'virtual' ? enlaceVideo.value.trim() : null
     };
 
     if (esTanda.value) {
@@ -258,6 +266,8 @@ async function crearTurno() {
         usuarioId.value = '';
         fecha.value = null;
         motivo.value = '';
+        modalidad.value = 'presencial';
+        enlaceVideo.value = '';
         esTanda.value = false;
         diasSeleccionados.value = [];
     } catch (e) {
@@ -360,6 +370,31 @@ function usarHorario(iso) {
 
                 <label class="etiqueta">Motivo</label>
                 <textarea v-model="motivo" rows="3" placeholder="Motivo del turno (opcional)" class="campo"></textarea>
+
+                <label class="etiqueta mt-5">Modalidad</label>
+                <div class="grid grid-cols-2 gap-3">
+                    <button
+                        v-for="m in [
+                            { valor: 'presencial', titulo: 'Presencial', detalle: 'En el consultorio', icono: 'pi-map-marker' },
+                            { valor: 'virtual', titulo: 'Videoconsulta', detalle: 'Por videollamada', icono: 'pi-video' }
+                        ]"
+                        :key="m.valor"
+                        type="button"
+                        class="text-left rounded-xl border p-3 transition"
+                        :class="modalidad === m.valor ? 'border-primary-500 bg-primary-50 dark:bg-primary-950/40' : 'border-surface-200 dark:border-surface-700 hover:bg-surface-50 dark:hover:bg-surface-800'"
+                        @click="modalidad = m.valor"
+                    >
+                        <i class="pi mb-1 block" :class="[m.icono, modalidad === m.valor ? 'text-primary-600 dark:text-primary-400' : 'text-surface-400']"></i>
+                        <span class="block text-sm font-semibold text-surface-800 dark:text-surface-100">{{ m.titulo }}</span>
+                        <span class="block text-xs text-surface-500 dark:text-surface-400">{{ m.detalle }}</span>
+                    </button>
+                </div>
+
+                <div v-if="modalidad === 'virtual'" class="mt-3">
+                    <label class="etiqueta">Enlace de la videollamada</label>
+                    <input v-model="enlaceVideo" type="url" placeholder="https://meet.google.com/abc-defg-hij" class="campo" autocomplete="off" />
+                    <p class="text-xs text-surface-500 dark:text-surface-400 mt-1 mb-0">Pegá el enlace de tu sala de Meet, Zoom o la herramienta que uses. Se lo mandamos al paciente por correo y lo ve en su portal.</p>
+                </div>
 
                 <label class="mt-5 flex items-start gap-3 cursor-pointer rounded-xl border border-surface-200 dark:border-surface-700 p-3 hover:bg-surface-50 dark:hover:bg-surface-800 transition">
                     <input v-model="esTanda" type="checkbox" class="mt-0.5 w-5 h-5 accent-primary-600 shrink-0" />

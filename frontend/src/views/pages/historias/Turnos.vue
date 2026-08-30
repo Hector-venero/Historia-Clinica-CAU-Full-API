@@ -325,6 +325,8 @@ const calendarOptions = reactive({
             profesional: e.extendedProps.profesional,
             description: e.extendedProps.description,
             observaciones: e.extendedProps.observaciones,
+            modalidad: e.extendedProps.modalidad,
+            enlaceVideo: e.extendedProps.enlace_video,
             ausencia: e.extendedProps.ausencia,
             paciente_id: e.extendedProps.paciente_id,
             tipoEvento: e.extendedProps.tipoEvento || 'Bloqueo',
@@ -501,6 +503,8 @@ function adaptarEventoTurno(t) {
             profesional: t.profesional,
             description: t.description,
             observaciones: t.observaciones,
+            modalidad: t.modalidad,
+            enlace_video: t.enlace_video,
             ausencia: t.ausencia,
             paciente_id: t.paciente_id,
             creadoPorNombre: t.creado_por_nombre,
@@ -956,6 +960,15 @@ onUnmounted(() => {
                         <p class="flex items-center gap-2">
                             <i class="pi pi-comment text-[#0891B2]"></i> <span class="text-slate-600 dark:text-slate-300">{{ turnoSeleccionado.description || 'Sin motivo' }}</span>
                         </p>
+                        <!-- Videoconsulta: el enlace a mano, para no tener que ir a
+                             buscarlo al correo cuando el paciente ya esta esperando. -->
+                        <div v-if="turnoSeleccionado.modalidad === 'virtual'" class="mt-3 p-3 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 text-xs border border-emerald-200 dark:border-emerald-900">
+                            <p class="font-semibold text-emerald-800 dark:text-emerald-300 m-0 mb-1"><i class="pi pi-video mr-1"></i> Videoconsulta</p>
+                            <a v-if="turnoSeleccionado.enlaceVideo" :href="turnoSeleccionado.enlaceVideo" target="_blank" rel="noopener noreferrer" class="text-emerald-700 dark:text-emerald-400 font-medium break-all">
+                                {{ turnoSeleccionado.enlaceVideo }}
+                            </a>
+                        </div>
+
                         <div v-if="turnoSeleccionado.observaciones" class="mt-3 p-3 rounded-lg bg-slate-50 dark:bg-slate-800/40 text-xs border border-slate-100 dark:border-slate-700">
                             <span class="font-semibold text-slate-500 block mb-1"><i class="pi pi-align-left mr-1 text-[#0891B2]"></i>Observaciones:</span>
                             <p class="text-slate-600 dark:text-slate-300 whitespace-pre-wrap">{{ turnoSeleccionado.observaciones }}</p>

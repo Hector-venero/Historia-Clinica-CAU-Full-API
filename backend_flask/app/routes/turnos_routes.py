@@ -14,6 +14,7 @@ from app.utils.fechas import TZ_ARG, a_iso_arg as _to_iso_arg
 
 bp_turnos = Blueprint("turnos", __name__)
 ROLES_TURNOS = ("director", "profesional", "administrativo", "area")
+MODALIDADES = ("presencial", "virtual")
 ROLES_TURNOS_GRUPALES = ("director", "administrativo", "area")
 GROUP_SLOT_MINUTES = 20
 WEEKDAY_NAME_TO_INDEX = {
@@ -39,6 +40,38 @@ WEEKDAY_NAME_TO_INDEX = {
     "dom": 6,
     "sunday": 6,
 }
+
+
+def _leer_modalidad(data):
+    """Valida modalidad y enlace de videollamada. Devuelve (modalidad, enlace, error).
+
+    El enlace no lo genera el sistema: lo pone el profesional con la herramienta
+    que ya usa. Por eso hay que mirarlo antes de guardarlo — termina en un correo
+    al paciente, y si esta mal el error se descubre con el paciente esperando
+    del otro lado a la hora del turno.
+
+    Se exige https:// y no solo "que parezca una URL": una sala de
+    videoconsulta servida por http es una consulta medica en claro.
+    """
+    modalidad = (data.get("modalidad") or "presencial").strip().lower()
+    if modalidad not in MODALIDADES:
+        return None, None, "modalidad debe ser 'presencial' o 'virtual'"
+
+    enlace = (data.get("enlace_video") or "").strip() or None
+
+    if modalidad == "presencial":
+        # Un enlace en un turno presencial es basura que despues aparece en el
+        # portal del paciente. Se descarta.
+        return modalidad, None, None
+
+    if not enlace:
+        return None, None, "Un turno virtual necesita el enlace de la videollamada"
+    if not enlace.startswith("https://"):
+        return None, None, "El enlace de la videollamada tiene que empezar con https://"
+    if len(enlace) > 500:
+        return None, None, "El enlace de la videollamada es demasiado largo"
+
+    return modalidad, enlace, None
 
 
 def _parse_iso_datetime(value):
@@ -450,6 +483,7 @@ def api_turnos():
                 cursor.execute(
                     """
                     SELECT t.id, t.paciente_id, t.fecha_inicio, t.fecha_fin, t.motivo, t.observaciones, t.ausencia,
+                           t.modalidad, t.enlace_video,
                            p.nombre, p.dni, u.nombre AS profesional
                     FROM turnos t
                     JOIN pacientes p ON t.paciente_id = p.id
@@ -463,6 +497,7 @@ def api_turnos():
                 cursor.execute(
                     """
                     SELECT t.id, t.paciente_id, t.fecha_inicio, t.fecha_fin, t.motivo, t.observaciones, t.ausencia,
+                           t.modalidad, t.enlace_video,
                            p.nombre, p.dni, u.nombre AS profesional
                     FROM turnos t
                     JOIN pacientes p ON t.paciente_id = p.id
@@ -483,6 +518,8 @@ def api_turnos():
                 "description": t["motivo"],
                 "observaciones": t["observaciones"],
                 "ausencia": t["ausencia"],
+                "modalidad": t["modalidad"],
+                "enlace_video": t["enlace_video"],
                 "paciente_id": t["paciente_id"],
                 "profesional": t["profesional"],
             }
@@ -499,6 +536,10 @@ def api_turnos():
     fecha_inicio_raw = data.get("fecha_inicio")
     motivo = data.get("motivo")
     observaciones = data.get("observaciones")
+
+    modalidad, enlace_video, err_modalidad = _leer_modalidad(data)
+    if err_modalidad:
+        return jsonify({"error": err_modalidad}), 400
 
     if not (paciente_id and usuario_id and fecha_inicio_raw):
         return jsonify({"error": "Campos obligatorios faltantes"}), 400
@@ -539,10 +580,21 @@ def api_turnos():
     with db_cursor(commit=True) as (_conn, cursor):
         cursor.execute(
             """
-            INSERT INTO turnos (paciente_id, usuario_id, fecha_inicio, fecha_fin, motivo, observaciones, creado_por, creado_en)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            INSERT INTO turnos (paciente_id, usuario_id, fecha_inicio, fecha_fin, motivo, observaciones, modalidad, enlace_video, creado_por, creado_en)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """,
-            (paciente_id, usuario_id, fecha_inicio, fecha_fin, motivo, observaciones, current_user.id, datetime.now()),
+            (
+                paciente_id,
+                usuario_id,
+                fecha_inicio,
+                fecha_fin,
+                motivo,
+                observaciones,
+                modalidad,
+                enlace_video,
+                current_user.id,
+                datetime.now(),
+            ),
         )
 
         cursor.execute("SELECT id, email, nombre, apellido FROM pacientes WHERE id = %s", (paciente_id,))
@@ -553,7 +605,7 @@ def api_turnos():
     # Mail HTML con invitacion .ics adjunta (ver utils/mails_turnos.py).
     # No propaga errores: un fallo del correo no invalida el turno.
     # Va fuera del bloque para no tener la conexion tomada mientras se arma.
-    enviar_confirmacion(paciente, profesional, fecha_inicio, fecha_fin, motivo)
+    enviar_confirmacion(paciente, profesional, fecha_inicio, fecha_fin, motivo, modalidad=modalidad, enlace_video=enlace_video)
 
     payload = {"message": "Turno creado correctamente."}
     if ajuste:
@@ -606,7 +658,10 @@ def editar_turno(id):
     # comprobar la disponibilidad, y medico_disponible() abre su propia
     # conexion. Anidarlas tendria dos tomadas para un solo pedido.
     with db_cursor() as (_conn, cursor):
-        cursor.execute("SELECT usuario_id, fecha_inicio, fecha_fin, motivo, observaciones FROM turnos WHERE id=%s", (id,))
+        cursor.execute(
+            "SELECT usuario_id, fecha_inicio, fecha_fin, motivo, observaciones, modalidad, enlace_video FROM turnos WHERE id=%s",
+            (id,),
+        )
         turno = cursor.fetchone()
 
     if not turno:
@@ -628,6 +683,17 @@ def editar_turno(id):
     motivo = data.get("motivo", turno.get("motivo"))
     observaciones = data.get("observaciones", turno.get("observaciones"))
 
+    # Un turno puede pasar a virtual despues de creado —es el caso de la reserva
+    # online, que siempre entra presencial—. Si el pedido no habla de modalidad,
+    # se conserva la que tenia en lugar de volverla presencial en silencio.
+    if "modalidad" in data or "enlace_video" in data:
+        modalidad, enlace_video, err_modalidad = _leer_modalidad(data)
+        if err_modalidad:
+            return jsonify({"error": err_modalidad}), 400
+    else:
+        modalidad = turno.get("modalidad") or "presencial"
+        enlace_video = turno.get("enlace_video")
+
     if not medico_disponible(
         turno["usuario_id"],
         fecha_inicio,
@@ -648,10 +714,10 @@ def editar_turno(id):
         cursor.execute(
             """
             UPDATE turnos
-            SET fecha_inicio=%s, fecha_fin=%s, motivo=%s, observaciones=%s
+            SET fecha_inicio=%s, fecha_fin=%s, motivo=%s, observaciones=%s, modalidad=%s, enlace_video=%s
             WHERE id=%s
         """,
-            (fecha_inicio, fecha_fin, motivo, observaciones, id),
+            (fecha_inicio, fecha_fin, motivo, observaciones, modalidad, enlace_video, id),
         )
 
     payload = {"message": "Turno actualizado correctamente."}
@@ -670,6 +736,10 @@ def crear_turnos_tanda():
         usuario_id = data.get("usuario_id")
         motivo = data.get("motivo", "")
         observaciones = data.get("observaciones")
+
+        modalidad, enlace_video, err_modalidad = _leer_modalidad(data)
+        if err_modalidad:
+            return jsonify({"error": err_modalidad}), 400
         
         fecha_raw = data.get("fecha")
         if not fecha_raw:
@@ -727,10 +797,21 @@ def crear_turnos_tanda():
                         continue
                     cursor.execute(
                         """
-                        INSERT INTO turnos (paciente_id, usuario_id, fecha_inicio, fecha_fin, motivo, observaciones, creado_por, creado_en)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                        INSERT INTO turnos (paciente_id, usuario_id, fecha_inicio, fecha_fin, motivo, observaciones, modalidad, enlace_video, creado_por, creado_en)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     """,
-                        (paciente_id, usuario_id, fecha_actual, fecha_fin, motivo, observaciones, current_user.id, datetime.now()),
+                        (
+                            paciente_id,
+                            usuario_id,
+                            fecha_actual,
+                            fecha_fin,
+                            motivo,
+                            observaciones,
+                            modalidad,
+                            enlace_video,
+                            current_user.id,
+                            datetime.now(),
+                        ),
                     )
                     turnos_creados += 1
                 fecha_actual += timedelta(days=1)
@@ -890,6 +971,8 @@ def turnos_profesional_completo():
                 t.motivo AS description,
                 t.observaciones,
                 t.ausencia,
+                t.modalidad,
+                t.enlace_video,
                 uc.nombre AS creado_por_nombre,
                 t.creado_en,
                 '#1976D2' AS color,
@@ -973,6 +1056,8 @@ def turnos_por_grupo(grupo_id):
                 t.motivo AS description,
                 t.observaciones,
                 t.ausencia,
+                t.modalidad,
+                t.enlace_video,
                 uc.nombre AS creado_por_nombre,
                 t.creado_en,
                 p.nombre AS paciente,

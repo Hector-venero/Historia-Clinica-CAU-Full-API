@@ -80,20 +80,33 @@ def _nombre_completo(persona):
     return f"{persona.get('nombre', '')} {persona.get('apellido', '')}".strip()
 
 
-def construir_ics(paciente, profesional, inicio, fin, motivo):
+def construir_ics(paciente, profesional, inicio, fin, motivo, enlace_video=None):
     """Invitacion iCalendar del turno.
 
     Las fechas van en UTC (sufijo Z) porque es lo unico que interpretan igual
     todos los clientes de calendario. Los saltos de linea deben ser CRLF por
     RFC 5545: con \\n solo, varios clientes descartan el archivo.
+
+    En un turno virtual el enlace va en LOCATION, que es de donde lo saca el
+    boton "unirse" del calendario del celular. Repetirlo en DESCRIPTION es a
+    proposito: los clientes que no muestran LOCATION igual lo dejan a mano.
     """
     inicio_dt = _a_datetime(inicio)
     fin_dt = _a_datetime(fin)
     dtstamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    descripcion = (
-        f"Motivo: {motivo or 'Consulta general'}"
-        "\\nPor favor asista con 10 minutos de anticipación y su DNI."
-    )
+    if enlace_video:
+        descripcion = (
+            f"Motivo: {motivo or 'Consulta general'}"
+            f"\\nVideoconsulta: {enlace_video}"
+            "\\nEntre desde el enlace unos minutos antes del horario."
+        )
+        ubicacion = enlace_video
+    else:
+        descripcion = (
+            f"Motivo: {motivo or 'Consulta general'}"
+            "\\nPor favor asista con 10 minutos de anticipación y su DNI."
+        )
+        ubicacion = _ubicacion()
 
     ics = f"""BEGIN:VCALENDAR
 VERSION:2.0
@@ -107,7 +120,7 @@ DTSTART:{inicio_dt.astimezone(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}
 DTEND:{fin_dt.astimezone(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}
 SUMMARY:Turno Médico - Dr/Dra. {profesional.get('nombre', '')}
 DESCRIPTION:{descripcion}
-LOCATION:{_ubicacion()}
+LOCATION:{ubicacion}
 STATUS:CONFIRMED
 ORGANIZER;CN={marca.nombre_corto()}:mailto:{ORGANIZADOR_EMAIL}
 ATTENDEE;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE;CN={_nombre_completo(paciente)}:mailto:{paciente.get('email', '')}
@@ -116,7 +129,36 @@ END:VCALENDAR"""
     return ics.replace("\n", "\r\n")
 
 
-def enviar_confirmacion(paciente, profesional, inicio, fin, motivo=None):
+def _bloque_lugar(es_virtual, enlace_video):
+    """El parrafo de ubicacion, que en una videoconsulta dice otra cosa.
+
+    "Asista con 10 minutos de anticipacion y su DNI" en un turno por video no
+    tiene sentido, y peor: hace dudar de si hay que ir igual. El enlace va como
+    boton y ademas en texto, porque varios clientes de correo no muestran los
+    fondos de color y el boton quedaria invisible.
+    """
+    if not es_virtual:
+        return f'''
+            <p style="font-size: 16px; line-height: 1.6; color: #333333;">
+            📍 <strong>UBICACIÓN:</strong> {_ubicacion()}<br>
+            ⚠️ <strong>IMPORTANTE:</strong> Por favor, asista con 10 minutos de anticipación y su DNI.</p>
+        '''
+
+    return f'''
+        <div style="background-color: #ecfdf5; padding: 20px; border-radius: 8px; margin: 25px 0; border-left: 5px solid #059669;">
+            <h3 style="margin-top: 0; color: #047857; font-size: 18px;">💻 Es una videoconsulta</h3>
+            <p style="font-size: 16px; color: #333333; margin: 0 0 15px 0;">
+                No hace falta que vayas al consultorio. Entrá desde este enlace unos minutos antes del horario:
+            </p>
+            <p style="margin: 0 0 12px 0;">
+                <a href="{enlace_video}" style="background-color: #059669; color: #ffffff; padding: 12px 24px; border-radius: 6px; text-decoration: none; font-weight: bold; display: inline-block;">Entrar a la videollamada</a>
+            </p>
+            <p style="font-size: 13px; color: #555555; margin: 0; word-break: break-all;">{enlace_video}</p>
+        </div>
+    '''
+
+
+def enviar_confirmacion(paciente, profesional, inicio, fin, motivo=None, modalidad="presencial", enlace_video=None):
     """Confirma el turno por mail, con la invitacion de calendario adjunta.
 
     No propaga excepciones: un fallo del servidor de correo no debe impedir que
@@ -132,13 +174,15 @@ def enviar_confirmacion(paciente, profesional, inicio, fin, motivo=None):
         hora = inicio_dt.strftime("%H:%M")
         motivo_txt = motivo or "Consulta general"
         nombre = _nombre_completo(paciente)
+        es_virtual = modalidad == "virtual" and bool(enlace_video)
 
         cuerpo = (
             f"Estimado/a {nombre},\n\n"
             "Le confirmamos que su turno ha sido agendado correctamente.\n\n"
             f"DETALLES:\nProfesional: {profesional.get('nombre', '')}\n"
-            f"Fecha: {fecha}\nHora: {hora} hs\nMotivo: {motivo_txt}\n\n"
-            f"Saludos,\nEquipo {marca.nombre_corto()}"
+            f"Fecha: {fecha}\nHora: {hora} hs\nMotivo: {motivo_txt}\n"
+            + (f"Videoconsulta: {enlace_video}\n" if es_virtual else "")
+            + f"\nSaludos,\nEquipo {marca.nombre_corto()}"
         )
 
         html = _envoltura(f"""
@@ -156,9 +200,7 @@ def enviar_confirmacion(paciente, profesional, inicio, fin, motivo=None):
                 </ul>
             </div>
 
-            <p style="font-size: 16px; line-height: 1.6; color: #333333;">
-            📍 <strong>UBICACIÓN:</strong> {_ubicacion()}<br>
-            ⚠️ <strong>IMPORTANTE:</strong> Por favor, asista con 10 minutos de anticipación y su DNI.</p>
+            {_bloque_lugar(es_virtual, enlace_video)}
             {_pie_contacto()}
         """)
 
@@ -171,7 +213,10 @@ def enviar_confirmacion(paciente, profesional, inicio, fin, motivo=None):
         mensaje.attach(
             "invitacion_turno.ics",
             "text/calendar",
-            construir_ics(paciente, profesional, inicio, fin, motivo).encode("utf-8"),
+            construir_ics(
+                paciente, profesional, inicio, fin, motivo,
+                enlace_video=enlace_video if es_virtual else None,
+            ).encode("utf-8"),
         )
         enviar_en_segundo_plano(mensaje)
         return True

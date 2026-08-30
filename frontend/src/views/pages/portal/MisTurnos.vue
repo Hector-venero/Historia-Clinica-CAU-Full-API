@@ -11,6 +11,20 @@ const confirmando = ref(null);
 const proximos = computed(() => turnos.value.filter((t) => t.estado === 'reservado'));
 const otros = computed(() => turnos.value.filter((t) => t.estado !== 'reservado'));
 
+/**
+ * El boton de la videollamada aparece cerca del horario, no siempre.
+ *
+ * Un boton "entrar" visible tres semanas antes invita a entrar a una sala vacia
+ * y a pensar que el sistema falla. Media hora antes y hasta dos horas despues
+ * cubre al que llega temprano y al turno que se estiro.
+ */
+function videollamadaDisponible(turno) {
+    if (turno.modalidad !== 'virtual' || !turno.enlace_video) return false;
+    const inicio = new Date(turno.fecha_inicio).getTime();
+    const ahora = Date.now();
+    return ahora >= inicio - 30 * 60 * 1000 && ahora <= inicio + 2 * 60 * 60 * 1000;
+}
+
 function cuando(valor) {
     if (!valor) return '';
     const d = new Date(valor);
@@ -87,6 +101,25 @@ onMounted(cargar);
                                 <span v-if="t.lugar"><i class="pi pi-map-marker mr-1"></i>{{ t.lugar }}</span>
                             </div>
                             <p v-if="t.motivo" class="text-sm text-surface-600 dark:text-surface-300 mt-2 mb-0">{{ t.motivo }}</p>
+
+                            <!-- Videoconsulta. El enlace lo puso el profesional; puede
+                                 haberlo cambiado despues de la reserva, asi que sale de
+                                 lo que responde el consultorio y no de la copia local. -->
+                            <div v-if="t.modalidad === 'virtual' && t.enlace_video" class="mt-3 p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900">
+                                <p class="text-sm font-semibold text-emerald-800 dark:text-emerald-300 m-0"><i class="pi pi-video mr-1"></i> Es por videollamada</p>
+                                <p class="text-xs text-emerald-700 dark:text-emerald-400 mt-1 mb-0">No hace falta que vayas al consultorio.</p>
+
+                                <a
+                                    v-if="videollamadaDisponible(t)"
+                                    :href="t.enlace_video"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    class="mt-3 inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 transition no-underline"
+                                >
+                                    <i class="pi pi-video"></i> Entrar a la videollamada
+                                </a>
+                                <p v-else class="text-xs text-emerald-700 dark:text-emerald-400 mt-2 mb-0">El botón para entrar aparece 30 minutos antes del turno.</p>
+                            </div>
 
                             <!-- Confirmación en dos pasos. Cancelar un turno no se
                                  deshace: el horario queda libre y otro paciente

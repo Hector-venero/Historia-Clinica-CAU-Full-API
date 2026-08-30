@@ -385,7 +385,11 @@ def mis_turnos(paciente, incluir_pasados=False):
         if fila["estado"] == "reservado":
             por_consultorio.setdefault(fila["consultorio_slug"], []).append(fila["turno_id"])
 
-    vigentes = set()
+    # Ademas de saber si el turno sigue vivo, se trae la modalidad: un turno
+    # puede haber pasado a videoconsulta despues de reservado, y el enlace tiene
+    # que llegarle al paciente sin reenviarle nada. La copia del portal no lo
+    # sabe; el consultorio si.
+    vigentes = {}
     for slug, ids in por_consultorio.items():
         cliente = plataforma.buscar_por_slug(slug)
         if cliente is None:
@@ -399,13 +403,15 @@ def mis_turnos(paciente, incluir_pasados=False):
                 with db_cursor() as (_conn, cur):
                     marcas = ", ".join(["%s"] * len(ids))
                     cur.execute(
-                        f"SELECT id FROM turnos WHERE id IN ({marcas})", tuple(ids)
+                        f"SELECT id, modalidad, enlace_video FROM turnos WHERE id IN ({marcas})",
+                        tuple(ids),
                     )
-                    vigentes.update((slug, f["id"]) for f in cur.fetchall())
+                    vigentes.update(((slug, f["id"]), f) for f in cur.fetchall())
         except Exception:
             # Un consultorio caido no puede dejar al paciente sin ver su lista.
-            # Se asume vigente: es lo que dice la copia.
-            vigentes.update((slug, i) for i in ids)
+            # Se asume vigente: es lo que dice la copia. Sin modalidad, porque
+            # eso solo lo sabe el consultorio y no se inventa.
+            vigentes.update(((slug, i), None) for i in ids)
 
     resultado = []
     for fila in filas:
@@ -414,6 +420,10 @@ def mis_turnos(paciente, incluir_pasados=False):
             # Lo cancelo el consultorio desde su sistema.
             fila["estado"] = "cancelado"
             fila["cancelado_por"] = "consultorio"
+
+        actual = vigentes.get(clave) or {}
+        fila["modalidad"] = actual.get("modalidad") or "presencial"
+        fila["enlace_video"] = actual.get("enlace_video")
         fila["puede_cancelar"] = _puede_cancelarse(fila)
         resultado.append(fila)
 

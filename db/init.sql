@@ -158,6 +158,10 @@ CREATE TABLE turnos (
     fecha_fin DATETIME NOT NULL,
     motivo VARCHAR(255),
     notificado BOOLEAN DEFAULT FALSE,
+    -- Videoconsulta. El enlace lo pone el profesional (Meet, Zoom, el que use):
+    -- el sistema no genera ni aloja la videollamada. Ver docs/VIDEOCONSULTA.md.
+    modalidad VARCHAR(20) NOT NULL DEFAULT 'presencial',
+    enlace_video VARCHAR(500) NULL,
     FOREIGN KEY (paciente_id) REFERENCES pacientes(id),
     FOREIGN KEY (usuario_id) REFERENCES usuarios(id)
 ) ENGINE=InnoDB

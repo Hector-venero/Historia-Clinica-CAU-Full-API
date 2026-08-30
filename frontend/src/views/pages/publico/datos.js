@@ -80,6 +80,15 @@ export const FUNCIONES = [
         destacada: true
     },
     {
+        titulo: 'Videoconsulta',
+        slug: 'videoconsulta',
+        detalle: 'Marcás el turno como videollamada y el paciente recibe el enlace por correo y en su portal.',
+        icono: 'pi-video',
+        audiencia: 'profesional',
+        planes: ['profesional', 'equipo'],
+        destacada: true
+    },
+    {
         titulo: 'Recordatorios por mail',
         detalle: 'Confirmación y cancelación automáticas, con la invitación para el calendario adjunta.',
         icono: 'pi-envelope',
@@ -229,14 +238,6 @@ export const FUNCIONES = [
         enCamino: true
     },
     {
-        titulo: 'Telemedicina',
-        detalle: 'Videoconsulta dentro del sistema.',
-        icono: 'pi-video',
-        audiencia: 'profesional',
-        planes: [],
-        enCamino: true
-    },
-    {
         titulo: 'Sincronización con Google Calendar',
         detalle: 'Que tus turnos aparezcan también en tu calendario personal.',
         icono: 'pi-sync',
@@ -317,6 +318,26 @@ export const PAGINAS = {
             { icono: 'pi-clock', titulo: 'Sin superposiciones', detalle: 'El horario ocupado deja de ofrecerse, y la base rechaza dos reservas del mismo turno aunque lleguen a la vez.' },
             { icono: 'pi-envelope', titulo: 'Menos ausencias', detalle: 'El paciente recibe la confirmación con el turno listo para agendar en su celular.' },
             { icono: 'pi-mobile', titulo: 'Desde donde estés', detalle: 'Es una web: entrás desde la computadora del consultorio o desde el teléfono.' }
+        ]
+    },
+
+    videoconsulta: {
+        encabezado: 'Videoconsulta, sin cambiar lo que ya usás',
+        promesa: 'Marcás el turno como videollamada y el paciente recibe el enlace donde lo va a buscar.',
+        titulo: 'El enlace es tuyo; el resto lo hacemos nosotros',
+        intro: 'No te pedimos que aprendas otra herramienta de video ni que tus pacientes instalen nada nuevo. Pegás el enlace de la sala que ya usás —Meet, Zoom, la que sea— y el sistema se ocupa de que llegue a horario y al lugar correcto.',
+        mockup: 'agenda',
+        puntos: [
+            'El turno se marca como presencial o videoconsulta al crearlo.',
+            'El paciente recibe el enlace en el correo de confirmación, con un botón para entrar.',
+            'La invitación de calendario lleva el enlace en la ubicación: el celular lo abre solo.',
+            'También lo ve en su portal, y el botón aparece 30 minutos antes del turno.',
+            'Un turno reservado online se puede pasar a videoconsulta después, y el paciente lo ve al instante.'
+        ],
+        beneficios: [
+            { icono: 'pi-link', titulo: 'Tu herramienta, no la nuestra', detalle: 'Seguís usando la sala de siempre. Si mañana cambiás de plataforma, cambiás el enlace y listo.' },
+            { icono: 'pi-check-circle', titulo: 'Sin enlaces rotos', detalle: 'El sistema no acepta un enlace que no sea https, así que el error no aparece con el paciente esperando del otro lado.' },
+            { icono: 'pi-eye-slash', titulo: 'No grabamos nada', detalle: 'La videollamada pasa por tu herramienta. Ficha Salud guarda el enlace, no la consulta.' }
         ]
     },
 
