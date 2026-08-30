@@ -32,7 +32,15 @@ export default defineConfig({
             //   - dentro de la red de Docker (perfil `dev`)  -> http://web:5000
             '/api': {
                 target: process.env.VITE_PROXY_TARGET || 'http://localhost:5000',
-                changeOrigin: true,
+                // `changeOrigin: false` a proposito: con `true`, el proxy
+                // reescribe el encabezado Host al del destino (`web:5000`), y
+                // ese encabezado es **lo unico** con lo que el backend sabe a
+                // que consultorio pertenece el pedido. Con `true`,
+                // drlopez.localhost:5173 respondia 404 "No se indico ningun
+                // consultorio" y no habia forma de probar un consultorio con
+                // recarga en caliente. El portal y el sitio publico funcionaban
+                // igual, porque son justamente los que no necesitan inquilino.
+                changeOrigin: false,
                 secure: false
             }
         }
