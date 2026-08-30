@@ -10,6 +10,17 @@
 -- /docker-entrypoint-initdb.d). Sobre una base existente, los cambios de
 -- esquema van por db/migrations/.
 
+-- Este archivo esta en UTF-8, pero el cliente de MySQL que lo ejecuta NO usa
+-- utf8mb4 por defecto: el del contenedor arranca en latin1. Sin esta linea, la
+-- 'e' con tilde de "Medico" (bytes C3 A9) se lee como dos caracteres latin1 y
+-- se guarda re-codificada (C3 83 C2 A9), o sea "MÃ©dico". Paso de verdad: asi
+-- quedo el usuario admin que se siembra mas abajo, y ese texto se imprime en
+-- las recetas.
+--
+-- Las tablas ya eran utf8mb4 y la conexion de la aplicacion tambien. El unico
+-- eslabon en latin1 era el cliente que corre este archivo.
+SET NAMES utf8mb4;
+
 CREATE DATABASE IF NOT EXISTS hc_bfa
   CHARACTER SET utf8mb4
   COLLATE utf8mb4_unicode_ci;
