@@ -42,6 +42,28 @@ export function esSitioPublico() {
     return etiqueta === null || etiqueta === 'www';
 }
 
+/**
+ * La dirección de entrada de un consultorio, a partir de su slug.
+ *
+ * Desde el sitio público no se puede iniciar sesión como profesional: la sesión
+ * vive en el subdominio del consultorio, así que hay que mandar a la persona
+ * ahí. El dominio raíz se deduce del host actual —quitando el subdominio si lo
+ * hay— para que esto funcione igual en `localhost:5173` que en producción, sin
+ * una variable de entorno más que se olvide de configurar.
+ */
+export function urlConsultorio(slug, ruta = '/auth/login') {
+    const [host, puerto] = window.location.host.split(':');
+
+    // Nada de adivinar el dominio raíz recortando etiquetas: `fichasalud.com.ar`
+    // tiene tres y `drlopez.localhost` dos, así que contar no distingue el
+    // subdominio del TLD compuesto. Esta función solo se usa desde el sitio
+    // público, y ahí el host **es** la raíz. Solo hay que sacarle el `www.`.
+    const raiz = host.toLowerCase().replace(/^www\./, '');
+
+    const conPuerto = puerto ? `${raiz}:${puerto}` : raiz;
+    return `${window.location.protocol}//${slug}.${conPuerto}${ruta}`;
+}
+
 /** El slug del consultorio, o null si no se entró por el de ninguno. */
 export function slugConsultorio() {
     const etiqueta = primeraEtiqueta();

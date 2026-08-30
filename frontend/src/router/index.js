@@ -6,6 +6,14 @@ import { esPortalPaciente, esSitioPublico } from '@/utils/dominio';
 
 const router = createRouter({
     history: createWebHistory(),
+    // El sitio público enlaza a secciones con ancla (/funcionalidades#paciente)
+    // desde el menú y desde el pie. Sin esto, vue-router cambia de página y deja
+    // el scroll donde estaba: el enlace parece no hacer nada.
+    scrollBehavior(to, from, posicionGuardada) {
+        if (to.hash) return { el: to.hash, behavior: 'smooth' };
+        if (posicionGuardada) return posicionGuardada;
+        return { top: 0 };
+    },
     routes: [
         // 🔐 Autenticación
         {
@@ -36,6 +44,29 @@ const router = createRouter({
             path: '/inicio',
             name: 'Inicio',
             component: () => import('@/views/pages/publico/Inicio.vue')
+        },
+        {
+            path: '/funcionalidades',
+            name: 'Funcionalidades',
+            component: () => import('@/views/pages/publico/Funcionalidades.vue')
+        },
+        {
+            // Una funcionalidad en particular. Es una sola pantalla para las diez:
+            // el contenido sale de `publico/datos.js` y un slug desconocido
+            // ofrece la salida en vez de romper.
+            path: '/funcionalidades/:slug',
+            name: 'Funcionalidad',
+            component: () => import('@/views/pages/publico/Funcionalidad.vue')
+        },
+        {
+            path: '/precios',
+            name: 'Precios',
+            component: () => import('@/views/pages/publico/Precios.vue')
+        },
+        {
+            path: '/ingresar',
+            name: 'Ingresar',
+            component: () => import('@/views/pages/publico/Ingresar.vue')
         },
         {
             path: '/registro',
@@ -370,11 +401,28 @@ router.beforeEach(async (to) => {
         if (esSitioPublico()) return '/inicio';
     }
 
-    const publicPages = ['/auth/login', '/recuperar', '/logout', '/logout', '/cuenta/suspendida', '/inicio', '/registro', '/registro/medico', '/registro/institucion'];
+    const publicPages = [
+        '/auth/login',
+        '/recuperar',
+        '/logout',
+        '/cuenta/suspendida',
+        // El sitio público: se ve sin cuenta, que es todo su propósito. Una
+        // página de precios detrás del login no la lee nadie.
+        '/inicio',
+        '/funcionalidades',
+        '/precios',
+        '/ingresar',
+        '/registro',
+        '/registro/medico',
+        '/registro/institucion'
+    ];
     // El token va en la URL, así que la ruta no puede exigir sesión: quien
     // verifica su correo todavía no tiene cuenta.
     const isResetRoute = to.path.startsWith('/reset/') || to.path.startsWith('/verificar/');
-    const authRequired = !publicPages.includes(to.path) && !isResetRoute;
+    // Las páginas de una funcionalidad llevan slug, así que no entran en la
+    // lista de rutas exactas de arriba.
+    const esFuncionalidad = to.path.startsWith('/funcionalidades');
+    const authRequired = !publicPages.includes(to.path) && !isResetRoute && !esFuncionalidad;
     const userStore = useUserStore();
     const needsUser = authRequired || Boolean(to.meta.roles);
 
