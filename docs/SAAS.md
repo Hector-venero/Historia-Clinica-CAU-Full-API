@@ -557,6 +557,61 @@ conversa después igual.
 
 ---
 
+## Lo que se aprendió usándolo
+
+Todo lo de esta sección salió de abrir las pantallas y usarlas, no de leer
+código. Vale anotarlo porque son defectos que **ninguna prueba por API
+encuentra**: el circuito responde 200 en cada paso y la persona igual queda
+varada.
+
+### Un enlace a una pantalla que no existía
+
+El avatar del portal apuntaba a `/portal/perfil`, que no estaba ni como ruta ni
+como vista: el clic caía en el 404. El endpoint del backend, en cambio, existía
+desde el principio. Quedó un chequeo que compara los `to="…"` estáticos contra
+las rutas declaradas — es lo que lo habría encontrado sin hacer un solo clic.
+
+### El botón correcto después de reservar
+
+Terminar de sacar un turno y que el único botón diga "Ver mis documentos" es
+mandar a la persona a un lugar que no tiene nada que ver con lo que acaba de
+hacer. Parece menor y no lo es: es el momento en que se decide si el circuito se
+siente terminado.
+
+### Las dos salidas del circuito sin cuenta
+
+Estaba pensado para quien **se registra**: se guarda el horario elegido, se
+manda a registro y verificar el correo devuelve al turno. Pero quien ya tenía
+cuenta hacía clic en "Iniciá sesión" y caía en el buzón, con el turno abandonado
+en `sessionStorage` y sin ninguna señal de que algo había quedado a medias.
+
+De ahí salió también el guardarraíl del `volver`: solo rutas que empiecen con
+`/portal/`. El valor nace de un parámetro de la URL, y redirigir a lo que venga
+es un redirect abierto — un enlace que arranca en Ficha Salud y termina en otro
+sitio.
+
+### El callejón sin salida de los horarios
+
+"No hay horarios, probá con otro día" obliga a adivinar de a uno. Y es peor el
+mismo día a la tarde, donde **no hay lugar porque ya pasó** el mínimo de
+anticipación: el sistema funciona bien y parece roto. Ahora se ofrece el próximo
+día con lugar, calculado con la misma función que usa el consultorio.
+
+### El nombre del consultorio donde va una persona
+
+`alta_cliente` crea el usuario admin con el nombre del **consultorio**, porque
+es lo único que se le pide a quien se registra. Eso se filtraba a todos lados:
+"Buenas tardes, Consultorio" en el dashboard y, peor, "Consultorio Dr. Lopez"
+como nombre del profesional en el directorio público.
+
+Se resolvió **sin sumar campos al formulario de alta**, que es donde se pierde
+gente: el saludo no inventa un nombre, el dashboard avisa qué falta —y esos
+datos hacen falta igual para emitir recetas— y publicar la agenda exige
+apellido. Ese último es el punto donde el dato pasa a estar a la vista de
+desconocidos, así que es donde corresponde exigirlo.
+
+---
+
 ## El sitio público
 
 Vive en el dominio raíz, y es lo único que ve alguien que todavía no es cliente.

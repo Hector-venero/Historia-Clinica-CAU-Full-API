@@ -1,7 +1,8 @@
 # Pendientes
 
-Lo que está abierto al **30/08/2026**, con Ficha Salud (G1–G5) terminado, el
-sitio público publicado y la videoconsulta funcionando. Cada punto trae cómo se detectó y cómo
+Lo que está abierto al **31/08/2026**, con Ficha Salud (G1–G5) terminado, el
+sitio público publicado, la videoconsulta funcionando y una pasada de arreglos
+sobre lo que apareció al usar las pantallas de verdad. Cada punto trae cómo se detectó y cómo
 reproducirlo, para no tener que volver a investigarlo desde cero.
 
 Los ítems tachados quedan un tiempo con la explicación de cómo se cerraron: en
@@ -194,6 +195,14 @@ verificadas.
   el `LOCATION` del `.ics` están verificados por unidad y contra el stack, pero
   el envío real depende del SMTP, que es el mismo pendiente de más arriba.
 
+- **Quedan 26 clases claras sin variante `dark:`,** todas `text-gray-400`. Es un
+  gris medio que se lee sobre los dos fondos, así que se dejaron. Las 35 que sí
+  molestaban —tarjetas blancas en la historia clínica, el menú de usuario
+  entero— se corrigieron el 31/08/2026.
+
+  El chequeo quedó en `scripts/revisiones/` junto con el de enlaces rotos, así
+  que se puede volver a correr en vez de tener que acordarse de mirar.
+
 - **Node 20 en la máquina.** Vite 7 exige ≥ 20.19 y hay 18.19, así que
   `npm run dev` y `npm run build` locales fallan con `crypto.hash is not a
   function`. Mientras tanto se trabaja con el perfil `docker-compose.dev.yml`,
@@ -201,6 +210,22 @@ verificadas.
 - **Prueba en navegador del flujo de autenticación.** El ciclo HTTP está
   verificado; falta recarga forzada, enlace directo a una ruta protegida y
   sesión vencida.
+
+- **Usuarios de prueba en `drlopez`** (creados el 31/08/2026 **por la API**, no
+  con SQL a mano, así pasan por la misma validación y el mismo hasheo):
+
+  | Usuario | Contraseña | Rol |
+  |---|---|---|
+  | `admin` | `Prueba123!` | director |
+  | `laura` | `Prueba123!` | profesional, con matrícula y agenda cargada |
+  | `marta` | `Prueba123!` | administrativo |
+
+  Existen **solo en la base local**. Sirven para lo que no se puede verificar con
+  un único director: que el menú no ofrezca lo que el guard rechaza, y la métrica
+  de lugares libres del dashboard. Con ellos se comprobó que `marta` recibe 403
+  al emitir una receta, que era justo lo que el menú le seguía ofreciendo.
+
+  ⚠️ `clinicasur` quedó con otra contraseña de admin y devuelve 401.
 - **`ModuloRehabilitacion.vue`** (700 líneas, con su ruta) sigue solo en el fork.
   Se decidió no traerlo. Depende de `calendar-medical.css`, que sí está, así que
   portarlo es viable si alguna vez hace falta.

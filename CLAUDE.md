@@ -34,6 +34,10 @@ Corre sobre `node:20-alpine` **a propósito**: Vite 7 exige Node ≥ 20.19 y en 
 
 El destino del proxy sale de `VITE_PROXY_TARGET`: dentro de la red de Docker el backend es `http://web:5000`, no `localhost` (que sería el propio contenedor).
 
+⚠️ **El proxy va con `changeOrigin: false`, y no es un descuido.** Con `true` reescribe el encabezado `Host` al del destino (`web:5000`), y ese encabezado es **lo único** con lo que el backend sabe a qué consultorio pertenece el pedido: `drlopez.localhost:5173` respondía 404 *"No se indicó ningún consultorio"* y no había forma de probar un consultorio con recarga en caliente. El portal y el sitio público no lo notaban, porque son justo los dos planos que **no** necesitan inquilino — por eso pasó desapercibido.
+
+⚠️ **El contenedor `frontend` (el del puerto 80) sirve un build congelado en el momento en que se armó su imagen.** Para ver cambios ahí hay que reconstruirlo; mientras se desarrolla, el que está al día es `frontend-dev` en el 5173.
+
 ### Frontend (Vue 3 + Vite)
 ```bash
 cd frontend
@@ -63,6 +67,9 @@ curl -I http://localhost/api/health/public   # Health check público (expects 20
 # /api/health/secure devuelve el detalle (DB, TSA de BFA, SMTP) — solo rol director
 
 cd backend_flask && pytest   # Suite del backend (no requiere MySQL: usa dobles en memoria)
+
+node scripts/revisiones/enlaces_rotos.mjs frontend/src   # enlaces a rutas que no existen
+node scripts/revisiones/modo_oscuro.mjs   frontend/src   # colores sin variante dark:
 
 bash scripts/comparar_esquemas.sh   # Verifica que init.sql + migraciones y el
                                      # init.sql viejo + migraciones lleguen al
@@ -106,6 +113,10 @@ Vite dev server proxies `/api/` al backend; el destino sale de `VITE_PROXY_TARGE
 
 **Modo oscuro:** se activa con la clase `app-dark` en `<html>` (`layout/composables/layout.js`), y `tailwind.config.js` la declara como `darkMode: ['class', '[class*="app-dark"]']`. Todo color necesita su variante `dark:`. Usar la escala **`surface`**, que en el rango 200–800 resuelve a variables de PrimeUI (`--p-surface-*`) y sigue el tema; los valores 0/50/100/900/950 están fijados en `tailwind.config.js`. Un `bg-white` o un `text-gray-800` sueltos dejan la pantalla en claro sobre una app oscura.
 
+Eso último **pasó a escala**: el 31/08/2026 había 61 clases claras sin pareja, y las peores estaban en `HistoriaPaciente.vue` —la pantalla clínica principal, con tarjetas blancas sobre fondo oscuro— y en `UserMenu.vue`, que se ve desde cualquier pantalla. Se corrigieron pasándolas a `surface`. Es el tipo de deuda que no la ve nadie hasta que un cliente usa la app de noche, así que conviene revisarla de vez en cuando en lugar de esperar a que la reporten.
+
+⚠️ Si se automatiza esa corrección, **la pareja se busca por prefijo** (`dark:text-`), no por familia exacta (`dark:text-gray`): `text-gray-800 dark:text-white` ya está resuelto a mano, y buscar la familia no lo ve y termina dejando dos `dark:text-*` en la misma clase.
+
 Key frontend libraries: PrimeVue 4, FullCalendar 5 (turnos/grupos), vee-validate + yup (forms), Pinia (state), Axios.
 
 **Caché del frontend en producción:** `frontend/nginx.conf` sirve `index.html` con `no-cache` y `/assets/` con un año e `immutable`. No es un detalle: sin `Cache-Control`, nginx manda solo `ETag`/`Last-Modified` y el navegador aplica **caché heurística**. Aplicado a `index.html` —el único archivo con nombre fijo, y el que apunta a los assets con hash— eso hace que después de cada deploy se siga viendo la versión anterior, y no hay rebuild que lo arregle: solo Ctrl+Shift+R.
@@ -115,7 +126,10 @@ Key frontend libraries: PrimeVue 4, FullCalendar 5 (turnos/grupos), vee-validate
 - **`config.py`** — reads all config from environment variables
 - **`database.py`** — conexión cruda `mysql-connector-python` con reintentos (sin ORM), y el context manager **`db_cursor()`**, que es la forma preferida de hablar con la base: cierra conexión y cursor pase lo que pase. El patrón `conn = get_connection()` … `conn.close()` al final filtra la conexión ante cualquier excepción o salida temprana
 - **`auth.py`** — `Usuario` class (Flask-Login `UserMixin`). Las contraseñas se hashean con **scrypt** vía `werkzeug.security` (`generate_password_hash(..., method="scrypt")`), no con bcrypt: en la base se ven como `scrypt:32768:8:1$...`. `bcrypt` ni siquiera está en `requirements.txt`
-- **`routes/`** — un blueprint por dominio (todos bajo `/api/`): `auth`, `usuarios`, `pacientes`, `historias`, `turnos`, `disponibilidades`, `grupos`, `ausencias`, `blockchain`, `dashboard`, `health`, `recetas`, `comunicados`, `grupo_posteos`
+- **`routes/`** — un blueprint por dominio (todos bajo `/api/`): `auth`, `usuarios`, `pacientes`, `historias`, `turnos`, `disponibilidades`, `grupos`, `ausencias`, `blockchain`, `dashboard`, `health`, `recetas`, `comunicados`, `grupo_posteos`, `agenda_publica`
+- **`routes/dashboard_routes.py`** — el resumen del día **dice cosas distintas según el rol, a propósito**. Al profesional le muestra `lugares_libres_hoy`, calculado con `proximos_slots_libres()` —la misma función que usan Nuevo Turno y el portal, para no ofrecer lugar donde la pantalla de turnos no lo ofrece—. A quien dirige, `profesionales_hoy`: contar franjas daba 3 con un solo médico que atiende en tres bloques, y calcular lugares libres de todo el centro serían tres consultas por profesional en el endpoint más golpeado de la app.
+
+  ⚠️ Antes mostraba `len(disponibilidad_hoy)` bajo el rótulo "Disponibles hoy", o sea **franjas configuradas**, que es una fila de una tabla de configuración y no un lugar libre. Medido en un caso real: 2 franjas contra 9 lugares libres.
 - **`utils/permisos.py`** — `@requiere_rol('director', ...)` y `@requiere_modulo('recetas')`, que valida el plan del consultorio. Los dos en el servidor: ocultar una opción del menú no es un permiso
 - **`utils/adjuntos.py`** — arma las rutas de los archivos de evoluciones, con un segmento por consultorio. Nunca construir esas rutas a mano: el id de evolución es autoincremental **por base**, así que dos consultorios tendrían ambos la evolución 1
 - **`utils/validacion.py`** — shared password and email validation (8–64 chars, upper+lower+digit+symbol)
@@ -134,7 +148,7 @@ Key frontend libraries: PrimeVue 4, FullCalendar 5 (turnos/grupos), vee-validate
 
 Hay una sola fixture, `client`; para lo que necesite contexto de aplicación se importa `from app import app as flask_app` y se usa `with flask_app.app_context():`.
 
-Al 30/08/2026 son **378 tests** y corren en menos de un segundo.
+Al 31/08/2026 son **391 tests** y corren en menos de un segundo.
 
 ## Ficha Salud — la plataforma (rama `saas/multi-tenant`)
 
@@ -247,8 +261,41 @@ respeta el dominio de la cookie, así que una prueba entre subdominios distintos
 pasa sin haber enviado nada. La primera versión de ese test dio "todo 401" y era
 mentira.
 
+### El portal por dentro
+
+- **Buscar profesional y reservar se ven sin cuenta, pero van dentro de
+  `PortalLayout`.** Estaban fuera y quedaban como páginas huérfanas: sin logo,
+  sin volver y sin forma de entrar. El layout tolera que no haya sesión — con
+  cuenta muestra avatar y salir, sin cuenta un botón *Entrar*—, y lo que las
+  mantiene públicas es no llevar `meta.paciente`, no estar afuera.
+- **El `volver` solo acepta rutas que empiecen con `/portal/`.** Nace de un
+  parámetro de la URL (`/portal/registro?volver=…`), y redirigir a lo que venga
+  es un **redirect abierto**: un enlace que arranca en Ficha Salud y termina en
+  otro sitio. Se valida en `PortalLogin.vue` y en `PortalVerificar.vue`.
+- **El circuito "elijo horario sin cuenta" tiene dos salidas, no una.** La
+  selección se guarda en `sessionStorage` y se retoma después de verificar el
+  correo **o** después de iniciar sesión: quien ya tenía cuenta hacía clic en
+  "Iniciá sesión" y caía en el buzón con el turno abandonado.
+- **Un día sin horarios ofrece el próximo con lugar**
+  (`reservas.proximo_dia_con_lugar()`), mirando 14 días. Recorrer los 60 de
+  anticipación serían 60 consultas para responder una sola pregunta. Importa
+  sobre todo el mismo día a la tarde, donde no hay lugar **porque ya pasó** el
+  mínimo de anticipación y nada en pantalla lo explicaba.
+- El perfil del paciente (`/portal/perfil`) deja cambiar contacto y cobertura,
+  **nunca el documento**: es la llave con la que dos consultorios le envían a la
+  misma persona.
+
 ### Turnos online
 
+- **Publicar exige `apellido`.** El alta crea el usuario admin con el nombre del
+  **consultorio**, que es lo único que se le pide a quien se registra; publicado
+  así, el paciente ve "Consultorio Dr. Lopez" donde debería ver a su
+  profesional. `CAMPOS_REQUERIDOS` en `agenda_publica_routes.py` lo pide junto
+  con la especialidad y la dirección. Se exige **acá y no en el alta** a
+  propósito: este es el momento exacto en que ese dato pasa a estar a la vista de
+  desconocidos, y cada campo obligatorio de más en el registro es gente que
+  abandona a mitad. Lo que empuja a completarlo antes es el aviso del dashboard,
+  que aparece cuando faltan `apellido` o `matricula_numero`.
 - **`agenda_publica` viene apagada.** Publicar la agenda de alguien sin que lo
   pida sería repartir su tiempo. Se enciende desde *Turnos → Turnos online*, y al
   guardarse se **rehace entero** el directorio de ese consultorio: con un UPDATE
@@ -352,6 +399,22 @@ contrató el consultorio.
 `SESSION_COOKIE_DOMAIN`.
 
 Routes with only `meta: { requiresAuth: true }` are accessible to all authenticated roles.
+
+**El menú tiene que coincidir con lo que la ruta permite.** Ocultar una entrada
+no es un permiso —eso lo deciden `@requiere_rol` y `@requiere_modulo` en el
+servidor—, pero al revés sí es un problema: *ofrecer* algo que después va a ser
+rechazado hace que alguien complete una pantalla entera para comerse un 403.
+
+Ya pasó dos veces con recetas: primero la ruta no declaraba roles, y cuando se
+arregló ahí quedó el menú mostrando "Generar Receta" con solo mirar el módulo
+del consultorio, así que un `administrativo` seguía viéndola. Son **dos
+condiciones distintas**: el módulo dice qué contrató el consultorio y el rol,
+quién puede usarlo.
+
+En `AppMenu.vue` el rol se normaliza **una sola vez** (`toLowerCase().trim()`) y
+se compara siempre contra esa variable. Antes una línea normalizaba y otras tres
+comparaban el valor crudo: un rol con otra capitalización habría escondido medio
+menú sin que nadie entendiera por qué.
 
 ## Key Configuration
 
