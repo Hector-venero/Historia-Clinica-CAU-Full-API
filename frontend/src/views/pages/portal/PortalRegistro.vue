@@ -123,7 +123,10 @@ async function enviar() {
 
                     <p class="text-center text-sm text-surface-500 dark:text-surface-400 m-0">
                         ¿Ya tenés cuenta?
-                        <router-link to="/portal/login" class="text-primary-600 dark:text-primary-400 font-semibold hover:underline">Iniciá sesión</router-link>
+                        <!-- El `volver` viaja con el enlace: si eligió un horario y
+                             resulta que ya tenía cuenta, entrar tiene que devolverlo
+                             a ese turno y no al buzón. -->
+                        <router-link :to="{ path: '/portal/login', query: route.query.volver ? { volver: route.query.volver } : {} }" class="text-primary-600 dark:text-primary-400 font-semibold hover:underline"> Iniciá sesión </router-link>
                     </p>
                 </form>
             </div>

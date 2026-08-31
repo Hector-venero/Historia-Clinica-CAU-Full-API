@@ -26,7 +26,12 @@ onMounted(async () => {
         // en vez de dejarlo en el buzón sin entender qué pasó con su turno.
         const volver = sessionStorage.getItem('ficha-salud:volver');
         sessionStorage.removeItem('ficha-salud:volver');
-        setTimeout(() => router.replace(volver || '/portal'), 1500);
+
+        // Solo rutas internas del portal. El valor nació de un `?volver=` en la
+        // URL, así que redirigir a lo que venga es un redirect abierto: un
+        // enlace que empieza en Ficha Salud y termina en otro sitio.
+        const destino = (volver || '').startsWith('/portal/') ? volver : '/portal';
+        setTimeout(() => router.replace(destino), 1500);
     } catch (e) {
         estado.value = 'error';
         error.value = e?.response?.data?.error || 'No pudimos activar tu cuenta.';

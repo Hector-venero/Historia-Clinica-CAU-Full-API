@@ -1,11 +1,29 @@
 <script setup>
 import { computed, ref } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { usePacienteStore } from '@/stores/paciente';
 import logo from '@/assets/logo-ficha-salud.svg';
 
+const route = useRoute();
 const router = useRouter();
 const paciente = usePacienteStore();
+
+/**
+ * A dónde volver después de entrar.
+ *
+ * Quien eligió un horario sin cuenta va a la pantalla de registro, pero si ya
+ * tenía cuenta hace clic en "Iniciá sesión" — y hasta ahora eso lo dejaba en el
+ * buzón, con el turno elegido abandonado en sessionStorage y sin ninguna señal
+ * de que había quedado algo a medias.
+ *
+ * Solo se aceptan rutas internas del portal: `volver` viene de la URL, y
+ * redirigir a cualquier cosa que llegue por ahí es un redirect abierto —
+ * alguien manda un enlace de Ficha Salud que termina en otro sitio.
+ */
+const destino = computed(() => {
+    const pedido = String(route.query.volver || sessionStorage.getItem('ficha-salud:volver') || '');
+    return pedido.startsWith('/portal/') ? pedido : '/portal';
+});
 
 const email = ref('');
 const password = ref('');
@@ -19,7 +37,8 @@ async function entrar() {
     entrando.value = true;
     try {
         await paciente.login(email.value.trim(), password.value);
-        router.replace('/portal');
+        sessionStorage.removeItem('ficha-salud:volver');
+        router.replace(destino.value);
     } catch (e) {
         // El backend devuelve el mismo mensaje para "no existe" y "clave
         // incorrecta": distinguirlos deja averiguar qué correos están

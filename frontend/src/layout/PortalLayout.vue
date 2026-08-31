@@ -102,9 +102,11 @@ async function salir() {
                         </button>
                     </template>
 
+                    <!-- Se lleva de dónde salió: quien está eligiendo un horario y
+                         entra tiene que volver a ese turno, no al buzón. -->
                     <router-link
                         v-else
-                        to="/portal/login"
+                        :to="{ path: '/portal/login', query: { volver: route.fullPath } }"
                         class="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-semibold text-surface-700 dark:text-surface-200 ring-1 ring-surface-300 dark:ring-surface-600 hover:bg-surface-100 dark:hover:bg-surface-800 transition no-underline"
                     >
                         <i class="pi pi-sign-in"></i>
