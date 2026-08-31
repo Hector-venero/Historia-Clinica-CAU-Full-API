@@ -232,3 +232,84 @@ class _PacienteFalso:
     apellido = "Perez"
     email = "ana@ejemplo.com"
     telefono = None
+
+
+# ------------------------------------------ el proximo dia con lugar
+
+
+def _sin_horarios_salvo(monkeypatch, fecha_con_lugar, horarios=("09:00", "09:45")):
+    """horarios_libres() falso: solo un dia tiene lugar."""
+    llamadas = []
+
+    def falso(cliente_id, usuario_id, fecha, cantidad=20):
+        llamadas.append(fecha)
+        if fecha == fecha_con_lugar:
+            return [f"{fecha}T{h}:00-03:00" for h in horarios]
+        return []
+
+    monkeypatch.setattr(reservas, "horarios_libres", falso)
+    return llamadas
+
+
+def test_devuelve_el_primer_dia_con_lugar(monkeypatch):
+    """El portal dejaba a la persona adivinando dia por dia."""
+    from datetime import date, timedelta
+
+    objetivo = (date.today() + timedelta(days=3)).strftime("%Y-%m-%d")
+    _sin_horarios_salvo(monkeypatch, objetivo)
+
+    encontrado = reservas.proximo_dia_con_lugar(1, 1)
+
+    assert encontrado["fecha"] == objetivo
+    assert len(encontrado["horarios"]) == 2
+
+
+def test_corta_en_el_primero_y_no_sigue_consultando(monkeypatch):
+    """Cada dia es una consulta a la base: seguir despues de encontrarlo seria
+    trabajo tirado."""
+    from datetime import date, timedelta
+
+    objetivo = (date.today() + timedelta(days=1)).strftime("%Y-%m-%d")
+    llamadas = _sin_horarios_salvo(monkeypatch, objetivo)
+
+    reservas.proximo_dia_con_lugar(1, 1)
+
+    assert llamadas[-1] == objetivo
+
+
+def test_no_mira_mas_alla_de_la_ventana(monkeypatch):
+    """Recorrer los 60 dias de anticipacion serian 60 consultas para responder
+    una sola pregunta."""
+    llamadas = _sin_horarios_salvo(monkeypatch, "1999-01-01")
+
+    assert reservas.proximo_dia_con_lugar(1, 1) is None
+    assert len(llamadas) == reservas.DIAS_QUE_SE_MIRAN_ADELANTE
+
+
+def test_arranca_desde_el_dia_pedido(monkeypatch):
+    from datetime import date, timedelta
+
+    desde = (date.today() + timedelta(days=5)).strftime("%Y-%m-%d")
+    llamadas = _sin_horarios_salvo(monkeypatch, "1999-01-01")
+
+    reservas.proximo_dia_con_lugar(1, 1, desde=desde)
+
+    assert llamadas[0] == desde
+
+
+def test_un_dia_pasado_no_hace_mirar_hacia_atras(monkeypatch):
+    """Pedir el 2020 no puede ofrecer horarios que ya pasaron."""
+    from datetime import date
+
+    llamadas = _sin_horarios_salvo(monkeypatch, "1999-01-01")
+
+    reservas.proximo_dia_con_lugar(1, 1, desde="2020-01-01")
+
+    assert llamadas[0] == date.today().strftime("%Y-%m-%d")
+
+
+def test_una_fecha_invalida_se_rechaza(monkeypatch):
+    _sin_horarios_salvo(monkeypatch, "1999-01-01")
+
+    with pytest.raises(reservas.ErrorReserva):
+        reservas.proximo_dia_con_lugar(1, 1, desde="el jueves")

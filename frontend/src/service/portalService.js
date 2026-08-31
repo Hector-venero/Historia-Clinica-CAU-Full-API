@@ -72,6 +72,13 @@ export default {
         });
     },
 
+    /** El primer día con lugar, para no dejar a la persona probando día por día. */
+    proximoDia(clienteId, usuarioId, desde) {
+        return api.get(`/portal/profesionales/${clienteId}/${usuarioId}/proximo-dia`, {
+            params: { desde }
+        });
+    },
+
     reservar(datos) {
         return api.post('/portal/reservar', datos);
     },

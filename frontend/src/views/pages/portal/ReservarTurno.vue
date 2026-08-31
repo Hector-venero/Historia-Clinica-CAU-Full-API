@@ -43,14 +43,40 @@ function fechaLarga(valor) {
     return new Date(`${valor}T12:00:00`).toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' });
 }
 
+// El día vacío no puede terminar en "probá con otro": se busca el próximo con
+// lugar y se ofrece de un clic. Importa sobre todo el mismo día a la tarde,
+// cuando no hay horarios porque ya pasó el mínimo de anticipación y nada en
+// pantalla lo explica.
+const proximoConLugar = ref(null);
+const buscandoProximo = ref(false);
+
+async function buscarProximoDia() {
+    proximoConLugar.value = null;
+    buscandoProximo.value = true;
+    try {
+        const { data } = await portalService.proximoDia(clienteId, usuarioId, fecha.value);
+        // El backend responde 200 con `dia: null` cuando no hay nada en las
+        // próximas dos semanas: es una respuesta, no un error.
+        proximoConLugar.value = data.dia || null;
+    } catch {
+        // Que falle esta ayuda no puede tapar la pantalla: el mensaje de "no hay
+        // horarios" ya está, y la persona puede seguir eligiendo días a mano.
+        proximoConLugar.value = null;
+    } finally {
+        buscandoProximo.value = false;
+    }
+}
+
 async function cargarHorarios() {
     if (!fecha.value) return;
     cargandoHorarios.value = true;
     elegido.value = '';
     error.value = '';
+    proximoConLugar.value = null;
     try {
         const { data } = await portalService.horarios(clienteId, usuarioId, fecha.value);
         horarios.value = data.horarios || [];
+        if (!horarios.value.length) await buscarProximoDia();
     } catch (e) {
         horarios.value = [];
         error.value = e?.response?.data?.error || 'No pudimos cargar los horarios.';
@@ -143,7 +169,21 @@ onMounted(async () => {
                 </div>
             </div>
 
-            <router-link to="/portal" class="inline-flex items-center gap-2 px-6 py-3 rounded-xl font-semibold text-white bg-primary-600 hover:bg-primary-700 transition"> Ver mis documentos </router-link>
+            <p class="text-sm text-surface-500 dark:text-surface-400 mb-6">
+                <i class="pi pi-envelope mr-1"></i>
+                Te mandamos un correo con los datos del turno.
+            </p>
+
+            <!-- Acaba de sacar un turno: lo que quiere ver es el turno. El botón
+                 llevaba al buzón de documentos, que no tiene nada que ver con lo
+                 que acaba de hacer. -->
+            <div class="flex flex-col sm:flex-row items-center justify-center gap-3">
+                <router-link to="/portal/turnos" class="inline-flex items-center gap-2 px-6 py-3 rounded-xl font-semibold text-white bg-primary-600 hover:bg-primary-700 transition no-underline">
+                    <i class="pi pi-calendar"></i>
+                    Ver mis turnos
+                </router-link>
+                <router-link to="/portal" class="px-6 py-3 rounded-xl font-semibold text-surface-600 dark:text-surface-300 hover:bg-surface-100 dark:hover:bg-surface-800 transition no-underline"> Ir a mis documentos </router-link>
+            </div>
         </div>
 
         <template v-else>
@@ -171,7 +211,18 @@ onMounted(async () => {
 
                 <div v-else-if="fecha && !horarios.length" class="text-center py-8">
                     <p class="text-surface-600 dark:text-surface-300 m-0 mb-1">No hay horarios para el {{ fechaLarga(fecha) }}.</p>
-                    <p class="text-sm text-surface-500 dark:text-surface-400 m-0">Probá con otro día.</p>
+
+                    <p v-if="buscandoProximo" class="text-sm text-surface-500 dark:text-surface-400 m-0"><i class="pi pi-spin pi-spinner mr-1"></i> Buscando el próximo día con lugar…</p>
+
+                    <template v-else-if="proximoConLugar">
+                        <p class="text-sm text-surface-500 dark:text-surface-400 m-0 mb-3">El próximo con lugar es el {{ fechaLarga(proximoConLugar.fecha) }}.</p>
+                        <button type="button" class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-white bg-primary-600 hover:bg-primary-700 transition" @click="fecha = proximoConLugar.fecha">
+                            <i class="pi pi-arrow-right"></i>
+                            Ver esos {{ proximoConLugar.horarios.length }} horarios
+                        </button>
+                    </template>
+
+                    <p v-else class="text-sm text-surface-500 dark:text-surface-400 m-0">No encontramos horarios en las próximas dos semanas. Probá más adelante o comunicate con el consultorio.</p>
                 </div>
 
                 <div v-else-if="horarios.length" class="space-y-2">

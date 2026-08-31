@@ -24,10 +24,42 @@ const esAdmin = computed(() => ['director', 'administrativo'].includes(user.rol?
 
 const saludo = computed(() => {
     const hora = new Date().getHours();
-    if (hora < 12) return 'Buenos dias';
+    if (hora < 12) return 'Buenos días';
     if (hora < 19) return 'Buenas tardes';
     return 'Buenas noches';
 });
+
+/**
+ * El perfil profesional está sin completar.
+ *
+ * El alta crea el usuario admin con el **nombre del consultorio**, que es lo
+ * único que se le pide a quien se registra. Mientras siga así, `apellido` está
+ * vacío: es la marca de que nadie completó quién es la persona.
+ *
+ * `matricula_numero` va en la misma comprobación porque hace falta para emitir
+ * recetas. Avisarlo acá adelanta un bloqueo que si no aparece recién al intentar
+ * emitir la primera, con el paciente delante.
+ */
+const perfilIncompleto = computed(() => {
+    if (!user.id) return false;
+    return !user.apellido || !user.matricula_numero;
+});
+
+const faltantesPerfil = computed(() => {
+    const faltan = [];
+    if (!user.apellido) faltan.push('tu nombre y apellido');
+    if (!user.matricula_numero) faltan.push('tu matrícula');
+    return faltan.join(' y ');
+});
+
+/**
+ * Saludar con un nombre solo si es el de una persona.
+ *
+ * Con el perfil sin completar, `user.nombre` es el nombre del consultorio, y
+ * `split(' ')[0]` daba cosas como "Buenas tardes, Consultorio". Preferible
+ * saludar sin nombre que inventar uno.
+ */
+const nombreParaSaludar = computed(() => (perfilIncompleto.value ? '' : user.nombre?.split(' ')[0] || ''));
 
 const resumenItems = computed(() => {
     const resumen = dashboard.value?.resumen || {};
@@ -112,15 +144,30 @@ const cerrarAlertaHoy = () => {
     <div class="p-6 md:p-8 w-full transition-colors">
         <div class="mb-8">
             <h1 class="text-3xl font-bold text-gray-800 dark:text-white">
-                <span v-if="user.nombre">{{ saludo }}, {{ user.nombre.split(' ')[0] }}</span>
-                <span v-else>Inicio</span>
+                <span v-if="nombreParaSaludar">{{ saludo }}, {{ nombreParaSaludar }}</span>
+                <span v-else>{{ saludo }}</span>
             </h1>
             <p class="text-gray-500 dark:text-gray-400 text-base mt-1">Agenda y novedades relevantes para hoy.</p>
         </div>
 
+        <!-- Perfil sin completar. No es una molestia inventada: sin matrícula no
+             se puede emitir una receta, y sin nombre y apellido el paciente ve
+             el nombre del consultorio donde debería ir el de una persona. -->
+        <div v-if="perfilIncompleto" class="mb-8 flex flex-col sm:flex-row sm:items-center gap-4 p-4 rounded-xl border border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/30">
+            <i class="pi pi-id-card text-xl text-amber-600 dark:text-amber-400 shrink-0"></i>
+            <div class="flex-1 min-w-0">
+                <p class="font-semibold text-amber-900 dark:text-amber-200 m-0">Completá tu perfil profesional</p>
+                <p class="text-sm text-amber-800 dark:text-amber-300/90 mt-1 mb-0">Falta {{ faltantesPerfil }}. Hace falta para emitir recetas y para que tus pacientes te vean por tu nombre.</p>
+            </div>
+            <router-link to="/mi-perfil" class="shrink-0 inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white bg-amber-600 hover:bg-amber-700 transition no-underline">
+                Completar ahora
+                <i class="pi pi-arrow-right text-xs"></i>
+            </router-link>
+        </div>
+
         <div v-if="loading" class="flex flex-col items-center justify-center py-20 text-gray-400">
             <i class="pi pi-spin pi-spinner text-4xl mb-3"></i>
-            <p>Cargando informacion...</p>
+            <p>Cargando información…</p>
         </div>
 
         <div v-else-if="error" class="bg-red-50 border border-red-200 text-red-700 p-4 rounded-lg flex items-center gap-3">
@@ -183,7 +230,7 @@ const cerrarAlertaHoy = () => {
                 <div class="bg-surface-0 dark:bg-surface-900 border border-surface-200 dark:border-surface-700 shadow-sm rounded-lg p-6 h-full">
                     <h2 class="text-xl font-bold text-gray-800 dark:text-white mb-4 flex items-center gap-2">
                         <i class="pi pi-clock text-blue-500"></i>
-                        Proximo evento de agenda
+                        Próximo evento de agenda
                     </h2>
 
                     <div v-if="proximoEvento" class="p-5 bg-surface-50 dark:bg-surface-800 rounded-lg border border-surface-200 dark:border-surface-700">

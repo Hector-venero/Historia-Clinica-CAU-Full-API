@@ -26,6 +26,17 @@ ROLES_CON_AGENDA = ("profesional", "director")
 # Lo que el directorio necesita para que la ficha sirva de algo. Sin esto el
 # paciente ve un nombre suelto y no sabe ni de que atiende ni donde.
 CAMPOS_REQUERIDOS = {
+    # `apellido` es el que marca que alguien completo quien es la persona.
+    #
+    # El alta crea el usuario admin con el **nombre del consultorio**, porque es
+    # lo unico que se le pide a quien se registra. Si se publica asi, el paciente
+    # ve "Consultorio Dr. Lopez" donde tendria que ver a su profesional, y abajo
+    # el nombre del consultorio otra vez.
+    #
+    # Se exige aca y no en el alta a proposito: este es el momento exacto en que
+    # ese dato pasa a estar a la vista de desconocidos. Pedirlo al registrarse
+    # seria un campo obligatorio mas en el formulario donde se pierde gente.
+    "apellido": "tu apellido",
     "especialidad": "la especialidad",
     "lugar_atencion_direccion": "la direccion donde atendes",
 }
@@ -35,7 +46,7 @@ def _estado_actual():
     with db_cursor() as (_conn, cur):
         cur.execute(
             """
-            SELECT agenda_publica, presentacion_publica, especialidad,
+            SELECT agenda_publica, presentacion_publica, especialidad, apellido,
                    duracion_turno, lugar_atencion_nombre, lugar_atencion_direccion
             FROM usuarios WHERE id = %s
             """,

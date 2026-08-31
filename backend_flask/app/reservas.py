@@ -234,6 +234,49 @@ def horarios_libres(cliente_id, usuario_id, fecha, cantidad=20):
     return del_dia
 
 
+# Cuantos dias se miran hacia adelante buscando el primero con lugar.
+#
+# No son los 60 de DIAS_MAXIMOS_ANTICIPACION: cada dia consultado es una consulta
+# a la base, y recorrerlos todos seria hacer sesenta para responder una sola
+# pregunta. Con dos semanas se cubre a cualquier profesional que atienda con
+# alguna regularidad; el que no aparezca en catorce dias es un caso donde
+# conviene que la persona llame.
+DIAS_QUE_SE_MIRAN_ADELANTE = 14
+
+
+def proximo_dia_con_lugar(cliente_id, usuario_id, desde=None):
+    """El primer dia, a partir de `desde`, en el que el profesional tiene lugar.
+
+    Existe porque el portal dejaba a la persona en un callejon sin salida: si el
+    dia elegido no tenia horarios, el mensaje era "proba con otro dia" y habia
+    que ir adivinando de a uno. Es peor de lo que parece el mismo dia a la
+    tarde, donde no hay horarios **porque ya paso** el minimo de anticipacion y
+    nada en pantalla lo explica.
+
+    Reutiliza `horarios_libres()`, que a su vez usa la misma funcion que la
+    pantalla del consultorio: dos implementaciones del calculo terminarian
+    ofreciendo horarios distintos para la misma agenda.
+
+    Devuelve `{"fecha": "YYYY-MM-DD", "horarios": [...]}` o None si no encontro
+    ninguno en la ventana que se mira.
+    """
+    inicio = datetime.now().date()
+    if desde:
+        try:
+            pedida = datetime.strptime(desde, "%Y-%m-%d").date()
+            inicio = max(inicio, pedida)
+        except (TypeError, ValueError):
+            raise ErrorReserva("Fecha invalida.")
+
+    for corrimiento in range(DIAS_QUE_SE_MIRAN_ADELANTE):
+        dia = inicio + timedelta(days=corrimiento)
+        libres = horarios_libres(cliente_id, usuario_id, dia.strftime("%Y-%m-%d"))
+        if libres:
+            return {"fecha": dia.strftime("%Y-%m-%d"), "horarios": libres}
+
+    return None
+
+
 # ---------------------------------------------------------------- reserva
 
 

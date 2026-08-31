@@ -19,17 +19,19 @@ onMounted(() => marca.cargar());
 </template>
 
 <style scoped>
+/* Fluye al final del contenido, no `position: fixed`.
+ *
+ * Fijo al fondo con `z-index: 100` se superponía a las tarjetas: el contenedor
+ * deja 2rem de margen inferior y el pie mide 40px, así que la última franja de
+ * cada pantalla quedaba debajo. Mantener esas dos medidas sincronizadas desde
+ * archivos distintos es justamente lo que ya falló. */
 .app-footer {
-    position: fixed;
-    bottom: 0;
-    left: 0;
     width: 100%;
-    height: 40px;
+    min-height: 40px;
     display: flex;
     justify-content: center;
     align-items: center;
     font-size: 13px;
-    z-index: 100;
     border-top: 1px solid var(--footer-border);
     background-color: var(--footer-bg);
     color: var(--footer-text);

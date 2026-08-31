@@ -312,19 +312,6 @@ const router = createRouter({
             name: 'PortalVerificar',
             component: () => import('@/views/pages/portal/PortalVerificar.vue')
         },
-        // Buscar profesional y elegir horario se ven SIN sesión: alguien tiene
-        // que poder ver con quién puede atenderse, y si hay lugar, antes de
-        // decidir si se registra. Lo único que exige cuenta es confirmar.
-        {
-            path: '/portal/buscar',
-            name: 'PortalBuscar',
-            component: () => import('@/views/pages/portal/BuscarProfesional.vue')
-        },
-        {
-            path: '/portal/reservar/:clienteId/:usuarioId',
-            name: 'PortalReservar',
-            component: () => import('@/views/pages/portal/ReservarTurno.vue')
-        },
         {
             path: '/portal',
             component: () => import('@/layout/PortalLayout.vue'),
@@ -340,6 +327,31 @@ const router = createRouter({
                     name: 'PortalMisTurnos',
                     component: () => import('@/views/pages/portal/MisTurnos.vue'),
                     meta: { paciente: true }
+                },
+                {
+                    path: 'perfil',
+                    name: 'PortalPerfil',
+                    component: () => import('@/views/pages/portal/MiPerfilPaciente.vue'),
+                    meta: { paciente: true }
+                },
+                // Buscar profesional y elegir horario se ven SIN sesión: alguien
+                // tiene que poder ver con quién puede atenderse, y si hay lugar,
+                // antes de decidir si se registra. Lo único que exige cuenta es
+                // confirmar, y eso lo resuelve la propia pantalla.
+                //
+                // Van adentro del layout igual —sin `meta.paciente`, que es lo
+                // que las mantiene públicas—: afuera quedaban como páginas
+                // huérfanas, sin logo, sin volver y sin forma de entrar. La barra
+                // sabe funcionar sin sesión.
+                {
+                    path: 'buscar',
+                    name: 'PortalBuscar',
+                    component: () => import('@/views/pages/portal/BuscarProfesional.vue')
+                },
+                {
+                    path: 'reservar/:clienteId/:usuarioId',
+                    name: 'PortalReservar',
+                    component: () => import('@/views/pages/portal/ReservarTurno.vue')
                 }
             ]
         },

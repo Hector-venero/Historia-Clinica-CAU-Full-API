@@ -124,7 +124,15 @@ onMounted(cargar);
                 <div class="flex flex-col gap-2">
                     <label class="text-sm font-semibold text-surface-700 dark:text-surface-200"> Presentación <span class="font-normal text-surface-400">(opcional)</span> </label>
                     <textarea v-model="presentacion" rows="3" maxlength="300" placeholder="Contale a tus pacientes qué atendés y cómo trabajás." class="campo resize-none"></textarea>
-                    <small class="text-surface-500 dark:text-surface-400">{{ presentacion.length }}/300</small>
+                    <div class="flex flex-wrap justify-between gap-2">
+                        <!-- La duración se muestra sola debajo de la tarjeta. Escribirla
+                             acá a mano es la forma de que la ficha se contradiga: pasó,
+                             y el paciente leía "turnos de 30 minutos" arriba y "turnos
+                             de 45 minutos" abajo. No se valida —es texto libre— pero se
+                             avisa antes de escribirlo. -->
+                        <small class="text-surface-500 dark:text-surface-400">No hace falta que escribas la duración del turno: se muestra sola.</small>
+                        <small class="text-surface-500 dark:text-surface-400 shrink-0">{{ presentacion.length }}/300</small>
+                    </div>
                 </div>
 
                 <!-- Vista previa. Que el profesional lea cómo va a aparecer antes

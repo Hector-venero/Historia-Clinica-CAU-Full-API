@@ -254,6 +254,27 @@ def horarios(cliente_id, usuario_id):
     return jsonify({"horarios": libres})
 
 
+@bp_portal.get("/profesionales/<int:cliente_id>/<int:usuario_id>/proximo-dia")
+def proximo_dia(cliente_id, usuario_id):
+    """El primer dia con lugar, para no dejar a la persona adivinando.
+
+    Sin sesion, como los horarios: es parte de decidir si vale la pena
+    registrarse.
+    """
+    from app import reservas
+
+    try:
+        encontrado = reservas.proximo_dia_con_lugar(
+            cliente_id, usuario_id, request.args.get("desde")
+        )
+    except reservas.ErrorReserva as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    # 200 con `dia: null` y no 404: que no haya lugar en las proximas dos
+    # semanas es una respuesta valida a la pregunta, no un error del pedido.
+    return jsonify({"dia": encontrado})
+
+
 @bp_portal.post("/reservar")
 @login_required
 @requiere_paciente
