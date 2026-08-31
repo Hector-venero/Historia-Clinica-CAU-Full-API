@@ -10,6 +10,13 @@ bp_dashboard = Blueprint("dashboard", __name__)
 ROLES_ADMIN = ("director", "administrativo")
 ROLES_PERSONALES = ("profesional", "area")
 
+# Hasta cuantos lugares libres se cuentan para el resumen del dia.
+#
+# proximos_slots_libres() recibe cuantos quiere, y pedir "todos" no existe. Un
+# dia de 8 horas con turnos de 15 minutos son 32 lugares, asi que 100 cubre
+# cualquier agenda real y evita que el numero quede recortado sin que se note.
+TOPE_LUGARES_LIBRES = 100
+
 DIAS_ES = {
     0: "Lunes",
     1: "Martes",
@@ -247,9 +254,25 @@ def get_dashboard():
             """, (user_id, hoy))
             data["ausencias"] = _enriquecer_ausencias(cursor.fetchall())
 
+            # Lugares que todavia quedan libres HOY, no franjas configuradas.
+            #
+            # El resumen mostraba `len(disponibilidad_hoy)`, o sea cuantas franjas
+            # de atencion tenia cargadas para el dia. Bajo el rotulo "Disponibles
+            # hoy" eso se lee como "me quedan N lugares", y no es lo mismo: un
+            # profesional con una sola franja de 09:00 a 17:00 veia un 1, con la
+            # agenda entera vacia.
+            #
+            # Se calcula con proximos_slots_libres(), la misma funcion que usan
+            # Nuevo Turno y el portal: si fuera un conteo aparte, el dashboard
+            # diria que hay lugar donde la pantalla de turnos no lo ofrece.
+            from app.routes.turnos_routes import proximos_slots_libres
+
+            libres_hoy = proximos_slots_libres(user_id, datetime.now(), cantidad=TOPE_LUGARES_LIBRES)
+
             data["resumen"] = {
                 "turnos_hoy": len(data["turnos"]),
-                "disponibilidad_hoy": len(data["disponibilidad_hoy"]),
+                "lugares_libres_hoy": len(libres_hoy),
+                "franjas_hoy": len(data["disponibilidad_hoy"]),
             }
 
         elif rol in ROLES_ADMIN:
@@ -366,9 +389,20 @@ def get_dashboard():
             """, (hoy, dia_hoy))
             data["alertas"]["agenda_vacia"] = _normalizar_rows(cursor.fetchall())
 
+            # Para quien dirige, la pregunta del dia no es cuantas franjas hay
+            # cargadas —el numero de filas de una tabla de configuracion— sino
+            # **cuanta gente esta atendiendo**. Contar los profesionales
+            # distintos responde eso; contar franjas daba 3 con un solo medico
+            # que atiende en tres bloques.
+            #
+            # No se calculan lugares libres como en la vista del profesional: ahi
+            # es una consulta para una sola agenda, y aca serian tres por cada
+            # profesional del centro en el endpoint mas golpeado de la app.
+            profesionales_hoy = {d.get("usuario_id") for d in data["disponibilidad_hoy"]}
+
             data["resumen"] = {
                 "turnos_hoy": len(data["turnos"]),
-                "disponibilidad_hoy": len(data["disponibilidad_hoy"]),
+                "profesionales_hoy": len(profesionales_hoy),
                 "turnos_superpuestos": len(data["alertas"]["turnos_superpuestos"]),
             }
 

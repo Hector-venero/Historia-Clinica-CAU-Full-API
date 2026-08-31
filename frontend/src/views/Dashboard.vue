@@ -61,16 +61,43 @@ const faltantesPerfil = computed(() => {
  */
 const nombreParaSaludar = computed(() => (perfilIncompleto.value ? '' : user.nombre?.split(' ')[0] || ''));
 
+/**
+ * Los números del día, que ahora dicen algo distinto según quién mira.
+ *
+ * "Disponibles hoy" contaba las **franjas de atención configuradas**, o sea
+ * filas de una tabla de configuración. Bajo ese rótulo se lee "me quedan N
+ * lugares", y no es lo mismo: con una sola franja de 09:00 a 17:00 y la agenda
+ * entera vacía, el número era 1.
+ *
+ * Al profesional le interesa cuántos lugares le quedan libres hoy; a quien
+ * dirige, cuánta gente está atendiendo. Son preguntas distintas y ahora son dos
+ * indicadores distintos.
+ */
 const resumenItems = computed(() => {
     const resumen = dashboard.value?.resumen || {};
-    const base = [
-        { label: 'Turnos hoy', value: resumen.turnos_hoy || 0, icon: 'pi pi-calendar', severity: 'info' },
-        { label: 'Disponibles hoy', value: resumen.disponibilidad_hoy || 0, icon: 'pi pi-clock', severity: 'success' }
+
+    const turnos = { label: 'Turnos hoy', value: resumen.turnos_hoy || 0, icon: 'pi pi-calendar', severity: 'info' };
+
+    if (!esAdmin.value) {
+        return [
+            turnos,
+            {
+                label: 'Lugares libres hoy',
+                value: resumen.lugares_libres_hoy ?? 0,
+                icon: 'pi pi-clock',
+                severity: 'success',
+                // Con la agenda del día ya terminada, un cero no es un problema:
+                // sin esta aclaración parece que algo está mal configurado.
+                ayuda: resumen.lugares_libres_hoy === 0 && resumen.franjas_hoy === 0 ? 'Hoy no atendés' : 'Del horario que queda por delante'
+            }
+        ];
+    }
+
+    return [
+        turnos,
+        { label: 'Profesionales atendiendo', value: resumen.profesionales_hoy || 0, icon: 'pi pi-users', severity: 'success' },
+        { label: 'Superpuestos', value: resumen.turnos_superpuestos || 0, icon: 'pi pi-exclamation-triangle', severity: 'warning' }
     ];
-
-    if (!esAdmin.value) return base;
-
-    return [...base, { label: 'Superpuestos', value: resumen.turnos_superpuestos || 0, icon: 'pi pi-exclamation-triangle', severity: 'warning' }];
 });
 
 const proximoEvento = computed(() => dashboard.value?.proximo_evento || null);
@@ -179,9 +206,10 @@ const cerrarAlertaHoy = () => {
             <div v-for="item in resumenItems" :key="item.label" class="col-span-12 sm:col-span-6 xl:col-span-3">
                 <div class="bg-surface-0 dark:bg-surface-900 border border-surface-200 dark:border-surface-700 shadow-sm rounded-lg p-5 h-full">
                     <div class="flex items-center justify-between gap-4">
-                        <div>
+                        <div class="min-w-0">
                             <span class="block text-gray-500 dark:text-gray-400 text-sm font-medium mb-2">{{ item.label }}</span>
                             <div class="text-3xl font-bold text-gray-800 dark:text-white">{{ item.value }}</div>
+                            <span v-if="item.ayuda" class="block text-xs text-gray-400 dark:text-gray-500 mt-1">{{ item.ayuda }}</span>
                         </div>
                         <div class="w-11 h-11 rounded-lg bg-surface-100 dark:bg-surface-800 flex items-center justify-center">
                             <i :class="[item.icon, 'text-xl text-blue-500']"></i>
@@ -197,7 +225,7 @@ const cerrarAlertaHoy = () => {
                             <i class="pi pi-calendar text-blue-500"></i>
                             Turnos de Hoy
                         </h2>
-                        <Tag :value="turnosHoy.length + ' turnos'" severity="info" rounded />
+                        <Tag :value="turnosHoy.length === 1 ? '1 turno' : turnosHoy.length + ' turnos'" severity="info" rounded />
                     </div>
 
                     <div v-if="turnosHoy.length === 0" class="flex flex-col items-center justify-center py-12 text-gray-400">
@@ -205,7 +233,9 @@ const cerrarAlertaHoy = () => {
                         <p>No hay turnos programados.</p>
                     </div>
 
-                    <DataTable v-else :value="turnosHoy" paginator :rows="6" class="p-datatable-sm" responsiveLayout="scroll">
+                    <!-- El paginador solo cuando hay algo que paginar: con un turno
+                         del día, la fila de controles ocupaba más que la tabla. -->
+                    <DataTable v-else :value="turnosHoy" :paginator="turnosHoy.length > 6" :rows="6" class="p-datatable-sm" responsiveLayout="scroll">
                         <Column field="fecha_inicio" header="Hora">
                             <template #body="slotProps">
                                 <span class="font-bold text-gray-700 dark:text-gray-200">{{ horaAgenda(slotProps.data.fecha_inicio) }}</span>
