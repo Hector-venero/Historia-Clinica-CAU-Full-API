@@ -123,7 +123,7 @@ onMounted(cargarDisponibilidades);
             </div>
 
             <div class="space-y-4">
-                <div class="hidden md:grid grid-cols-12 gap-4 px-4 text-sm font-bold text-gray-500 uppercase tracking-wider mb-2">
+                <div class="hidden md:grid grid-cols-12 gap-4 px-4 text-sm font-bold text-surface-500 dark:text-surface-400 uppercase tracking-wider mb-2">
                     <div class="col-span-3">Día</div>
                     <div class="col-span-2 text-center">Estado</div>
                     <div class="col-span-7 text-center">Horario de Atención</div>
@@ -136,7 +136,7 @@ onMounted(cargarDisponibilidades);
                     :class="{ 'opacity-60 grayscale': !dia.activo }"
                 >
                     <div class="col-span-1 md:col-span-3 flex items-center gap-3">
-                        <div class="w-10 h-10 rounded-lg flex items-center justify-center font-bold text-lg transition-colors" :class="dia.activo ? 'bg-primary text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-500'">
+                        <div class="w-10 h-10 rounded-lg flex items-center justify-center font-bold text-lg transition-colors" :class="dia.activo ? 'bg-primary text-white' : 'bg-gray-200 dark:bg-gray-700 text-surface-500 dark:text-surface-400'">
                             {{ dia.nombre.charAt(0) }}
                         </div>
                         <span class="text-lg font-semibold text-gray-800 dark:text-gray-200 capitalize">
@@ -145,14 +145,14 @@ onMounted(cargarDisponibilidades);
                     </div>
 
                     <div class="col-span-1 md:col-span-2 flex items-center md:justify-center justify-between">
-                        <span class="md:hidden text-sm font-medium text-gray-500">¿Atiende este día?</span>
+                        <span class="md:hidden text-sm font-medium text-surface-500 dark:text-surface-400">¿Atiende este día?</span>
                         <InputSwitch v-model="dia.activo" />
                     </div>
 
                     <div class="col-span-1 md:col-span-7 flex flex-col md:flex-row items-center justify-center gap-3">
                         <div class="flex items-center gap-2 w-full md:w-auto">
                             <i class="pi pi-sun text-gray-400"></i>
-                            <label class="md:hidden text-sm text-gray-500 w-16">Desde:</label>
+                            <label class="md:hidden text-sm text-surface-500 dark:text-surface-400 w-16">Desde:</label>
                             <input type="time" v-model="dia.hora_inicio" :disabled="!dia.activo" class="p-inputtext p-component w-full md:w-32 text-center" />
                         </div>
 
@@ -160,7 +160,7 @@ onMounted(cargarDisponibilidades);
 
                         <div class="flex items-center gap-2 w-full md:w-auto">
                             <i class="pi pi-moon text-gray-400"></i>
-                            <label class="md:hidden text-sm text-gray-500 w-16">Hasta:</label>
+                            <label class="md:hidden text-sm text-surface-500 dark:text-surface-400 w-16">Hasta:</label>
                             <input type="time" v-model="dia.hora_fin" :disabled="!dia.activo" class="p-inputtext p-component w-full md:w-32 text-center" />
                         </div>
                     </div>

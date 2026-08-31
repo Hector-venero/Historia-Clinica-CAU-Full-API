@@ -128,9 +128,9 @@ onUnmounted(() => {
                 <button v-if="noLeidos > 0" type="button" class="text-xs text-primary-600 hover:underline" @click="marcarTodos">Marcar todo como leído</button>
             </div>
 
-            <div v-if="cargando" class="px-4 py-6 text-sm text-gray-500 text-center">Cargando...</div>
+            <div v-if="cargando" class="px-4 py-6 text-sm text-surface-500 dark:text-surface-400 text-center">Cargando...</div>
 
-            <div v-else-if="visibles.length === 0" class="px-4 py-6 text-sm text-gray-500 text-center">No hay comunicados.</div>
+            <div v-else-if="visibles.length === 0" class="px-4 py-6 text-sm text-surface-500 dark:text-surface-400 text-center">No hay comunicados.</div>
 
             <ul v-else class="max-h-80 overflow-y-auto divide-y divide-gray-100 dark:divide-slate-700">
                 <li v-for="c in visibles" :key="c.id">
@@ -144,7 +144,7 @@ onUnmounted(() => {
                                     <span v-if="c.prioridad === 'importante'" class="text-amber-600 dark:text-amber-400 mr-1">●</span>
                                     {{ c.titulo }}
                                 </p>
-                                <p class="text-xs text-gray-500 truncate">{{ c.autor_nombre }} · {{ formatearFecha(c.creado_en) }}</p>
+                                <p class="text-xs text-surface-500 dark:text-surface-400 truncate">{{ c.autor_nombre }} · {{ formatearFecha(c.creado_en) }}</p>
                             </div>
                         </div>
                     </button>

@@ -56,7 +56,7 @@ const reactivarUsuarioConfirmado = async () => {
         <input v-model="busqueda" type="text" placeholder="Buscar por nombre o usuario" class="p-inputtext p-component w-full mb-4 border rounded px-3 py-2" />
 
         <div v-if="filtrados.length > 0" class="overflow-x-auto">
-            <table class="min-w-full bg-white rounded shadow">
+            <table class="min-w-full bg-surface-0 dark:bg-surface-900 rounded shadow">
                 <thead>
                     <tr>
                         <th class="py-2 px-4 border-b">ID</th>

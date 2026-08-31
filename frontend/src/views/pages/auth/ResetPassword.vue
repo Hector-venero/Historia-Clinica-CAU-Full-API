@@ -91,7 +91,7 @@ async function resetear() {
                                 v-model="password"
                                 type="password"
                                 placeholder="********"
-                                class="w-full border border-gray-300 rounded-lg p-3 text-base focus:outline-none focus:ring-2 focus:ring-primary transition"
+                                class="w-full border border-surface-300 dark:border-surface-600 rounded-lg p-3 text-base focus:outline-none focus:ring-2 focus:ring-primary transition"
                                 :class="{ 'border-red-500': passwordError }"
                                 @input="validarEnVivo"
                             />
@@ -108,7 +108,7 @@ async function resetear() {
                                 v-model="confirmPassword"
                                 type="password"
                                 placeholder="********"
-                                class="w-full border border-gray-300 rounded-lg p-3 text-base focus:outline-none focus:ring-2 focus:ring-primary transition"
+                                class="w-full border border-surface-300 dark:border-surface-600 rounded-lg p-3 text-base focus:outline-none focus:ring-2 focus:ring-primary transition"
                                 :class="{ 'border-red-500': confirmError }"
                             />
                             <p v-if="confirmError" class="text-red-500 text-xs mt-1">Las contraseñas no coinciden.</p>

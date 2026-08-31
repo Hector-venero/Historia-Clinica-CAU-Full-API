@@ -143,7 +143,7 @@ onMounted(async () => {
                                 <i :class="['pi mr-1', p.valor === 'importante' ? 'pi-exclamation-circle text-amber-500' : 'pi-bell text-gray-400']"></i>
                                 {{ p.etiqueta }}
                             </span>
-                            <span class="block text-xs text-gray-500 mt-0.5">{{ p.ayuda }}</span>
+                            <span class="block text-xs text-surface-500 dark:text-surface-400 mt-0.5">{{ p.ayuda }}</span>
                         </label>
                     </div>
 
@@ -154,7 +154,7 @@ onMounted(async () => {
             </template>
         </Card>
 
-        <div v-if="loading" class="text-sm text-gray-500">Cargando comunicados...</div>
+        <div v-if="loading" class="text-sm text-surface-500 dark:text-surface-400">Cargando comunicados...</div>
 
         <div v-else-if="comunicados.length === 0" class="text-sm text-gray-500 dark:text-gray-400 bg-white dark:bg-slate-900 border border-dashed border-gray-300 dark:border-slate-700 rounded-xl p-6 text-center">
             No hay comunicados publicados por el momento.
@@ -179,7 +179,7 @@ onMounted(async () => {
                                 <h2 class="text-lg font-semibold text-gray-800 dark:text-gray-100">{{ c.titulo }}</h2>
                                 <span v-if="c.prioridad === 'importante'" class="text-[11px] font-bold tracking-wide uppercase px-2 py-0.5 rounded bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200"> Importante </span>
                             </div>
-                            <p class="text-xs text-gray-500 mt-1">{{ c.autor_nombre }} ({{ c.autor_rol }}) - {{ formatearFecha(c.creado_en) }}</p>
+                            <p class="text-xs text-surface-500 dark:text-surface-400 mt-1">{{ c.autor_nombre }} ({{ c.autor_rol }}) - {{ formatearFecha(c.creado_en) }}</p>
                         </div>
                         <Button v-if="c.puede_eliminar" icon="pi pi-trash" text severity="danger" @click="eliminarComunicado(c)" />
                     </div>

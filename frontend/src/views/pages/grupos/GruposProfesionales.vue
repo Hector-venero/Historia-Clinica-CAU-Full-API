@@ -194,12 +194,12 @@ function verCalendario(grupo) {
                             <Avatar :label="m.nombre[0]" shape="circle" class="bg-blue-100 text-blue-600" />
                             <div class="flex flex-col">
                                 <span class="font-medium text-gray-800 dark:text-gray-200">{{ m.nombre }}</span>
-                                <span class="text-xs text-gray-500 capitalize">{{ m.rol }}</span>
+                                <span class="text-xs text-surface-500 dark:text-surface-400 capitalize">{{ m.rol }}</span>
                             </div>
                         </div>
                         <Button icon="pi pi-times" text rounded severity="danger" @click="quitarMiembro(m)" v-tooltip.left="'Quitar del grupo'" />
                     </li>
-                    <li v-if="miembros.length === 0" class="text-center py-4 text-gray-500 text-sm">Este grupo aún no tiene miembros.</li>
+                    <li v-if="miembros.length === 0" class="text-center py-4 text-surface-500 dark:text-surface-400 text-sm">Este grupo aún no tiene miembros.</li>
                 </ul>
 
                 <div class="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg border border-gray-100 dark:border-gray-700">

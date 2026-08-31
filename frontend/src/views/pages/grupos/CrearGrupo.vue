@@ -97,7 +97,7 @@ async function crearGrupo() {
                         <template #option="slotProps">
                             <div class="flex flex-col">
                                 <span class="font-medium">{{ slotProps.option.nombre }}</span>
-                                <span class="text-xs text-gray-500 capitalize">{{ slotProps.option.rol }}</span>
+                                <span class="text-xs text-surface-500 dark:text-surface-400 capitalize">{{ slotProps.option.rol }}</span>
                             </div>
                         </template>
                     </MultiSelect>

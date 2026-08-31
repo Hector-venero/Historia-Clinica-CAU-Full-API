@@ -86,7 +86,7 @@ const eliminarUsuarioConfirmado = async () => {
             <div class="overflow-x-auto">
                 <DataTable :value="filtrados" paginator :rows="5" :rowsPerPageOptions="[5, 10, 20]" tableStyle="min-width: 50rem" stripedRows class="p-datatable-sm">
                     <template #empty>
-                        <div class="text-center p-4 text-gray-500">No se encontraron usuarios.</div>
+                        <div class="text-center p-4 text-surface-500 dark:text-surface-400">No se encontraron usuarios.</div>
                     </template>
 
                     <Column field="nombre" header="Nombre" sortable class="font-bold text-gray-700 dark:text-gray-200"></Column>

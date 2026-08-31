@@ -25,7 +25,7 @@ onMounted(async () => {
 
 <template>
     <div class="flex items-center justify-center min-h-screen">
-        <p class="text-gray-700">Cerrando sesión...</p>
+        <p class="text-surface-700 dark:text-surface-200">Cerrando sesión...</p>
     </div>
 </template>
 

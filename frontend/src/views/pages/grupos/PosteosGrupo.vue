@@ -109,7 +109,7 @@ onMounted(async () => {
             <Button label="Volver a grupos" icon="pi pi-arrow-left" text @click="router.push('/grupos')" />
         </div>
 
-        <div v-if="loading" class="text-sm text-gray-500">Cargando posteos...</div>
+        <div v-if="loading" class="text-sm text-surface-500 dark:text-surface-400">Cargando posteos...</div>
 
         <div v-else-if="accesoDenegado" class="text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl p-4">No tiene permisos para ver los posteos de este grupo.</div>
 
@@ -135,7 +135,7 @@ onMounted(async () => {
                         <div class="flex items-start justify-between gap-3">
                             <div>
                                 <h2 class="text-base font-semibold text-gray-800 dark:text-gray-100">{{ p.titulo || 'Posteo del equipo' }}</h2>
-                                <p class="text-xs text-gray-500 mt-1">{{ p.autor_nombre }} ({{ p.autor_rol }}) - {{ formatearFecha(p.creado_en) }}</p>
+                                <p class="text-xs text-surface-500 dark:text-surface-400 mt-1">{{ p.autor_nombre }} ({{ p.autor_rol }}) - {{ formatearFecha(p.creado_en) }}</p>
                             </div>
                             <Button v-if="p.puede_eliminar" icon="pi pi-trash" text severity="danger" @click="eliminarPosteo(p)" />
                         </div>

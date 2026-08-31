@@ -95,7 +95,7 @@ const formatFecha = (fecha) => {
             <div class="overflow-x-auto">
                 <DataTable :value="filtrados" paginator :rows="10" :rowsPerPageOptions="[5, 10, 20]" tableStyle="min-width: 60rem" stripedRows class="p-datatable-sm">
                     <template #empty>
-                        <div class="text-center p-8 text-gray-500">
+                        <div class="text-center p-8 text-surface-500 dark:text-surface-400">
                             <i class="pi pi-users text-4xl mb-3 block"></i>
                             No se encontraron pacientes.
                         </div>

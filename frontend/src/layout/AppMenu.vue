@@ -26,8 +26,14 @@ async function handleLogout() {
 
 // 4. Cambiamos 'ref' por 'computed' para poder usar lógica dinámica
 const model = computed(() => {
-    // Normalizamos el rol para evitar errores de mayúsculas/espacios
-    const esDirector = userStore.rol?.toLowerCase().trim() === 'director';
+    // Normalizamos el rol para evitar errores de mayúsculas/espacios.
+    //
+    // Se hace UNA vez y se usa en todas las comprobaciones: hasta ahora esta
+    // línea normalizaba y las de más abajo comparaban `userStore.rol` crudo, así
+    // que un rol con otra capitalización habría escondido medio menú sin que
+    // nadie entendiera por qué.
+    const rol = userStore.rol?.toLowerCase().trim();
+    const esDirector = rol === 'director';
 
     return [
         {
@@ -47,9 +53,17 @@ const model = computed(() => {
         },
         {
             label: 'Recetas y Prácticas',
-            // Los módulos los define el plan del consultorio. Ocultar la entrada
-            // es presentación: quien decide es @requiere_modulo en el backend.
-            visible: userStore.tieneModulo('recetas'),
+            // Dos condiciones, porque son dos cosas distintas: el **módulo** dice
+            // qué contrató el consultorio y el **rol**, quién puede emitir.
+            //
+            // Faltaba la segunda. La ruta exige director o profesional, así que
+            // un administrativo con el módulo contratado veía la entrada y lo
+            // rebotaba el guard. Es el mismo problema que ya se había arreglado
+            // en la ruta y quedó pendiente en el menú.
+            //
+            // Ocultar la entrada es presentación: quien decide de verdad son
+            // @requiere_modulo y @requiere_rol en el backend.
+            visible: userStore.tieneModulo('recetas') && ['director', 'profesional'].includes(rol),
             items: [{ label: 'Generar Receta', icon: 'pi pi-file-edit', to: '/recetas' }]
         },
         {
@@ -77,13 +91,13 @@ const model = computed(() => {
                             icon: 'pi pi-fw pi-globe',
                             to: '/turnos/agenda-publica',
                             // Solo quien atiende pacientes tiene agenda que publicar.
-                            visible: ['profesional', 'director'].includes(userStore.rol)
+                            visible: ['profesional', 'director'].includes(rol)
                         },
                         {
                             label: 'Duración de turnos',
                             icon: 'pi pi-fw pi-sliders-h',
                             to: '/turnos/configuracion',
-                            visible: ['profesional', 'director', 'area'].includes(userStore.rol)
+                            visible: ['profesional', 'director', 'area'].includes(rol)
                         }
                     ]
                 }

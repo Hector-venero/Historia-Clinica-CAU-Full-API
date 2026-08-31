@@ -85,34 +85,34 @@ async function onSubmit() {
 
 <template>
     <div class="flex justify-center items-start p-8">
-        <div class="bg-white shadow-xl rounded-2xl p-8 w-full max-w-2xl">
+        <div class="bg-surface-0 dark:bg-surface-900 shadow-xl rounded-2xl p-8 w-full max-w-2xl">
             <h1 class="text-3xl font-bold text-center mb-8 text-blue-700">Editar usuario</h1>
 
             <form @submit.prevent="onSubmit" class="space-y-6">
                 <!-- Nombre -->
                 <div>
-                    <label class="block mb-2 font-semibold text-gray-700">Nombre completo</label>
+                    <label class="block mb-2 font-semibold text-surface-700 dark:text-surface-200">Nombre completo</label>
                     <input v-model.trim="form.nombre" type="text" class="w-full p-3 border rounded-xl shadow-sm focus:ring-2 focus:ring-blue-500" :disabled="loading" required />
                 </div>
 
                 <!-- Usuario -->
                 <div>
-                    <label class="block mb-2 font-semibold text-gray-700">Usuario</label>
+                    <label class="block mb-2 font-semibold text-surface-700 dark:text-surface-200">Usuario</label>
                     <input v-model.trim="form.username" type="text" class="w-full p-3 border rounded-xl shadow-sm focus:ring-2 focus:ring-blue-500" :disabled="loading" required />
                 </div>
 
                 <!-- Email -->
                 <div>
-                    <label class="block mb-2 font-semibold text-gray-700">Email</label>
+                    <label class="block mb-2 font-semibold text-surface-700 dark:text-surface-200">Email</label>
                     <input v-model.trim="form.email" type="email" class="w-full p-3 border rounded-xl shadow-sm focus:ring-2 focus:ring-blue-500" :disabled="loading" required />
                 </div>
 
                 <!-- Contraseña (opcional) -->
                 <div>
-                    <label class="block mb-2 font-semibold text-gray-700">Nueva contraseña (opcional)</label>
+                    <label class="block mb-2 font-semibold text-surface-700 dark:text-surface-200">Nueva contraseña (opcional)</label>
                     <div class="flex gap-2">
                         <input v-model="form.password" :type="showPwd ? 'text' : 'password'" class="w-full p-3 border rounded-xl shadow-sm focus:ring-2 focus:ring-blue-500" placeholder="********" :disabled="loading" />
-                        <button type="button" class="px-4 py-2 border rounded-xl shadow-sm bg-gray-50 hover:bg-gray-100" @click="showPwd = !showPwd" :disabled="loading">
+                        <button type="button" class="px-4 py-2 border rounded-xl shadow-sm bg-surface-50 dark:bg-surface-800 hover:bg-gray-100" @click="showPwd = !showPwd" :disabled="loading">
                             {{ showPwd ? 'Ocultar' : 'Ver' }}
                         </button>
                     </div>
@@ -120,7 +120,7 @@ async function onSubmit() {
 
                 <!-- Rol -->
                 <div>
-                    <label class="block mb-2 font-semibold text-gray-700">Rol</label>
+                    <label class="block mb-2 font-semibold text-surface-700 dark:text-surface-200">Rol</label>
                     <select v-model="form.rol" class="w-full p-3 border rounded-xl shadow-sm focus:ring-2 focus:ring-blue-500" :disabled="loading" required>
                         <option v-for="r in ROLES" :key="r" :value="r">{{ r }}</option>
                     </select>
@@ -128,25 +128,25 @@ async function onSubmit() {
 
                 <!-- Especialidad -->
                 <div v-if="rolPrescribe()">
-                    <label class="block mb-2 font-semibold text-gray-700">Especialidad</label>
+                    <label class="block mb-2 font-semibold text-surface-700 dark:text-surface-200">Especialidad</label>
                     <input v-model.trim="form.especialidad" type="text" class="w-full p-3 border rounded-xl shadow-sm focus:ring-2 focus:ring-blue-500" :disabled="loading" />
                 </div>
 
                 <!-- Sin estos datos el profesional no puede emitir recetas -->
                 <section v-if="rolPrescribe()" class="p-4 bg-amber-50 border border-amber-200 rounded-xl space-y-3">
-                    <h3 class="font-semibold text-gray-700">Datos para recetas electrónicas</h3>
+                    <h3 class="font-semibold text-surface-700 dark:text-surface-200">Datos para recetas electrónicas</h3>
 
                     <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
                         <div>
-                            <label class="block mb-1 text-sm text-gray-600">Apellido</label>
+                            <label class="block mb-1 text-sm text-surface-600 dark:text-surface-300">Apellido</label>
                             <input v-model.trim="form.apellido" type="text" class="w-full p-3 border rounded-xl shadow-sm focus:ring-2 focus:ring-blue-500" :disabled="loading" />
                         </div>
                         <div>
-                            <label class="block mb-1 text-sm text-gray-600">DNI</label>
+                            <label class="block mb-1 text-sm text-surface-600 dark:text-surface-300">DNI</label>
                             <input v-model.trim="form.dni" type="text" class="w-full p-3 border rounded-xl shadow-sm focus:ring-2 focus:ring-blue-500" :disabled="loading" />
                         </div>
                         <div>
-                            <label class="block mb-1 text-sm text-gray-600">Sexo</label>
+                            <label class="block mb-1 text-sm text-surface-600 dark:text-surface-300">Sexo</label>
                             <select v-model="form.sexo" class="w-full p-3 border rounded-xl shadow-sm focus:ring-2 focus:ring-blue-500" :disabled="loading">
                                 <option value="">—</option>
                                 <option v-for="s in SEXOS" :key="s.value" :value="s.value">{{ s.label }}</option>
@@ -156,37 +156,37 @@ async function onSubmit() {
 
                     <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
                         <div>
-                            <label class="block mb-1 text-sm text-gray-600">Tipo de matrícula</label>
+                            <label class="block mb-1 text-sm text-surface-600 dark:text-surface-300">Tipo de matrícula</label>
                             <select v-model="form.matricula_tipo" class="w-full p-3 border rounded-xl shadow-sm focus:ring-2 focus:ring-blue-500" :disabled="loading">
                                 <option value="">—</option>
                                 <option v-for="t in TIPOS_MATRICULA" :key="t" :value="t">{{ t }}</option>
                             </select>
                         </div>
                         <div>
-                            <label class="block mb-1 text-sm text-gray-600">N° de matrícula</label>
+                            <label class="block mb-1 text-sm text-surface-600 dark:text-surface-300">N° de matrícula</label>
                             <input v-model.trim="form.matricula_numero" type="text" class="w-full p-3 border rounded-xl shadow-sm focus:ring-2 focus:ring-blue-500" :disabled="loading" />
                         </div>
                         <div>
-                            <label class="block mb-1 text-sm text-gray-600">Provincia</label>
+                            <label class="block mb-1 text-sm text-surface-600 dark:text-surface-300">Provincia</label>
                             <input v-model.trim="form.matricula_provincia" type="text" class="w-full p-3 border rounded-xl shadow-sm focus:ring-2 focus:ring-blue-500" :disabled="loading" />
                         </div>
                     </div>
 
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                         <div>
-                            <label class="block mb-1 text-sm text-gray-600">Lugar de atención</label>
+                            <label class="block mb-1 text-sm text-surface-600 dark:text-surface-300">Lugar de atención</label>
                             <input v-model.trim="form.lugar_atencion_nombre" type="text" class="w-full p-3 border rounded-xl shadow-sm focus:ring-2 focus:ring-blue-500" :disabled="loading" />
                         </div>
                         <div>
-                            <label class="block mb-1 text-sm text-gray-600">Dirección de atención</label>
+                            <label class="block mb-1 text-sm text-surface-600 dark:text-surface-300">Dirección de atención</label>
                             <input v-model.trim="form.lugar_atencion_direccion" type="text" placeholder="Calle y número" class="w-full p-3 border rounded-xl shadow-sm focus:ring-2 focus:ring-blue-500" :disabled="loading" />
                         </div>
                         <div>
-                            <label class="block mb-1 text-sm text-gray-600">Teléfono</label>
+                            <label class="block mb-1 text-sm text-surface-600 dark:text-surface-300">Teléfono</label>
                             <input v-model.trim="form.telefono" type="text" class="w-full p-3 border rounded-xl shadow-sm focus:ring-2 focus:ring-blue-500" :disabled="loading" />
                         </div>
                         <div>
-                            <label class="block mb-1 text-sm text-gray-600">Email de contacto</label>
+                            <label class="block mb-1 text-sm text-surface-600 dark:text-surface-300">Email de contacto</label>
                             <input v-model.trim="form.lugar_atencion_email" type="text" class="w-full p-3 border rounded-xl shadow-sm focus:ring-2 focus:ring-blue-500" :disabled="loading" />
                         </div>
                     </div>
