@@ -99,6 +99,49 @@ def logo():
     return _valor("logo", "MARCA_LOGO")
 
 
+# Logo de la instalacion de un solo centro: el CAU.
+#
+# Se usa SOLO cuando no hay consultorio resuelto, o sea en `main`, donde ese
+# escudo es el correcto. En la plataforma no se usa nunca: ver logo_archivo().
+LOGO_INSTALACION = "logo_cau_unsam2.png"
+
+
+def logo_archivo():
+    """El logo como ruta de archivo, para lo que se dibuja en el servidor (PDF).
+
+    `logo()` devuelve lo que va en un `<img src>` del navegador; un PDF necesita
+    un archivo en disco, asi que hay que resolverlo.
+
+    ⚠️ **Un consultorio sin logo propio no recibe ninguno.** Devuelve None y
+    quien llama pone el nombre en texto. Antes los dos generadores de PDF tenian
+    escrita a mano la ruta del escudo de la UNSAM, asi que cualquier consultorio
+    emitia historias clinicas con la identidad de otra institucion. Eso no es un
+    detalle estetico: es un documento clinico firmado con un logo ajeno.
+
+    El escudo del CAU sigue apareciendo **solo en la instalacion de un solo
+    centro**, donde es el que corresponde.
+    """
+    from flask import current_app
+
+    propio = logo()
+    if propio:
+        # Puede venir como URL (/static/…) o como nombre de archivo suelto: al
+        # PDF solo le sirve el nombre, resuelto dentro de static.
+        nombre_archivo = os.path.basename(str(propio).split("?")[0])
+        ruta = os.path.join(current_app.root_path, "static", "marcas", nombre_archivo)
+        if os.path.exists(ruta):
+            return ruta
+        # Un logo configurado que no esta en disco no puede caer al de otro:
+        # mejor el nombre en texto.
+        return None
+
+    if _cliente() is not None:
+        return None
+
+    ruta = os.path.join(current_app.root_path, "static", "img", LOGO_INSTALACION)
+    return ruta if os.path.exists(ruta) else None
+
+
 def lugar_atencion():
     """Donde atiende el consultorio. Va en los mails de turnos y en las recetas.
 

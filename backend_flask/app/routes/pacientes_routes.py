@@ -449,10 +449,14 @@ def exportar_historia_pdf(id):
     # -------------------------------------------------------
     # 🔹 ENCABEZADO con logo y título
     # -------------------------------------------------------
-    logo_path = os.path.join(current_app.root_path, "static", "img", "logo_cau_unsam2.png")
+    # El logo sale de la marca del consultorio, NO de una ruta escrita a mano.
+    #
+    # Estaba fijo en el escudo de la UNSAM, asi que cualquier consultorio de la
+    # plataforma emitia historias clinicas con la identidad de otra institucion.
+    # Sin logo propio va el nombre en texto: nunca el de otro.
+    logo_path = marca.logo_archivo()
 
-    if os.path.exists(logo_path):
-        # 🔸 Logo apenas más grande
+    if logo_path:
         logo = Image(logo_path, width=5*cm, height=2*cm)
     else:
         logo = Paragraph(f"<b>{marca.nombre_corto()}</b>", styles["Normal"])
@@ -692,9 +696,10 @@ def exportar_evolucion_pdf(paciente_id, evo_id):
     # ----------------------------------------------------------
     # 🔹 ENCABEZADO CON LOGO Y TÍTULO
     # ----------------------------------------------------------
-    logo_path = os.path.join(current_app.root_path, "static", "img", "logo_cau_unsam2.png")
+    # Ver la nota del otro generador: el logo es el del consultorio o ninguno.
+    logo_path = marca.logo_archivo()
 
-    if os.path.exists(logo_path):
+    if logo_path:
         logo = Image(logo_path, width=5*cm, height=2*cm)
     else:
         logo = Paragraph(f"<b>{marca.nombre_corto()}</b>", styles["Normal"])

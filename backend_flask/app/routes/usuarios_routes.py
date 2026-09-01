@@ -375,6 +375,25 @@ def actualizar_duracion_turno(usuario_id):
         cursor.execute("UPDATE usuarios SET duracion_turno = %s WHERE id = %s", (nueva_duracion, usuario_id))
         conn.commit()
 
+    # El directorio publico guarda su propia copia de la duracion, y hasta ahora
+    # solo se rehacia al guardar la pantalla de Turnos online. Cambiar la
+    # duracion aca dejaba al paciente viendo la vieja en el buscador, sin nada
+    # que lo delatara: los dos numeros son plausibles.
+    #
+    # No propaga errores: la duracion ya quedo guardada, y que el directorio
+    # tarde un rato en ponerse al dia no puede hacer fallar la operacion.
+    try:
+        from app import reservas
+        from app.tenancy import cliente_actual
+
+        cliente = cliente_actual()
+        if cliente is not None:
+            reservas.sincronizar_directorio(cliente)
+    except Exception:
+        app.logger.exception(
+            "No se pudo actualizar el directorio publico tras cambiar la duracion"
+        )
+
     return jsonify({"message": "Duración actualizada correctamente"})
 
 

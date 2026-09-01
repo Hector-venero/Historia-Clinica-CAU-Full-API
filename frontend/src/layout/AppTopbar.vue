@@ -32,9 +32,13 @@ function irAgenda() {
                  subdominio del consultorio. Estaban escritos aca. -->
             <router-link to="/" class="layout-topbar-logo flex items-center gap-2">
                 <img :src="marca.logo || logoPorDefecto" :alt="`Logo ${marca.nombreCorto}`" class="h-8 md:h-10" />
-                <div class="flex flex-col leading-tight">
-                    <div class="font-bold text-lg">{{ marca.nombreCorto }}</div>
-                    <div class="text-xs text-gray-500">{{ marca.nombre }}</div>
+                <!-- La segunda línea solo cuando dice algo distinto.
+                     Para un consultorio, `nombreCorto` y `nombre` son el mismo
+                     texto, así que se leía duplicado — y al ser largo se partía
+                     en dos líneas, que es lo que se veía como mal alineado. -->
+                <div class="flex flex-col leading-tight min-w-0">
+                    <div class="font-bold text-lg truncate">{{ marca.nombreCorto }}</div>
+                    <div v-if="marca.nombre && marca.nombre !== marca.nombreCorto" class="text-xs text-surface-500 dark:text-surface-400 truncate">{{ marca.nombre }}</div>
                 </div>
             </router-link>
         </div>

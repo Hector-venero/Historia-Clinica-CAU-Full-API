@@ -120,6 +120,11 @@ const pacientes = ref([]);
 const pacienteSeleccionado = ref(null);
 const nuevoTurnoTipoEvento = ref('Turno');
 const nuevoTurnoMotivo = ref('');
+// Videoconsulta. El diálogo de la agenda creaba el turno SIN modalidad, así que
+// entraba presencial siempre y no había forma de elegir — y es el camino que se
+// usa a diario, porque se llega haciendo clic sobre el hueco del calendario.
+const nuevoTurnoModalidad = ref('presencial');
+const nuevoTurnoEnlaceVideo = ref('');
 const nuevoTurnoObservaciones = ref('');
 const nuevoTurnoFecha = ref('');
 const nuevoTurnoGuardando = ref(false);
@@ -590,6 +595,8 @@ function abrirModalNuevoTurno(date) {
     limpiarPacienteSeleccionado();
     nuevoTurnoMotivo.value = '';
     nuevoTurnoObservaciones.value = '';
+    nuevoTurnoModalidad.value = 'presencial';
+    nuevoTurnoEnlaceVideo.value = '';
     nuevoTurnoModalVisible.value = true;
 }
 
@@ -621,7 +628,17 @@ async function guardarNuevoTurno() {
             }
             const resp = await api.post(
                 '/turnos',
-                { paciente_id: pacienteSeleccionado.value.id, usuario_id: Number(sujetoSeleccionadoId.value), fecha_inicio: nuevoTurnoFecha.value, motivo: nuevoTurnoMotivo.value, observaciones: nuevoTurnoObservaciones.value },
+                {
+                    paciente_id: pacienteSeleccionado.value.id,
+                    usuario_id: Number(sujetoSeleccionadoId.value),
+                    fecha_inicio: nuevoTurnoFecha.value,
+                    motivo: nuevoTurnoMotivo.value,
+                    observaciones: nuevoTurnoObservaciones.value,
+                    modalidad: nuevoTurnoModalidad.value,
+                    // Solo en virtual: el backend descarta el enlace de un turno
+                    // presencial, y mandarlo igual sería pedirle que limpie lo nuestro.
+                    enlace_video: nuevoTurnoModalidad.value === 'virtual' ? nuevoTurnoEnlaceVideo.value.trim() : null
+                },
                 { withCredentials: true }
             );
             if (resp.data?.ajuste_horario?.aplicado) {
@@ -809,6 +826,37 @@ onUnmounted(() => {
                 <div v-if="nuevoTurnoTipoEvento === 'Turno'">
                     <label class="font-heading font-semibold text-sm block mb-1.5 text-[#134E4A] dark:text-slate-200"> <i class="pi pi-align-left mr-1.5 text-[#0891B2]"></i>Observaciones </label>
                     <Textarea v-model="nuevoTurnoObservaciones" rows="3" autoResize class="w-full" placeholder="Observaciones adicionales" />
+                </div>
+
+                <!-- Modalidad. El mismo criterio que en Nuevo Turno: el enlace lo
+                     pone el profesional con la herramienta que ya usa. -->
+                <div v-if="nuevoTurnoTipoEvento === 'Turno'">
+                    <label class="font-heading font-semibold text-sm block mb-1.5 text-[#134E4A] dark:text-slate-200"> <i class="pi pi-video mr-1.5 text-[#0891B2]"></i>Modalidad </label>
+                    <div class="grid grid-cols-2 gap-2">
+                        <button
+                            v-for="m in [
+                                { valor: 'presencial', titulo: 'Presencial', icono: 'pi-map-marker' },
+                                { valor: 'virtual', titulo: 'Videoconsulta', icono: 'pi-video' }
+                            ]"
+                            :key="m.valor"
+                            type="button"
+                            class="flex items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold transition"
+                            :class="
+                                nuevoTurnoModalidad === m.valor
+                                    ? 'border-[#0891B2] bg-cyan-50 text-[#134E4A] dark:bg-cyan-950/40 dark:text-cyan-200'
+                                    : 'border-surface-200 dark:border-surface-700 text-surface-600 dark:text-surface-300 hover:bg-surface-50 dark:hover:bg-surface-800'
+                            "
+                            @click="nuevoTurnoModalidad = m.valor"
+                        >
+                            <i class="pi" :class="m.icono"></i>
+                            {{ m.titulo }}
+                        </button>
+                    </div>
+
+                    <div v-if="nuevoTurnoModalidad === 'virtual'" class="mt-2">
+                        <InputText v-model="nuevoTurnoEnlaceVideo" class="w-full" placeholder="https://meet.google.com/abc-defg-hij" />
+                        <p class="text-[11px] text-slate-500 mt-1 mb-0">Se lo mandamos al paciente por correo y lo ve en su portal.</p>
+                    </div>
                 </div>
             </div>
             <template #footer>
