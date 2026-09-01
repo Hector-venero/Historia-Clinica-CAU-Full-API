@@ -12,7 +12,7 @@ import SitioLayout from './SitioLayout.vue';
 import MockupAgenda from './MockupAgenda.vue';
 import MockupBuzon from './MockupBuzon.vue';
 import MockupEquipo from './MockupEquipo.vue';
-import { AUDIENCIAS, funcionesDe } from './datos';
+import { AUDIENCIAS, POR_QUE, SOBRE_LOS_DATOS, funcionesDe } from './datos';
 
 // Solo las destacadas del profesional: la portada muestra la punta, no el
 // inventario. Salen de la misma lista que la pagina de funcionalidades.
@@ -196,6 +196,35 @@ const GARANTIAS = [
             </div>
         </section>
 
+        <!-- ══════════════ Por qué cambiar ══════════════ -->
+        <!--
+            A la portada le sobraban funciones y le faltaba el argumento: quien
+            entra ya tiene una forma de trabajar y no la cambia porque le
+            enumeren pantallas, sino porque reconoce un problema propio.
+
+            Se contrasta con lo que la gente realmente usa hoy, no con un
+            competidor: cualquier cosa que se diga de otro producto queda vieja
+            o queda injusta.
+        -->
+        <section class="py-20 md:py-24">
+            <div class="max-w-5xl mx-auto px-5">
+                <div class="text-center max-w-2xl mx-auto">
+                    <h2 class="text-3xl md:text-4xl font-bold tracking-tight text-slate-900 dark:text-white">¿Y esto para qué?</h2>
+                    <p class="mt-4 text-lg text-slate-600 dark:text-slate-300">Lo que cambia el primer mes, comparado con lo que probablemente estés haciendo hoy.</p>
+                </div>
+
+                <div class="mt-14 space-y-4">
+                    <div v-for="p in POR_QUE" :key="p.hoy" class="grid md:grid-cols-[auto_1fr_1fr] gap-4 md:gap-6 items-start p-5 rounded-2xl border border-slate-200 dark:border-slate-800">
+                        <div class="w-10 h-10 rounded-xl grid place-items-center bg-slate-100 dark:bg-slate-800 shrink-0">
+                            <i class="pi text-slate-500 dark:text-slate-400" :class="p.icono"></i>
+                        </div>
+                        <p class="m-0 text-slate-500 dark:text-slate-400 line-through decoration-slate-300 dark:decoration-slate-600">{{ p.hoy }}</p>
+                        <p class="m-0 text-slate-800 dark:text-slate-100 font-medium">{{ p.con }}</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
         <!-- ══════════════ Cómo funciona ══════════════ -->
         <section class="py-20 md:py-24 bg-slate-50 dark:bg-slate-900/40 border-y border-slate-200 dark:border-slate-800">
             <div class="max-w-5xl mx-auto px-5">
@@ -239,6 +268,32 @@ const GARANTIAS = [
         </section>
 
         <!-- ══════════════ Cierre ══════════════ -->
+        <!-- ══════════════ Qué pasa con los datos ══════════════ -->
+        <!--
+            Estaba enterrado en una tarjeta entre otras diez funciones, y es de
+            lo poco que este producto tiene y casi ninguno ofrece. Además
+            responde la objeción real de quien duda: "si subo la historia
+            clínica de mis pacientes, ¿de quién pasa a ser?".
+        -->
+        <section class="py-20 md:py-24 bg-slate-50 dark:bg-slate-900/40 border-y border-slate-200 dark:border-slate-800">
+            <div class="max-w-5xl mx-auto px-5">
+                <div class="text-center max-w-2xl mx-auto">
+                    <h2 class="text-3xl md:text-4xl font-bold tracking-tight text-slate-900 dark:text-white">Los datos siguen siendo tuyos</h2>
+                    <p class="mt-4 text-lg text-slate-600 dark:text-slate-300">Lo que hacemos para que subir una historia clínica no sea entregarla.</p>
+                </div>
+
+                <div class="mt-14 grid md:grid-cols-3 gap-8 md:gap-6">
+                    <div v-for="d in SOBRE_LOS_DATOS" :key="d.titulo">
+                        <div class="w-11 h-11 rounded-xl grid place-items-center bg-white dark:bg-slate-800 ring-1 ring-slate-200 dark:ring-slate-700">
+                            <i class="pi text-primary-600 dark:text-primary-400" :class="d.icono"></i>
+                        </div>
+                        <h3 class="mt-5 font-semibold text-lg text-slate-900 dark:text-white">{{ d.titulo }}</h3>
+                        <p class="mt-2 text-sm leading-relaxed text-slate-600 dark:text-slate-400">{{ d.detalle }}</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
         <section class="py-20 md:py-28">
             <div class="max-w-4xl mx-auto px-5">
                 <div class="relative overflow-hidden rounded-3xl px-8 py-14 md:px-14 text-center ring-1 ring-primary-200 dark:ring-primary-900 bg-gradient-to-br from-primary-50 to-white dark:from-primary-950/40 dark:to-slate-900">

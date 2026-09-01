@@ -539,3 +539,67 @@ export const CON_PAGINA = FUNCIONES.filter((f) => f.slug && PAGINAS[f.slug]);
  * mudanza.
  */
 export const CORREO_CONTACTO = 'hola@fichasalud.com.ar';
+
+/**
+ * Por que esto y no lo que ya se usa.
+ *
+ * A la portada le sobraban funciones y le faltaba el argumento: quien entra ya
+ * tiene una forma de trabajar —un cuaderno, una planilla, WhatsApp— y no la
+ * cambia porque le enumeren pantallas, sino porque reconoce un problema propio.
+ *
+ * ⚠️ Cada linea contrasta con lo que la gente REALMENTE usa hoy, no con un
+ * competidor. Comparar contra un competidor obliga a describirlo, y cualquier
+ * cosa que se diga de otro producto queda vieja o queda injusta.
+ *
+ * ⚠️ Sin un cliente real no van numeros ni testimonios. "Ahorra 5 horas por
+ * semana" es la forma mas rapida de perder al primero que pregunte de donde
+ * sale ese numero.
+ */
+export const POR_QUE = [
+    {
+        icono: 'pi-search',
+        hoy: 'La historia está en un cuaderno o en carpetas',
+        con: 'Buscás por nombre o documento y aparece completa, con los adjuntos y quién escribió cada cosa.'
+    },
+    {
+        icono: 'pi-phone',
+        hoy: 'Los turnos se dan por teléfono y por WhatsApp',
+        con: 'El paciente reserva solo, sobre tu agenda real. No se dan dos turnos para el mismo horario porque lo impide la base, no la memoria de quien atiende.'
+    },
+    {
+        icono: 'pi-users',
+        hoy: 'Cada profesional tiene su propia planilla',
+        con: 'La ficha del paciente es una sola. Quien lo atienda ve lo que hicieron los demás, con la firma de cada uno.'
+    },
+    {
+        icono: 'pi-mobile',
+        hoy: 'Todo vive en la computadora del consultorio',
+        con: 'Entrás desde donde estés, con tu usuario. Si se rompe esa computadora no se pierde nada.'
+    }
+];
+
+/**
+ * Lo que pasa con los datos.
+ *
+ * Estaba enterrado en una tarjeta entre otras diez funciones, y es de lo poco
+ * que este producto tiene y casi ninguno ofrece. Ademas es la objecion real de
+ * quien duda: "si subo la historia clinica de mis pacientes, ¿de quien pasa a
+ * ser?".
+ */
+export const SOBRE_LOS_DATOS = [
+    {
+        icono: 'pi-shield',
+        titulo: 'Sellado en blockchain',
+        detalle: 'Cada historia se sella en la Blockchain Federal Argentina. Sirve para probar que lo que dice hoy es lo mismo que decía cuando se escribió — que es exactamente lo que se discute cuando una historia clínica llega a un juzgado.'
+    },
+    {
+        icono: 'pi-download',
+        titulo: 'Te las llevás cuando quieras',
+        detalle: 'Exportás todas tus historias en cualquier momento, y también si dás de baja la cuenta o dejás de pagar. Las historias clínicas son del paciente y del profesional, no del proveedor del software.'
+    },
+    {
+        icono: 'pi-lock',
+        titulo: 'Cada consultorio, su propia base',
+        detalle: 'Los datos de un consultorio están en una base separada, con su propio usuario. No es una tabla compartida donde un error de programación mezcla pacientes de dos clínicas.'
+    }
+];
