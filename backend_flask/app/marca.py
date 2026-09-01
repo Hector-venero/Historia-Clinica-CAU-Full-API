@@ -37,8 +37,50 @@ MODULOS_CONOCIDOS = (
     "blockchain",
 )
 
+# Que incluye cada plan.
+#
+# Hasta ahora `clientes.plan` era un texto que **no se traducia a modulos en
+# ninguna parte**: los modulos vivian sueltos en `clientes_config.modulos` y la
+# unica forma de cambiarlos era escribir la base a mano. Vender un plan y no
+# tener donde este escrito que incluye es como no tener planes.
+#
+# Las claves son las mismas que las de la pagina de precios
+# (`publico/datos.js` → PLANES). Que el sistema y el sitio usen dos vocabularios
+# distintos es como empieza a venderse una cosa y entregarse otra.
+#
+# `basico` es el nombre que puso el script de alta antes de que esto existiera.
+# Se conserva como sinonimo de `profesional` en vez de renombrarlo en la base:
+# renombrar es una migracion sobre clientes vivos para arreglar un alias.
+PLANES = {
+    "profesional": {
+        "modulos": ("turnos", "pacientes", "historias", "recetas"),
+        "blockchain": False,
+    },
+    "equipo": {
+        "modulos": (
+            "turnos", "pacientes", "historias", "recetas",
+            "grupos", "comunicados", "blockchain",
+        ),
+        "blockchain": True,
+    },
+}
+PLANES["basico"] = PLANES["profesional"]
+
+# Nombre para mostrar. El plan se le muestra a quien lo paga, y "basico" no es
+# como se llama en ningun lado de cara al cliente.
+NOMBRE_DE_PLAN = {
+    "profesional": "Profesional",
+    "basico": "Profesional",
+    "equipo": "Equipo",
+}
+
+# Con que se queda un consultorio cuyo plan no figura en el mapa. El plan chico
+# y no el grande: equivocarse para arriba es regalar lo que se vende, y nadie
+# reclama por eso — asi que no se entera nadie.
+PLAN_POR_DEFECTO = "profesional"
+
 # Lo que recibe un consultorio si su fila de configuracion todavia no existe.
-MODULOS_POR_DEFECTO = ("turnos", "pacientes", "historias", "recetas")
+MODULOS_POR_DEFECTO = PLANES[PLAN_POR_DEFECTO]["modulos"]
 
 
 def _cliente():
@@ -170,15 +212,49 @@ def publica():
 # ------------------------------------------------------------------- modulos
 
 
+def _definicion_del_plan(cliente):
+    """Lo que incluye el plan del consultorio, con respaldo al plan chico."""
+    clave = (getattr(cliente, "plan", None) or "").strip().lower()
+    return PLANES.get(clave) or PLANES[PLAN_POR_DEFECTO]
+
+
+def plan():
+    """El plan del consultorio: clave y nombre para mostrar.
+
+    None en la instalacion de un solo centro, que no tiene plan que mostrar.
+    """
+    cliente = _cliente()
+    if cliente is None:
+        return None
+    clave = (getattr(cliente, "plan", None) or PLAN_POR_DEFECTO).strip().lower()
+    return {
+        "clave": clave,
+        "nombre": NOMBRE_DE_PLAN.get(clave, clave.capitalize()),
+    }
+
+
 def modulos():
-    """Modulos habilitados para este consultorio, como conjunto."""
+    """Modulos habilitados para este consultorio, como conjunto.
+
+    El orden importa:
+
+    1. `clientes_config.modulos`, si esta cargado. Es un **override**, y existe
+       para poder venderle un modulo suelto a un consultorio sin inventar un
+       plan nuevo por cada combinacion.
+    2. Lo que incluye su plan.
+    3. Todo, en la instalacion de un solo centro, que no tiene planes.
+
+    Antes el paso 2 no existia: sin fila de configuracion todos recibian la
+    misma lista fija, con lo que el plan no encendia nada y contratar el grande
+    no cambiaba ni una pantalla.
+    """
     config = _config()
     if config and config.get("modulos"):
         return {m.strip() for m in config["modulos"].split(",") if m.strip()}
 
     cliente = _cliente()
     if cliente is not None:
-        return set(MODULOS_POR_DEFECTO)
+        return set(_definicion_del_plan(cliente)["modulos"])
 
     # Instalacion de un solo centro: todo habilitado, como siempre.
     return set(MODULOS_CONOCIDOS)
@@ -186,6 +262,18 @@ def modulos():
 
 def tiene_modulo(nombre_modulo):
     return nombre_modulo in modulos()
+
+
+def modulos_no_incluidos():
+    """Los que existen y este consultorio no tiene.
+
+    El frontend los usa para **mostrarlos igual, con candado**, en vez de
+    esconderlos. Un consultorio que nunca ve que existen los comunicados o las
+    agendas de grupo no los va a contratar nunca: esconder lo que no se contrato
+    protege al que no paga de una frustracion y le cuesta la venta al que si
+    pagaria.
+    """
+    return sorted(set(MODULOS_CONOCIDOS) - modulos())
 
 
 def blockchain_habilitado():
@@ -197,8 +285,10 @@ def blockchain_habilitado():
     config = _config()
     if config is not None:
         return bool(config.get("blockchain"))
-    if _cliente() is not None:
-        return False
+    cliente = _cliente()
+    if cliente is not None:
+        # Sin fila de configuracion manda el plan, igual que los modulos.
+        return bool(_definicion_del_plan(cliente)["blockchain"])
     return True
 
 

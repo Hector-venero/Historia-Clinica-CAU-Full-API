@@ -97,6 +97,11 @@ def _current_user_payload():
     from app import marca
 
     payload["modulos"] = sorted(marca.modulos())
+    # Lo que NO incluye el plan viaja igual, para poder mostrarlo con candado en
+    # vez de esconderlo: un consultorio que nunca ve que existen los comunicados
+    # no los va a contratar nunca.
+    payload["modulos_no_incluidos"] = marca.modulos_no_incluidos()
+    payload["plan"] = marca.plan()
     payload["marca"] = marca.publica()
     return payload
 

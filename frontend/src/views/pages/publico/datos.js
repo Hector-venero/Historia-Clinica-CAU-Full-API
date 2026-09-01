@@ -529,3 +529,13 @@ export function funcionPorSlug(slug) {
 
 /** Las funciones que tienen pagina propia, en el orden en que estan escritas. */
 export const CON_PAGINA = FUNCIONES.filter((f) => f.slug && PAGINAS[f.slug]);
+
+/**
+ * A donde escribe alguien que quiere hablar con una persona.
+ *
+ * ⚠️ El dominio todavia no esta registrado. Este es el unico lugar donde
+ * cambiarlo: lo usan el pie del sitio publico y la pantalla del plan dentro del
+ * sistema, y dos copias de una direccion de correo divergen a la primera
+ * mudanza.
+ */
+export const CORREO_CONTACTO = 'hola@fichasalud.com.ar';

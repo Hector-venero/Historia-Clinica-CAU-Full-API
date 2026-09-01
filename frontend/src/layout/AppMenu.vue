@@ -35,6 +35,29 @@ const model = computed(() => {
     const rol = userStore.rol?.toLowerCase().trim();
     const esDirector = rol === 'director';
 
+    /**
+     * Una sección que depende de un módulo del plan.
+     *
+     * Antes, lo que no estaba contratado simplemente no aparecía, y el
+     * consultorio nunca se enteraba de que existía: esconderlo le ahorra una
+     * frustración a quien no paga y le cuesta la venta a quien sí pagaría.
+     *
+     * Ahora aparece con candado y lleva a la pantalla del plan. Solo para la
+     * dirección: es quien decide qué se contrata, y al resto del equipo una
+     * entrada que no puede usar ni desbloquear es ruido.
+     *
+     * Esto es presentación. Quien decide de verdad es @requiere_modulo, en el
+     * servidor: la ruta sigue devolviendo 403.
+     */
+    function seccionDeModulo(modulo, seccion) {
+        if (userStore.tieneModulo(modulo)) return seccion;
+        if (!esDirector || !userStore.moduloBloqueado(modulo)) return { ...seccion, visible: false };
+        return {
+            ...seccion,
+            items: [{ label: 'No incluido en tu plan', icon: 'pi pi-fw pi-lock', to: '/plan' }]
+        };
+    }
+
     return [
         {
             label: 'Inicio',
@@ -51,7 +74,7 @@ const model = computed(() => {
             label: 'Historias Clínicas',
             items: [{ label: 'Ver Historias', icon: 'pi pi-fw pi-book', to: '/historias' }]
         },
-        {
+        seccionDeModulo('recetas', {
             label: 'Recetas y Prácticas',
             // Dos condiciones, porque son dos cosas distintas: el **módulo** dice
             // qué contrató el consultorio y el **rol**, quién puede emitir.
@@ -63,14 +86,13 @@ const model = computed(() => {
             //
             // Ocultar la entrada es presentación: quien decide de verdad son
             // @requiere_modulo y @requiere_rol en el backend.
-            visible: userStore.tieneModulo('recetas') && ['director', 'profesional'].includes(rol),
+            visible: ['director', 'profesional'].includes(rol),
             items: [{ label: 'Generar Receta', icon: 'pi pi-file-edit', to: '/recetas' }]
-        },
-        {
+        }),
+        seccionDeModulo('comunicados', {
             label: 'Comunicados',
-            visible: userStore.tieneModulo('comunicados'),
             items: [{ label: 'Ver Comunicados', icon: 'pi pi-fw pi-megaphone', to: '/comunicados' }]
-        },
+        }),
         {
             label: 'Turnos',
             items: [
@@ -123,18 +145,23 @@ const model = computed(() => {
             ]
         },
 
-        {
+        seccionDeModulo('grupos', {
             label: 'Agendas Grupales',
-            visible: userStore.tieneModulo('grupos'),
             items: [
                 { label: 'Ver grupos', icon: 'pi pi-fw pi-users', to: '/grupos' },
                 { label: 'Crear grupo', icon: 'pi pi-plus', to: '/grupos/crear', visible: esDirector }
             ]
-        },
-        {
+        }),
+        seccionDeModulo('blockchain', {
             label: 'Blockchain',
-            visible: userStore.tieneModulo('blockchain'),
             items: [{ label: 'Verificar Hash', icon: 'pi pi-fw pi-search', to: '/blockchain/verificar' }]
+        }),
+        {
+            label: 'Mi cuenta',
+            // Solo con planes. En la instalación de un solo centro no hay nada
+            // que mostrar: no se contrata, se instala.
+            visible: esDirector && !!userStore.plan,
+            items: [{ label: 'Plan y módulos', icon: 'pi pi-fw pi-verified', to: '/plan' }]
         },
         {
             label: 'Salir',

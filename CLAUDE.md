@@ -287,6 +287,32 @@ mentira.
   **nunca el documento**: es la llave con la que dos consultorios le envían a la
   misma persona.
 
+### El plan enciende los módulos
+
+`marca.PLANES` traduce `clientes.plan` a módulos. Antes esa traducción **no
+existía en ninguna parte**: los módulos vivían sueltos en
+`clientes_config.modulos`, la única forma de cambiarlos era escribir la base a
+mano, y contratar el plan grande no cambiaba ni una pantalla.
+
+El orden de resolución es: **override** de `clientes_config.modulos` → lo que
+incluye el plan → todo, en la instalación de un solo centro. El override existe
+para venderle un módulo suelto a alguien sin inventar un plan nuevo por cada
+combinación; una cadena vacía significa "sin override", no "ningún módulo".
+
+- **Las claves de plan son las mismas que las de la página de precios**
+  (`publico/datos.js` → `PLANES`): `profesional` y `equipo`. Que el sistema y el
+  sitio usen dos vocabularios es como se empieza a vender una cosa y entregar
+  otra; hay un test que lo vigila. `basico` es el nombre que puso el script de
+  alta antes de que esto existiera y se conserva como sinónimo.
+- **Un plan desconocido cae al chico**, no al grande: equivocarse para arriba
+  regala lo que se vende y no lo reclama nadie, así que no se entera nadie.
+- **Lo que no está contratado se muestra con candado, no se esconde.** Un
+  consultorio que nunca ve que existen los comunicados no los va a contratar
+  nunca. `marca.modulos_no_incluidos()` viaja en `/api/usuarios/me` y el menú lo
+  dibuja — solo para `director`, que es quien decide qué se contrata. La
+  pantalla es `/plan`, y **no tiene botón de contratar**: hoy no hay cobro
+  online, y un botón que no cobra promete algo que no pasa.
+
 ### Servicios (prestaciones)
 
 Un turno puede ser **de algo**: consulta, control, urgencia, cada uno con su
@@ -391,6 +417,9 @@ flask clientes                                           # listado y vencimiento
 flask cliente-estado <slug> suspendido --motivo "..."
 flask revisar-suscripciones [--dry-run]                  # cron diario
 flask cancelados-vencidos                                # solo lista; borrar es a mano
+flask cliente-plan <slug>                                # que plan tiene y que incluye
+flask cliente-plan <slug> equipo                         # cambiarlo
+flask cliente-plan <slug> --modulos "turnos,recetas"     # override; "" lo borra
 bash scripts/backup_plataforma.sh [slug]                 # copia por consultorio
 bash scripts/restaurar_cliente.sh <slug> <archivo.sql.gz>
 

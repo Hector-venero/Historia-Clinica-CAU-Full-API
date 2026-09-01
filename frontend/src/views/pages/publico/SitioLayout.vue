@@ -11,15 +11,11 @@ import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { useRoute } from 'vue-router';
 import { useLayout } from '@/layout/composables/layout';
 import logo from '@/assets/logo-ficha-salud.svg';
-import { AUDIENCIAS, funcionesDe } from './datos';
+import { AUDIENCIAS, CORREO_CONTACTO, funcionesDe } from './datos';
 import { PUBLICADO as LEGALES_PUBLICADOS } from './legales';
 
 const { toggleDarkMode, isDarkTheme } = useLayout();
 const route = useRoute();
-
-// ⚠️ El dominio todavia no esta registrado. Cuando lo este, esta constante es
-// el unico lugar donde cambiarlo.
-const CORREO_CONTACTO = 'hola@fichasalud.com.ar';
 
 // La barra se vuelve solida al bajar. Arriba compite con la portada; abajo, si
 // es transparente, el texto de la pagina se le mezcla al pasar por encima.

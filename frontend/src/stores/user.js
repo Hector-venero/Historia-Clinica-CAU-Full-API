@@ -67,6 +67,14 @@ export const useUserStore = defineStore('user', {
         // Arranca con todos habilitados para que una instalación de un solo
         // centro, donde el backend no manda el campo, no pierda su menú.
         modulos: ['turnos', 'pacientes', 'historias', 'recetas', 'grupos', 'comunicados', 'blockchain'],
+        // Lo que el plan NO incluye. Se muestra igual, con candado, en vez de
+        // esconderse: un consultorio que nunca ve que existen los comunicados o
+        // las agendas de grupo no los va a contratar nunca. Vacío en la
+        // instalación de un solo centro, que tiene todo.
+        modulosNoIncluidos: [],
+        // El plan contratado, para poder decírselo a quien lo paga. null cuando
+        // no hay planes (un solo centro).
+        plan: null,
         // Evita el rebote login -> dashboard mientras se está cerrando sesión.
         loggingOut: false
     }),
@@ -90,6 +98,10 @@ export const useUserStore = defineStore('user', {
             if (Array.isArray(data.modulos)) {
                 this.modulos = data.modulos;
             }
+            if (Array.isArray(data.modulos_no_incluidos)) {
+                this.modulosNoIncluidos = data.modulos_no_incluidos;
+            }
+            this.plan = data.plan ?? null;
 
             this.loggingOut = false;
 
@@ -138,6 +150,9 @@ export const useUserStore = defineStore('user', {
         isDirector: (state) => state.rol === 'director',
         isProfesional: (state) => state.rol === 'profesional',
         isAdministrativo: (state) => state.rol === 'administrativo',
-        tieneModulo: (state) => (nombre) => state.modulos.includes(nombre)
+        tieneModulo: (state) => (nombre) => state.modulos.includes(nombre),
+        // Que el módulo exista y no esté contratado. Distinto de "no existe":
+        // solo lo primero merece una invitación a contratarlo.
+        moduloBloqueado: (state) => (nombre) => state.modulosNoIncluidos.includes(nombre)
     }
 });

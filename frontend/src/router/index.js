@@ -165,6 +165,13 @@ const router = createRouter({
                     meta: { roles: ['profesional', 'director'] }
                 },
                 {
+                    path: 'plan',
+                    name: 'plan',
+                    component: () => import('@/views/pages/cuenta/Plan.vue'),
+                    // Solo la dirección: es quien decide qué se contrata.
+                    meta: { roles: ['director'] }
+                },
+                {
                     path: 'turnos/servicios',
                     name: 'servicios',
                     component: () => import('@/views/pages/turnos/Servicios.vue'),

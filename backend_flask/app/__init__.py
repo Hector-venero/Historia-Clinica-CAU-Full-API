@@ -303,6 +303,64 @@ def cliente_estado_command(slug, estado, motivo):
     click.echo(f"{slug}: {estado}")
 
 
+@app.cli.command("cliente-plan")
+@click.argument("slug")
+@click.argument("plan", required=False)
+@click.option("--modulos", default=None,
+              help="Lista separada por comas que PISA lo que trae el plan. "
+                   "Vacio ('') borra el override y vuelve a mandar el plan.")
+def cliente_plan_command(slug, plan, modulos):
+    """Muestra o cambia el plan de un consultorio.
+
+    Sin PLAN solo informa. Es la unica forma que habia de cambiar los modulos
+    sin escribir la base a mano.
+
+    `--modulos` existe para venderle un modulo suelto a alguien sin inventar un
+    plan nuevo por cada combinacion posible.
+    """
+    from app import marca, plataforma
+    from app.tenancy import TTL_CACHE_SEGUNDOS, olvidar
+
+    cliente = plataforma.buscar_por_slug(slug)
+    if cliente is None:
+        raise click.ClickException(f"No existe el consultorio '{slug}'.")
+
+    if plan is None and modulos is None:
+        incluidos = marca.PLANES.get(
+            (cliente.plan or "").lower(), marca.PLANES[marca.PLAN_POR_DEFECTO]
+        )
+        propios = (cliente.config or {}).get("modulos")
+        click.echo(f"{slug}: plan={cliente.plan}")
+        click.echo(f"  el plan incluye : {', '.join(incluidos['modulos'])}")
+        click.echo(f"  override         : {propios or '(ninguno)'}")
+        return
+
+    if plan is not None:
+        if plan not in marca.PLANES:
+            conocidos = ", ".join(sorted(marca.PLANES))
+            raise click.ClickException(f"Plan desconocido. Conocidos: {conocidos}.")
+        with plataforma.cursor_plataforma(commit=True) as (_conn, cur):
+            cur.execute("UPDATE clientes SET plan = %s WHERE slug = %s", (plan, slug))
+
+    if modulos is not None:
+        limpios = [m.strip() for m in modulos.split(",") if m.strip()]
+        desconocidos = set(limpios) - set(marca.MODULOS_CONOCIDOS)
+        if desconocidos:
+            raise click.ClickException(
+                f"Modulos desconocidos: {', '.join(sorted(desconocidos))}."
+            )
+        # Vacio se guarda como '' y no como NULL: la columna es NOT NULL, y
+        # `marca.modulos()` ya trata la cadena vacia como "sin override" — que
+        # es distinto de "ningun modulo", con el que el consultorio se quedaria
+        # sin sistema.
+        plataforma.guardar_config(cliente.id, modulos=",".join(limpios))
+
+    # El catalogo esta cacheado en memoria y este comando corre en otro proceso
+    # que el servidor web: sin invalidar, el cambio tarda hasta el TTL.
+    olvidar(slug)
+    click.echo(f"{slug}: listo. Puede tardar hasta {TTL_CACHE_SEGUNDOS}s en verse.")
+
+
 @app.cli.command("cancelados-vencidos")
 def cancelados_vencidos_command():
     """Cancelados cuyo plazo de retencion ya paso.
