@@ -287,6 +287,51 @@ mentira.
   **nunca el documento**: es la llave con la que dos consultorios le envían a la
   misma persona.
 
+### Ajustes del consultorio y avisos
+
+`app/ajustes.py` sobre la tabla `configuracion` (clave/valor) de la base de
+**cada consultorio**. Hasta ahora el correo se mandaba siempre y no había forma
+de apagarlo: un consultorio que ya avisa por WhatsApp le mandaba al paciente dos
+confirmaciones del mismo turno.
+
+Va en la base del consultorio y **no** en `clientes_config` del plano de control
+por dos razones: `clientes_config` solo existe con `MULTI_TENANT`, y estos son
+ajustes de *cómo trabaja* el consultorio, no de *qué contrató* — el plan dice qué
+módulos tiene, esto dice cómo los usa.
+
+- **Sin fila rige el valor por defecto**, y todos los valores por defecto dicen
+  que sí. Un consultorio que actualiza el sistema no puede dejar de avisarle a
+  sus pacientes porque apareció un interruptor que nunca tocó. No se siembran
+  filas al crear la base: fila ausente y fila con el valor por defecto significan
+  lo mismo.
+- **Ante cualquier duda se avisa.** Clave desconocida, tabla sin migrar o base
+  caída devuelven `True`: dejar de avisarle a un paciente por un problema del
+  sistema es peor que mandar un correo de más.
+- **La comprobación va antes de `enviar_en_segundo_plano()`**, o sea en el hilo
+  del request. Adentro del hilo de correo no hay inquilino en `flask.g`.
+- ⚠️ `flask enviar-alertas` corre desde cron, **fuera del ciclo de request**. Con
+  `MULTI_TENANT` hay que entrar al contexto de cada consultorio antes de llamarlo.
+
+Los ajustes viajan al frontend **con su título y su explicación**
+(`ajustes.descripcion()`): la pantalla se dibuja con lo que reciba, así que sumar
+un aviso es un solo lugar y no dos que se contradicen.
+
+### Toda la configuración en una pantalla
+
+`/configuracion`, con una pestaña por sección. Estaba repartida en cuatro rutas
+sin relación entre sí —`/disponibilidad`, `/turnos/configuracion`,
+`/turnos/agenda-publica`, `/turnos/servicios`—, cada una colgada de una parte
+distinta del menú: poner en marcha un consultorio era ir a buscarlas de a una sin
+que nada dijera que existían.
+
+**Cada pestaña es una ruta hija de verdad**, no un estado interno, así que se
+puede guardar el enlace y volver con el botón de atrás. Las cuatro rutas viejas
+siguen vivas redirigiendo.
+
+⚠️ Los roles se declaran en **tres** lugares que tienen que coincidir: la pestaña
+en `Configuracion.vue`, el `meta.roles` de la ruta hija y el `@requiere_rol` del
+backend. El logo del consultorio todavía vive en Mi Perfil.
+
 ### El plan enciende los módulos
 
 `marca.PLANES` traduce `clientes.plan` a módulos. Antes esa traducción **no

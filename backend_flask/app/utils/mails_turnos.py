@@ -163,9 +163,17 @@ def enviar_confirmacion(paciente, profesional, inicio, fin, motivo=None, modalid
 
     No propaga excepciones: un fallo del servidor de correo no debe impedir que
     el turno quede agendado. Se registra en el log y sigue.
+
+    El consultorio puede apagarlo (ver `app/ajustes.py`): el que ya avisa por
+    WhatsApp le estaba mandando al paciente dos confirmaciones del mismo turno.
     """
     email = (paciente or {}).get("email")
     if not email:
+        return False
+
+    from app import ajustes
+
+    if not ajustes.activo("avisar_turno_nuevo"):
         return False
 
     try:
@@ -229,6 +237,11 @@ def enviar_cancelacion(paciente, profesional_nombre, inicio):
     """Avisa por mail que el turno fue cancelado. Tampoco propaga excepciones."""
     email = (paciente or {}).get("email")
     if not email:
+        return False
+
+    from app import ajustes
+
+    if not ajustes.activo("avisar_turno_cancelado"):
         return False
 
     try:

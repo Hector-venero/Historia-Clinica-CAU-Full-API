@@ -127,6 +127,36 @@ def borrar_logo():
     return jsonify({"message": "Logo eliminado"}), 200
 
 
+@bp_marca.get("/api/ajustes")
+@login_required
+@requiere_rol("director", "administrativo")
+def leer_ajustes():
+    """Los avisos del consultorio, con su titulo y su explicacion.
+
+    El texto viaja desde el servidor (`ajustes.descripcion()`) para que sumar un
+    aviso sea un solo lugar: la pantalla se dibuja con lo que reciba.
+    """
+    from app import ajustes
+
+    return jsonify({"ajustes": ajustes.descripcion()})
+
+
+@bp_marca.put("/api/ajustes")
+@login_required
+@requiere_rol("director")
+def guardar_ajustes():
+    """Apagar los avisos del consultorio es de la direccion.
+
+    Un administrativo puede verlos —para saber por que un paciente no recibio
+    el correo— pero no decidir que el consultorio deje de avisar.
+    """
+    from app import ajustes
+
+    datos = request.get_json(silent=True) or {}
+    ajustes.guardar(datos.get("ajustes") or datos)
+    return jsonify({"ajustes": ajustes.descripcion(), "message": "Ajustes guardados"})
+
+
 @bp_marca.get("/static/marcas/<path:nombre>")
 @bp_marca.get("/api/static/marcas/<path:nombre>")
 def servir_logo(nombre):

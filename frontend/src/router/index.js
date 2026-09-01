@@ -157,36 +157,78 @@ const router = createRouter({
                     component: () => import('@/views/pages/historias/NuevoTurno.vue')
                 },
                 {
-                    path: 'turnos/agenda-publica',
-                    name: 'AgendaPublica',
-                    component: () => import('@/views/pages/turnos/AgendaPublica.vue'),
-                    // Solo quien atiende pacientes: un administrativo no tiene
-                    // agenda propia que publicar.
-                    meta: { roles: ['profesional', 'director'] }
-                },
-                {
                     path: 'plan',
                     name: 'plan',
                     component: () => import('@/views/pages/cuenta/Plan.vue'),
                     // Solo la dirección: es quien decide qué se contrata.
                     meta: { roles: ['director'] }
                 },
+
+                // 📌 Configuración, todo junto.
+                //
+                // Estaba repartida en cuatro rutas sin relación entre sí, cada
+                // una colgada de una parte distinta del menú. Cada pestaña es
+                // una ruta hija de verdad —no un estado interno— así que se
+                // puede guardar el enlace y volver con el botón de atrás.
+                //
+                // Los `roles` de cada hija son los mismos que declara su
+                // pestaña en Configuracion.vue y los mismos que exige el
+                // backend. Las tres listas tienen que coincidir: ofrecer algo
+                // que después se rechaza hace completar una pantalla entera
+                // para comerse un 403.
                 {
-                    path: 'turnos/servicios',
-                    name: 'servicios',
-                    component: () => import('@/views/pages/turnos/Servicios.vue'),
-                    // Mismos roles que el @requiere_rol del backend. El `area`
-                    // queda afuera: coordina agendas de grupo, no define las
-                    // prestaciones que factura el consultorio.
-                    meta: { roles: ['director', 'administrativo', 'profesional'] }
+                    path: 'configuracion',
+                    component: () => import('@/views/pages/configuracion/Configuracion.vue'),
+                    meta: { requiresAuth: true },
+                    children: [
+                        { path: '', redirect: '/configuracion/disponibilidad' },
+                        {
+                            path: 'disponibilidad',
+                            name: 'disponibilidadProfesional',
+                            component: () => import('@/views/pages/disponibilidades/DisponibilidadProfesional.vue'),
+                            meta: { roles: ['profesional', 'director', 'area'] }
+                        },
+                        {
+                            path: 'turnos',
+                            name: 'configuracionTurnos',
+                            component: () => import('@/views/pages/turnos/ConfiguracionTurnos.vue'),
+                            meta: { roles: ['profesional', 'director', 'area'] }
+                        },
+                        {
+                            path: 'servicios',
+                            name: 'servicios',
+                            component: () => import('@/views/pages/turnos/Servicios.vue'),
+                            // El `area` queda afuera: coordina agendas de grupo,
+                            // no define las prestaciones que factura el centro.
+                            meta: { roles: ['director', 'administrativo', 'profesional'] }
+                        },
+                        {
+                            path: 'online',
+                            name: 'AgendaPublica',
+                            component: () => import('@/views/pages/turnos/AgendaPublica.vue'),
+                            // Solo quien atiende pacientes: un administrativo no
+                            // tiene agenda propia que publicar.
+                            meta: { roles: ['profesional', 'director'] }
+                        },
+                        {
+                            path: 'avisos',
+                            name: 'avisos',
+                            component: () => import('@/views/pages/configuracion/Avisos.vue'),
+                            // El administrativo los ve —puede necesitar saber por
+                            // qué un paciente no recibió el correo— pero el PUT
+                            // es solo de la dirección, y eso lo corta el backend.
+                            meta: { roles: ['director', 'administrativo'] }
+                        }
+                    ]
                 },
-                {
-                    path: 'turnos/configuracion',
-                    name: 'configuracionTurnos',
-                    component: () => import('@/views/pages/turnos/ConfiguracionTurnos.vue'),
-                    // Permitimos a todos los que gestionan agenda
-                    meta: { roles: ['profesional', 'director', 'area'] }
-                },
+
+                // Las rutas viejas siguen vivas: alguien pudo dejarlas
+                // guardadas, y un enlace que deja de funcionar es peor que uno
+                // que lleva al lugar nuevo.
+                { path: 'turnos/agenda-publica', redirect: '/configuracion/online' },
+                { path: 'turnos/servicios', redirect: '/configuracion/servicios' },
+                { path: 'turnos/configuracion', redirect: '/configuracion/turnos' },
+                { path: 'disponibilidad', redirect: '/configuracion/disponibilidad' },
 
                 // 📌 Usuarios (🔒 SECCIÓN BLINDADA - SOLO DIRECTOR)
                 {
@@ -227,13 +269,6 @@ const router = createRouter({
                     name: 'cambiarPassword',
                     component: () => import('@/views/pages/usuarios/CambiarPassword.vue'),
                     meta: { requiresAuth: true }
-                },
-
-                // 📌 Disponibilidades
-                {
-                    path: 'disponibilidad',
-                    name: 'disponibilidadProfesional',
-                    component: () => import('@/views/pages/disponibilidades/DisponibilidadProfesional.vue')
                 },
 
                 // 📌 Grupos

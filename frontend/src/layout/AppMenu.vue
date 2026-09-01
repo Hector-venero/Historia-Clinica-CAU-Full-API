@@ -98,39 +98,15 @@ const model = computed(() => {
             items: [
                 { label: 'Agenda', icon: 'pi pi-fw pi-calendar', to: '/turnos' },
                 { label: 'Nuevo Turno', icon: 'pi pi-fw pi-calendar-plus', to: '/turnos/nuevo' },
-                // Las dos pantallas de ajustes van agrupadas: son lo que se
-                // toca al configurar la agenda (que dias se atiende y de cuanto
-                // es cada turno), no algo del uso diario. Sueltas al mismo nivel
-                // que Agenda y Nuevo Turno, competian en peso con lo que se usa
-                // todos los dias.
-                {
-                    label: 'Configuración',
-                    icon: 'pi pi-fw pi-cog',
-                    items: [
-                        { label: 'Disponibilidad', icon: 'pi pi-fw pi-clock', to: '/disponibilidad' },
-                        {
-                            label: 'Turnos online',
-                            icon: 'pi pi-fw pi-globe',
-                            to: '/turnos/agenda-publica',
-                            // Solo quien atiende pacientes tiene agenda que publicar.
-                            visible: ['profesional', 'director'].includes(rol)
-                        },
-                        {
-                            label: 'Servicios',
-                            icon: 'pi pi-fw pi-list',
-                            to: '/turnos/servicios',
-                            // Los mismos roles que la ruta y que el backend: el
-                            // `area` no define las prestaciones del consultorio.
-                            visible: ['director', 'administrativo', 'profesional'].includes(rol)
-                        },
-                        {
-                            label: 'Duración de turnos',
-                            icon: 'pi pi-fw pi-sliders-h',
-                            to: '/turnos/configuracion',
-                            visible: ['profesional', 'director', 'area'].includes(rol)
-                        }
-                    ]
-                }
+                // Una sola entrada. Antes eran cuatro pantallas sueltas
+                // repartidas por el menú, y poner en marcha un consultorio era
+                // ir a buscarlas de a una sin que nada dijera que existían.
+                //
+                // Cada pestaña de esa pantalla filtra por rol con la misma
+                // lista que declara su ruta, así que acá alcanza con exigir el
+                // rol que ve *alguna*: el `area` configura disponibilidad y
+                // duración, el administrativo servicios y avisos.
+                { label: 'Configuración', icon: 'pi pi-fw pi-cog', to: '/configuracion' }
             ]
         },
 

@@ -148,6 +148,21 @@ CREATE TABLE evolucion_archivos (
   COLLATE=utf8mb4_unicode_ci;
 
 -- ==============================================
+-- AJUSTES DEL CONSULTORIO
+-- ==============================================
+-- Clave/valor. Los tipos y los valores por defecto viven en `app/ajustes.py`:
+-- sin fila, rige el valor por defecto. Va acá y no en el plano de control
+-- porque son ajustes de cómo trabaja el consultorio —no de qué contrató— y
+-- porque así la instalación de un solo centro también los tiene.
+CREATE TABLE configuracion (
+    clave VARCHAR(60) NOT NULL PRIMARY KEY,
+    valor VARCHAR(255) NOT NULL,
+    actualizado_en DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB
+  DEFAULT CHARSET=utf8mb4
+  COLLATE=utf8mb4_unicode_ci;
+
+-- ==============================================
 -- SERVICIOS (PRESTACIONES)
 -- ==============================================
 -- Cada turno puede ser *de algo*: consulta, control, urgencia, con su duracion

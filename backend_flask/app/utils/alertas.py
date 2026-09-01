@@ -167,7 +167,21 @@ def procesar_y_enviar_alertas(dry_run=False):
     fecha_con_dia = f"{dia_nombre} {fecha_bonita}"
     
     current_app.logger.info(f"Iniciando proceso de alertas de turnos para: {fecha_con_dia}")
-    
+
+    # El consultorio puede apagarlo (ver app/ajustes.py). Se comprueba una sola
+    # vez y antes de buscar a nadie: apagado, no hay nada que calcular.
+    #
+    # ⚠️ Este proceso corre desde cron, o sea FUERA del ciclo de request, donde
+    # no hay inquilino en `flask.g`. Con MULTI_TENANT hay que entrar al contexto
+    # de cada consultorio antes de llamar a esta funcion — igual que ya pasa con
+    # la base, que sale del mismo lugar.
+    from app import ajustes
+
+    if not ajustes.activo("resumen_diario"):
+        current_app.logger.info("El resumen diario está apagado para este consultorio.")
+        return {"profesionales": 0, "enviados": 0, "simulados": 0, "errores": 0, "apagado": True}
+
+
     # 1. Obtener profesionales disponibles mañana
     profesionales = []
     try:
