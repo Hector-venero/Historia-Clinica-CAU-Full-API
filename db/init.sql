@@ -163,6 +163,25 @@ CREATE TABLE configuracion (
   COLLATE=utf8mb4_unicode_ci;
 
 -- ==============================================
+-- PLANTILLAS DE TEXTO CLÍNICO
+-- ==============================================
+-- Lo que se repite al escribir una evolución. `usuario_id` NULL = del
+-- consultorio; `campo` separa evolución de indicaciones.
+CREATE TABLE plantillas_texto (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    usuario_id INT NULL,
+    campo VARCHAR(30) NOT NULL DEFAULT 'evolucion',
+    nombre VARCHAR(120) NOT NULL,
+    cuerpo TEXT NOT NULL,
+    activo TINYINT(1) NOT NULL DEFAULT 1,
+    creado_en DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE,
+    INDEX idx_plantillas_uso (campo, activo, usuario_id)
+) ENGINE=InnoDB
+  DEFAULT CHARSET=utf8mb4
+  COLLATE=utf8mb4_unicode_ci;
+
+-- ==============================================
 -- SERVICIOS (PRESTACIONES)
 -- ==============================================
 -- Cada turno puede ser *de algo*: consulta, control, urgencia, con su duracion

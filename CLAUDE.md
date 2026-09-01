@@ -316,6 +316,27 @@ Los ajustes viajan al frontend **con su título y su explicación**
 (`ajustes.descripcion()`): la pantalla se dibuja con lo que reciba, así que sumar
 un aviso es un solo lugar y no dos que se contradicen.
 
+### Plantillas de texto clínico
+
+`plantillas_texto` por consultorio, con el mismo modelo que `servicios`:
+`usuario_id` NULL es del consultorio, con valor es de ese profesional, y un
+profesional solo administra las suyas. `campo` (`evolucion` | `indicaciones`)
+las separa: un texto de indicaciones no sirve como evolución, y mezclarlas
+obliga a leer veinte opciones para encontrar una.
+
+- **La plantilla es un punto de partida, no el texto final.** Se inserta en el
+  formulario y se edita antes de guardar; nunca se escribe sola en una
+  evolución.
+- **Inserta, no reemplaza.** Con el campo vacío pone el texto; con algo escrito
+  lo agrega debajo. Pisar lo que alguien ya escribió en una historia clínica por
+  un clic mal dado no se puede deshacer desde la pantalla.
+- **Acá sí se borra de verdad**, a diferencia de `servicios`: lo que queda en la
+  evolución es el texto copiado, no un puntero, así que borrarla no deja
+  huérfano a ningún registro clínico.
+- ⚠️ El filtro de la lista que se ofrece al escribir es lo delicado: las del
+  profesional que escribe **más** las del consultorio. Sin él, un profesional
+  vería los textos con los que otro describe a sus pacientes.
+
 ### Toda la configuración en una pantalla
 
 `/configuracion`, con una pestaña por sección. Estaba repartida en cuatro rutas

@@ -10,6 +10,7 @@ import { useRouter } from 'vue-router';
 import DatePicker from 'primevue/datepicker';
 import { fechaBonitaClinica, fechaBonitaCompleta } from '@/utils/formatDate.js';
 import { descargarPdfDesde } from '@/utils/descargas.js';
+import SelectorPlantilla from '@/components/SelectorPlantilla.vue';
 import { nextTick } from 'vue';
 import { computed } from 'vue';
 
@@ -375,10 +376,16 @@ onMounted(fetchHistoria);
 
             <DatePicker v-model="fecha" dateFormat="dd/mm/yy" :showIcon="true" class="p-inputtext p-component w-full h-12 mb-4" />
 
-            <label for="contenido" class="block font-medium mb-2 text-surface-700 dark:text-surface-200">Evolución</label>
+            <div class="flex items-center justify-between mb-2">
+                <label for="contenido" class="block font-medium text-surface-700 dark:text-surface-200">Evolución</label>
+                <SelectorPlantilla v-model="contenido" campo="evolucion" />
+            </div>
             <textarea v-model="contenido" rows="5" class="p-2 border rounded w-full mb-4" placeholder="Escribí la evolución clínica..."></textarea>
 
-            <label for="indicaciones" class="block font-medium mb-2 text-surface-700 dark:text-surface-200">Indicaciones</label>
+            <div class="flex items-center justify-between mb-2">
+                <label for="indicaciones" class="block font-medium text-surface-700 dark:text-surface-200">Indicaciones</label>
+                <SelectorPlantilla v-model="indicaciones" campo="indicaciones" />
+            </div>
             <textarea v-model="indicaciones" rows="3" class="p-2 border rounded w-full mb-4" placeholder="Escribí las indicaciones médicas (opcional)..."></textarea>
 
             <label class="block font-medium mb-2 text-surface-700 dark:text-surface-200">Archivos adjuntos</label>

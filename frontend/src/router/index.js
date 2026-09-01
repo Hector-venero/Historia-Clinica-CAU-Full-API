@@ -211,6 +211,16 @@ const router = createRouter({
                             meta: { roles: ['profesional', 'director'] }
                         },
                         {
+                            path: 'plantillas',
+                            name: 'plantillas',
+                            component: () => import('@/views/pages/configuracion/Plantillas.vue'),
+                            // Quien escribe en la historia clínica. Un
+                            // administrativo no redacta evoluciones, así que
+                            // tampoco define las plantillas con las que se
+                            // redactan.
+                            meta: { roles: ['director', 'profesional'] }
+                        },
+                        {
                             path: 'avisos',
                             name: 'avisos',
                             component: () => import('@/views/pages/configuracion/Avisos.vue'),

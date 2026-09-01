@@ -29,6 +29,7 @@ const SOLAPAS = [
     { to: '/configuracion/turnos', titulo: 'Duración de turnos', icono: 'pi-sliders-h', roles: ['director', 'profesional', 'area'] },
     { to: '/configuracion/servicios', titulo: 'Servicios', icono: 'pi-list', roles: ['director', 'administrativo', 'profesional'] },
     { to: '/configuracion/online', titulo: 'Turnos online', icono: 'pi-globe', roles: ['director', 'profesional'] },
+    { to: '/configuracion/plantillas', titulo: 'Plantillas', icono: 'pi-bolt', roles: ['director', 'profesional'] },
     { to: '/configuracion/avisos', titulo: 'Avisos', icono: 'pi-envelope', roles: ['director', 'administrativo'] }
 ];
 
