@@ -1,8 +1,8 @@
 # Mejoras de la pasada de QA — resueltas
 
 > **Este documento es un registro cerrado.** Lo que sigue abierto está en
-> [PENDIENTES.md](PENDIENTES.md); el detalle de qué se trajo del fork y qué no,
-> en [RECONCILIACION-FORK.md](RECONCILIACION-FORK.md).
+> [PENDIENTES.md](../PENDIENTES.md); el detalle de qué se trajo del fork y qué no,
+> en [RECONCILIACION-FORK.md](../RECONCILIACION-FORK.md).
 
 Los 15 problemas que salieron de la pasada de QA del 25/08/2026, posterior a la
 reconciliación con el fork. **Los 15 están resueltos**, salvo el de rotación de

@@ -139,7 +139,9 @@ Key frontend libraries: PrimeVue 4, FullCalendar 5 (turnos/grupos), vee-validate
 - **`utils/mails_turnos.py`** — plantillas HTML de confirmación y cancelación de turnos, con invitación `.ics` adjunta
 - **`utils/mails_comunicados.py`** — aviso de comunicado importante. Los destinatarios van en **Bcc**: son todos los usuarios del sistema y en `To` cada persona vería la lista de mails del equipo. Sin `MAIL_DEFAULT_SENDER` configurado no manda nada, en vez de poner a un destinatario real en `To` para tener un remitente válido
 - **`utils/correo.py`** — `enviar_en_segundo_plano()`: un hilo por mensaje, con su propio `app_context`. El envío era síncrono dentro del request y un SMTP lento demoraba la respuesta de la API. No es una cola con reintentos; si algún día hace falta garantizar la entrega, el punto de cambio es este módulo
-- **`utils/fechas.py`** — `TZ_ARG` y `a_iso_arg()`. Vivía dentro de `turnos_routes.py`; se compartió cuando el calendario de grupos necesitó lo mismo, para no dejar dos definiciones que pudieran divergir en silencio
+- **`utils/fechas.py`** — `TZ_ARG` y `a_iso_arg()`. Vivía dentro de `turnos_routes.py`; se compartió cuando el calendario de grupos necesitó lo mismo, para no dejar dos definiciones que pudieran divergir en silencio.
+
+  ⚠️ **Toda fecha que salga en un JSON pasa por `a_iso_arg()`.** `jsonify` serializa los `DATETIME` al formato de fecha HTTP **etiquetado como GMT** aunque estén guardados en hora argentina, así que quien los lea como UTC los corre tres horas. Ya pasó tres veces: en `/api/ausencias` (un bloqueo de día completo se leía de 21:00 del día anterior a 20:59, y por eso nunca se reconocía como día completo), en `/api/portal/mis-turnos`, y es el error que hay que buscar primero cuando una hora aparece corrida
 - **`utils/alertas.py`** — resumen diario de agenda por mail (`flask enviar-alertas [--dry-run]`, disparado por cron)
 - **`migrate.py`** — runner de migraciones que corre al arrancar. Trackea por checksum y solo marca aplicada una migración si **todas** sus sentencias pasaron
 

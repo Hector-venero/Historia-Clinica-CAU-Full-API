@@ -32,7 +32,7 @@ comunicados, los grupos y el runner de migraciones, y corrigió en el camino la
 verificación de blockchain, los anclajes append-only y el hash versionado.
 
 El detalle de lo que salió de la pasada de QA posterior está en
-[MEJORAS-QA.md](MEJORAS-QA.md).
+[historico/MEJORAS-QA.md](historico/MEJORAS-QA.md).
 
 **Lo que esa fase dejó afuera sin querer:** el frontend del calendario. Se llevó
 `turnos_routes.py` pero `Turnos.vue` y `CalendarioGrupo.vue` quedaron en la

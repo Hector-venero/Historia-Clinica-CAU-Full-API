@@ -5,12 +5,20 @@ sitio público publicado, la videoconsulta funcionando y una pasada de arreglos
 sobre lo que apareció al usar las pantallas de verdad. Cada punto trae cómo se detectó y cómo
 reproducirlo, para no tener que volver a investigarlo desde cero.
 
-Los ítems tachados quedan un tiempo con la explicación de cómo se cerraron: en
-varios casos la conclusión fue distinta del reporte original, y esa corrección
-vale más que el ítem.
+**Acá va lo que NO está en la pasada de QA en curso.** Los trece hallazgos de
+septiembre viven en [QA-2026-09.md](QA-2026-09.md), que es la lista viva mientras
+esa pasada esté abierta; cuando se cierre, lo que quede sin resolver vuelve acá.
+Tener las dos listas con lo mismo era la forma segura de que una quedara vieja
+sin que nadie se enterara.
 
-El registro de lo ya resuelto está en [MEJORAS-QA.md](MEJORAS-QA.md) (los 15
-problemas de la pasada de QA del 25/08) y en el historial de commits.
+Un ítem tachado se borra **cuando su lección ya está en `CLAUDE.md` o
+`SAAS.md`**. Ese es el criterio, y no "cuando pase un tiempo": mientras la
+enseñanza viva solo acá, borrarlo la pierde. Varias veces la conclusión terminó
+siendo distinta del reporte original, y esa corrección vale más que el ítem.
+
+El registro de lo ya resuelto está en
+[historico/MEJORAS-QA.md](historico/MEJORAS-QA.md) (los 15 problemas de la
+pasada del 25/08) y en el historial de commits.
 
 ---
 
@@ -32,35 +40,7 @@ correspondiente y actualizar el `.env` de producción.
 
 ---
 
-## 2. ~~"Bloquear un día" en Agenda del profesional está roto~~ ✅ cerrado el 26/08/2026
-
-**Corrección sobre el reporte original:** los dos errores eran reales
-(mandaba `{fecha}` cuando la API pide `fecha_inicio`/`fecha_fin`, y la tabla
-leía una columna `fecha` inexistente), pero `AgendaProfesional.vue` **no tenía
-ruta, ni import, ni entrada de menú**. Era código inalcanzable: nadie podía
-toparse con el bug.
-
-Bloquear un día **sí funciona**, desde el modal del calendario en `Turnos.vue`,
-que manda la forma correcta y contempla día completo y rango parcial.
-
-El archivo se eliminó junto con el resto del código muerto.
-
----
-
-## 3. ~~`/api/ausencias` miente sobre la zona horaria~~ ✅ resuelto el 26/08/2026
-
-Devolvía los `DATETIME` con `jsonify` por defecto, que los serializa al formato
-de fecha HTTP **etiquetado como GMT** aunque estén guardados en hora argentina,
-y eso corría el valor tres horas en cualquier consumidor que lo leyera como UTC.
-
-Se corrigió con `a_iso_arg()` al implementar el bloqueo de días en Nuevo Turno,
-que era justamente lo que el bug rompía: un bloqueo de día completo se leía como
-21:00 del día anterior a 20:59 y por lo tanto nunca se reconocía como día
-completo. Verificado bajo `America/Argentina/Buenos_Aires`.
-
----
-
-## 4. ~~Datos con doble codificación UTF-8 en la base~~ ✅ cerrado el 30/08/2026
+## 2. ~~Datos con doble codificación UTF-8 en la base~~ ✅ cerrado el 30/08/2026
 
 **Corrección sobre el reporte original:** decía "es un problema de datos, no de
 código", y era cierto, pero faltaba la causa —que es lo que impedía cerrarlo—.
@@ -92,29 +72,23 @@ del plano de control pero NO la base del entorno**: `hc_bfa` necesitó
 
 ---
 
-## 5. Antes de vender — depende de Hector, no del código
+## 3. Antes de vender — depende de Hector, no del código
 
 - **Verificar `fichasalud.com.ar`** y hacer una búsqueda en el INPI antes de
   fijar el nombre. Si no está libre, el cambio es barato: la marca está
   centralizada en `marca.py` y `stores/marca.js`.
-- **Reemplazar el logo.** `frontend/src/assets/logo-ficha-salud.svg` es un
-  provisorio hecho para no mostrar el escudo de la UNSAM a un consultorio ajeno.
-- **Definir los precios.** El sitio no publica importes a propósito: poner un
-  número inventado sería comprometer a Hector con algo que no decidió. La página
-  `/precios` ya está armada y muestra "Consultanos"; cuando estén, es una línea
-  por plan en `PLANES`, dentro de `views/pages/publico/datos.js`.
 - **Un correo de contacto del producto.** El pie del sitio muestra
   `hola@fichasalud.com.ar`, que todavía no existe. Está en una sola constante,
   `CORREO_CONTACTO` en `publico/SitioLayout.vue`.
-- **Términos y política de privacidad.** El pie del sitio **no los enlaza**,
-  porque enlazar a páginas que no existen es peor que no tenerlas.
-  Ahora hay cuentas de pacientes, así que
-  la Ley 25.326 pesa más que cuando solo había consultorios. Hacen falta textos
-  reales antes del primer usuario, no después.
+
+El **logo**, los **precios** y los **términos y condiciones** también dependen de
+Hector, pero están siendo tratados en la pasada de QA en curso —puntos 4, 11 y 9
+de [QA-2026-09.md](QA-2026-09.md)— con lo que hay que hacer del lado del código
+para recibirlos. No se repiten acá para no terminar con dos versiones.
 
 ---
 
-## 6. Plataforma: lo que quedó sin verificar
+## 4. Plataforma: lo que quedó sin verificar
 
 La rama `saas/multi-tenant` está completa (F0–F8) pero hay cosas que **no se
 pueden probar sin un dominio real**. Están anotadas acá para que nadie las dé por
@@ -163,7 +137,7 @@ verificadas.
 
 ---
 
-## 7. Menores
+## 5. Menores
 
 - ~~**Quedan 6 conexiones manuales en `turnos_routes.py`.**~~ ✅ hecho el
   30/08/2026, y con ellas las 20 que quedaban en todo el backend
