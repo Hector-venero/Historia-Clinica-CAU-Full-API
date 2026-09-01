@@ -169,3 +169,37 @@ def config_de(cliente_id):
     with cursor_plataforma() as (_conn, cur):
         cur.execute("SELECT * FROM clientes_config WHERE cliente_id = %s", (cliente_id,))
         return cur.fetchone()
+
+
+def guardar_config(cliente_id, **campos):
+    """Actualiza campos de `clientes_config`, creando la fila si no existe.
+
+    La fila puede no existir: un consultorio recien dado de alta no tiene
+    configuracion hasta que alguien cambia algo. Por eso INSERT ... ON DUPLICATE
+    KEY en vez de UPDATE, que sobre una fila ausente no haria nada y devolveria
+    exito igual.
+
+    Solo se aceptan campos conocidos: los nombres van al SQL sin comillas, y
+    dejarlos abiertos seria una inyeccion servida.
+    """
+    PERMITIDOS = {
+        "nombre_visible", "logo", "modulos", "blockchain",
+        "qbi_base_url", "qbi_client_id", "qbi_token",
+        "lugar_nombre", "lugar_direccion", "lugar_telefono", "lugar_email",
+    }
+    desconocidos = set(campos) - PERMITIDOS
+    if desconocidos:
+        raise ValueError(f"Campos de configuracion desconocidos: {sorted(desconocidos)}")
+    if not campos:
+        return
+
+    columnas = ["cliente_id"] + list(campos)
+    marcas = ", ".join(["%s"] * len(columnas))
+    actualizaciones = ", ".join(f"{c} = VALUES({c})" for c in campos)
+
+    with cursor_plataforma(commit=True) as (_conn, cur):
+        cur.execute(
+            f"INSERT INTO clientes_config ({', '.join(columnas)}) VALUES ({marcas}) "
+            f"ON DUPLICATE KEY UPDATE {actualizaciones}",
+            (cliente_id, *campos.values()),
+        )

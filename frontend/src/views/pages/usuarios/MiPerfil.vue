@@ -2,6 +2,7 @@
 import { ref, reactive, computed, onMounted } from 'vue';
 import api from '@/api/axios';
 import { useUserStore } from '@/stores/user';
+import { useMarcaStore } from '@/stores/marca';
 import { buildFotoURL } from '@/utils/fotoUrl.js';
 
 import Toast from 'primevue/toast';
@@ -41,6 +42,50 @@ const REQUERIDOS_RECETA = [
 ];
 
 const puedePrescribir = computed(() => ['profesional', 'director'].includes((userStore.rol || '').toLowerCase()));
+
+// El logo es del CONSULTORIO, no de la persona: por eso solo lo toca la
+// dirección. Va en esta pantalla porque es donde ya se editan los datos que
+// salen impresos, y abrir una pantalla aparte para un solo campo era peor.
+const esDirector = computed(() => (userStore.rol || '').toLowerCase() === 'director');
+const marcaStore = useMarcaStore();
+const subiendoLogo = ref(false);
+const errorLogo = ref('');
+
+async function subirLogo(evento) {
+    const archivo = evento.target.files?.[0];
+    if (!archivo) return;
+
+    errorLogo.value = '';
+    subiendoLogo.value = true;
+    try {
+        const datos = new FormData();
+        datos.append('logo', archivo);
+        const { data } = await api.post('/marca/logo', datos, { headers: { 'Content-Type': 'multipart/form-data' } });
+        // Se refresca la marca entera y no solo esta pantalla: el logo se ve en
+        // la barra superior, que lee del mismo store.
+        marcaStore.logo = data.logo;
+        toast.add({ severity: 'success', summary: 'Logo actualizado', life: 3000 });
+    } catch (e) {
+        errorLogo.value = e?.response?.data?.error || 'No pudimos subir el logo.';
+    } finally {
+        subiendoLogo.value = false;
+        evento.target.value = '';
+    }
+}
+
+async function quitarLogo() {
+    errorLogo.value = '';
+    subiendoLogo.value = true;
+    try {
+        await api.delete('/marca/logo');
+        marcaStore.logo = null;
+        toast.add({ severity: 'success', summary: 'Logo eliminado', life: 3000 });
+    } catch (e) {
+        errorLogo.value = e?.response?.data?.error || 'No pudimos eliminar el logo.';
+    } finally {
+        subiendoLogo.value = false;
+    }
+}
 const faltantes = computed(() => REQUERIDOS_RECETA.filter((r) => !String(r.valor() || '').trim()).map((r) => r.etiqueta));
 const listoParaRecetar = computed(() => faltantes.value.length === 0);
 
@@ -307,6 +352,34 @@ const eliminarFoto = async () => {
                                 <input v-model.trim="perfil.lugar_atencion_email" type="text" class="campo" />
                             </div>
                         </div>
+                    </div>
+                </section>
+
+                <!-- Logo del consultorio. Es lo que sale impreso en las historias
+                     clínicas: sin uno propio va el nombre en texto. -->
+                <section v-if="esDirector" class="bg-surface-0 dark:bg-surface-900 border border-surface-200 dark:border-surface-700 rounded-2xl p-5">
+                    <h2 class="text-base font-semibold text-surface-900 dark:text-surface-0 m-0 mb-1">Logo del consultorio</h2>
+                    <p class="text-sm text-surface-500 dark:text-surface-400 mt-0 mb-4">Se muestra en la barra superior y en el encabezado de las historias clínicas en PDF.</p>
+
+                    <div class="flex flex-wrap items-center gap-5">
+                        <div class="w-32 h-20 rounded-xl border border-surface-200 dark:border-surface-700 bg-surface-50 dark:bg-surface-800 flex items-center justify-center overflow-hidden shrink-0">
+                            <img v-if="marcaStore.logo" :src="marcaStore.logo" alt="Logo del consultorio" class="max-h-full max-w-full object-contain" />
+                            <span v-else class="text-xs text-surface-400 dark:text-surface-500 px-2 text-center">Sin logo</span>
+                        </div>
+
+                        <div class="flex flex-col gap-2">
+                            <label class="inline-flex items-center gap-2 px-4 py-2 rounded-xl font-semibold text-sm text-white bg-primary-600 hover:bg-primary-700 cursor-pointer transition">
+                                <i :class="subiendoLogo ? 'pi pi-spin pi-spinner' : 'pi pi-upload'"></i>
+                                {{ marcaStore.logo ? 'Cambiar logo' : 'Subir logo' }}
+                                <input type="file" accept=".png,.jpg,.jpeg,.webp" class="hidden" :disabled="subiendoLogo" @change="subirLogo" />
+                            </label>
+                            <button v-if="marcaStore.logo" type="button" class="text-sm text-red-600 dark:text-red-400 hover:underline text-left" :disabled="subiendoLogo" @click="quitarLogo">Quitar logo</button>
+                            <span class="text-xs text-surface-500 dark:text-surface-400">PNG, JPG o WEBP, hasta 2 MB.</span>
+                        </div>
+                    </div>
+
+                    <div v-if="errorLogo" class="mt-4 p-3 rounded-xl bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-300 text-sm border border-red-200 dark:border-red-900">
+                        {{ errorLogo }}
                     </div>
                 </section>
 
