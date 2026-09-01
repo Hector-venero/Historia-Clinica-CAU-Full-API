@@ -101,6 +101,13 @@ def api_get_historias(paciente_id):
     """
     Retorna todas las versiones de historia clínica de un paciente.
     """
+    # Queda anotado quién la abrió. Ver app/accesos.py: si la anotación falla, la
+    # historia se muestra igual — dejar sin atender a alguien porque no se pudo
+    # escribir una fila de auditoría es peor que no tener auditoría.
+    from app import accesos
+
+    accesos.registrar(paciente_id, accesos.VER_HISTORIA)
+
     with db_cursor() as (_conn, cursor):
         cursor.execute("""
             SELECT h.*, u.nombre AS nombre_usuario

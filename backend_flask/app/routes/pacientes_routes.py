@@ -319,6 +319,10 @@ def agregar_evolucion(id):
 @login_required
 def get_evoluciones(id):
     """Obtiene las evoluciones de un paciente, mostrando también el médico y su especialidad."""
+    from app import accesos
+
+    accesos.registrar(id, accesos.VER_EVOLUCIONES)
+
     with db_cursor() as (_conn, cursor):
         cursor.execute("""
             SELECT
@@ -365,6 +369,26 @@ def uploaded_file(evo_id, filename):
     /uploads/ directamente desde el volumen, sin pasar por aca y por lo tanto
     sin exigir sesion: cualquiera con la URL se descargaba un adjunto clinico.
     """
+    # La URL no trae el paciente, asi que hay que resolverlo. Es una consulta
+    # por clave primaria y vale la pena: bajarse una radiografia es exactamente
+    # lo que se quiere poder auditar, y sin el paciente la fila no sirve para
+    # responder "quien miro esta historia".
+    from app import accesos
+
+    paciente_id = None
+    try:
+        with db_cursor() as (_conn, cursor):
+            cursor.execute("SELECT paciente_id FROM evoluciones WHERE id = %s", (evo_id,))
+            fila = cursor.fetchone()
+            paciente_id = fila and fila.get("paciente_id")
+    except Exception:
+        paciente_id = None
+
+    if paciente_id:
+        accesos.registrar(
+            paciente_id, accesos.DESCARGAR_ADJUNTO, detalle=str(filename)[:255]
+        )
+
     return send_from_directory(carpeta_evolucion(evo_id), filename)
 
 # ==========================================================
@@ -376,6 +400,13 @@ def exportar_historia_pdf(id):
     """Genera un PDF con toda la historia clínica del paciente, incluyendo adjuntos (imágenes y enlaces)."""
     from flask import current_app
     from PIL import Image as PILImage
+
+    # La exportación se anota aparte de la lectura: llevarse la historia entera
+    # en un archivo no es lo mismo que mirarla en pantalla, y es lo que
+    # realmente se investiga cuando algo se filtra.
+    from app import accesos
+
+    accesos.registrar(id, accesos.EXPORTAR_HISTORIA)
 
     # Se leen todos los datos primero y se suelta la conexion antes de generar
     # el PDF: el render con reportlab puede tardar segundos y no tiene sentido
@@ -641,6 +672,12 @@ def exportar_evolucion_pdf(paciente_id, evo_id):
     from flask import current_app
     from PIL import Image as PILImage
 
+    from app import accesos
+
+    accesos.registrar(
+        paciente_id, accesos.EXPORTAR_EVOLUCION, detalle=f"evolución {evo_id}"
+    )
+
     with db_cursor() as (_conn, cursor):
         # ==========================================================
         #  1) DATOS DEL PACIENTE
@@ -884,6 +921,13 @@ def enviar_al_portal(paciente_id):
 
     if not titulo:
         return jsonify({"error": "El documento necesita un titulo."}), 400
+
+    # Se anota despues de validar y antes de escribir: es el unico punto donde
+    # algo clinico sale del consultorio, asi que la fila tiene que existir
+    # aunque el envio falle mas adelante.
+    from app import accesos
+
+    accesos.registrar(paciente_id, accesos.ENVIAR_AL_PORTAL, detalle=titulo)
 
     with db_cursor() as (_conn, cursor):
         cursor.execute("SELECT * FROM pacientes WHERE id = %s", (paciente_id,))

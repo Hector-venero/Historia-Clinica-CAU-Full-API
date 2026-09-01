@@ -187,6 +187,7 @@ from app.routes.agenda_publica_routes import bp_agenda_publica
 from app.routes.marca_routes import bp_marca
 from app.routes.servicios_routes import bp_servicios
 from app.routes.plantillas_routes import bp_plantillas
+from app.routes.accesos_routes import bp_accesos
 
 app.register_blueprint(bp_auth)
 app.register_blueprint(bp_usuarios)
@@ -210,6 +211,7 @@ app.register_blueprint(bp_agenda_publica)
 app.register_blueprint(bp_marca)
 app.register_blueprint(bp_servicios)
 app.register_blueprint(bp_plantillas)
+app.register_blueprint(bp_accesos)
 
 # -------------------------
 # Servir fotos de usuario

@@ -79,7 +79,8 @@ del plano de control pero NO la base del entorno**: `hc_bfa` necesitó
   centralizada en `marca.py` y `stores/marca.js`.
 - **Un correo de contacto del producto.** El pie del sitio muestra
   `hola@fichasalud.com.ar`, que todavía no existe. Está en una sola constante,
-  `CORREO_CONTACTO` en `publico/SitioLayout.vue`.
+  `CORREO_CONTACTO` en `publico/datos.js` — la usan el pie del sitio y la
+  pantalla del plan dentro del sistema.
 
 El **logo**, los **precios** y los **términos y condiciones** también dependen de
 Hector, pero están siendo tratados en la pasada de QA en curso —puntos 4, 11 y 9
@@ -115,9 +116,15 @@ verificadas.
   ya hace algo equivalente).
 
 - **Legal — Ley 25.326.** Alojar datos de salud **de terceros** cae bajo la ley de
-  datos sensibles. No cambia el código, pero sí el contrato y las condiciones del
-  servicio. Conviene averiguar qué implica **antes** de facturarle al primer
-  cliente.
+  datos sensibles. Conviene averiguar qué implica **antes** de facturarle al
+  primer cliente.
+
+  Del lado del código ya están las piezas que se veían venir: el circuito de
+  consentimiento en los tres registros (falta el texto), la exportación que
+  sigue viva con la cuenta suspendida, una base por consultorio, y desde el
+  01/09/2026 el **registro de accesos a la historia clínica**
+  (`app/accesos.py`). Lo que falta es el contrato y las condiciones del
+  servicio, que no son código.
 
 - **El correo del portal no está probado con un SMTP real.** La verificación de
   cuenta de un paciente, la bienvenida y el aviso de documento nuevo se arman y
@@ -169,10 +176,22 @@ verificadas.
   el `LOCATION` del `.ics` están verificados por unidad y contra el stack, pero
   el envío real depende del SMTP, que es el mismo pendiente de más arriba.
 
-- **Quedan 26 clases claras sin variante `dark:`,** todas `text-gray-400`. Es un
-  gris medio que se lee sobre los dos fondos, así que se dejaron. Las 35 que sí
-  molestaban —tarjetas blancas en la historia clínica, el menú de usuario
-  entero— se corrigieron el 31/08/2026.
+- ~~**Quedan 26 clases claras sin variante `dark:`.**~~ ✅ cerrado el
+  01/09/2026, y no como se esperaba: **casi todas eran falsos positivos del
+  propio verificador**. `scripts/revisiones/modo_oscuro.mjs` buscaba la pareja
+  por familia exacta (`dark:text-gray`) en vez de por prefijo (`dark:text-`), que
+  es justo el error del que advierte CLAUDE.md — así que `text-gray-800
+  dark:text-white`, ya resuelto a mano, se reportaba igual. De 24 hallazgos, 23
+  estaban bien.
+
+  Corregido, con un escape `dark-ok` para lo deliberado (una sección oscura en
+  los dos temas lleva colores claros a propósito). Hoy da **cero**.
+
+  Lo que deja como enseñanza: las cifras que este documento repitió durante
+  semanas salían de una herramienta que nadie había verificado. Un verificador
+  que grita por cosas que están bien deja de mirarse, que es peor que no
+  tenerlo. Las 35 que sí molestaban —tarjetas blancas en la historia clínica, el
+  menú de usuario entero— eran reales y se corrigieron el 31/08/2026.
 
   El chequeo quedó en `scripts/revisiones/` junto con el de enlaces rotos, así
   que se puede volver a correr en vez de tener que acordarse de mirar.

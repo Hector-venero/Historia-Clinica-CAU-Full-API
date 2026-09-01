@@ -148,6 +148,32 @@ CREATE TABLE evolucion_archivos (
   COLLATE=utf8mb4_unicode_ci;
 
 -- ==============================================
+-- ACCESOS A LA HISTORIA CLÍNICA
+-- ==============================================
+-- Quién abrió la historia de quién. **Append-only**: la aplicación no actualiza
+-- ni borra estas filas — un registro de accesos que el propio sistema puede
+-- reescribir no prueba nada.
+--
+-- Guarda quién, qué y cuándo, **nunca el contenido**: copiar acá lo que se leyó
+-- sería duplicar la historia clínica en una segunda tabla.
+--
+-- Sin FK a `pacientes`: si algún día se borra un paciente, el rastro de quién lo
+-- miró es justamente lo que no se puede perder.
+CREATE TABLE accesos_historia (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    usuario_id INT NULL,
+    paciente_id INT NOT NULL,
+    accion VARCHAR(30) NOT NULL,
+    detalle VARCHAR(255) NULL,
+    ip VARCHAR(60) NULL,
+    creado_en DATETIME NOT NULL,
+    INDEX idx_accesos_paciente (paciente_id, creado_en),
+    INDEX idx_accesos_usuario (usuario_id, creado_en)
+) ENGINE=InnoDB
+  DEFAULT CHARSET=utf8mb4
+  COLLATE=utf8mb4_unicode_ci;
+
+-- ==============================================
 -- INTENTOS DE ENTRADA FALLIDOS
 -- ==============================================
 -- Freno a los intentos de adivinar una contraseña. `clave` es `u:<usuario>|<ip>`

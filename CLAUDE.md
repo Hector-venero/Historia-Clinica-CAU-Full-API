@@ -601,6 +601,35 @@ TTL_CACHE_CLIENTES                  # default 60s; es lo que tarda un cambio de 
 
 ⚠️ **Sin `DOMINIO_BASE`, cualquier host que apunte al servidor se interpreta como un consultorio.** Es obligatoria en producción.
 
+### Quién abrió la historia de quién
+
+`app/accesos.py` sobre la tabla `accesos_historia`, una por consultorio. **No
+había ningún registro**: con dirección, profesionales, secretaría y coordinación
+de área accediendo a datos de pacientes, nadie podía responder "¿quién miró esta
+historia?" — que para datos de salud de terceros (Ley 25.326) hay que poder
+contestar, y es lo primero que pregunta un cliente cuando sospecha algo.
+
+- **Quién, qué y cuándo. Nunca el contenido.** Copiar acá lo que se leyó sería
+  duplicar la historia clínica en una segunda tabla, con las mismas obligaciones
+  legales y menos cuidado encima. Hay un test que mira el código fuente.
+- **Append-only.** El módulo no tiene función de borrar ni de actualizar, y no es
+  un olvido: un registro de accesos que el propio sistema puede reescribir no
+  prueba nada. Depurarlo es una decisión explícita y a mano.
+- **Anotar nunca rompe el pedido.** Si falla la escritura, el profesional ve la
+  historia igual: un sistema que deja de mostrarla porque no pudo escribir la
+  auditoría es peor que uno sin auditoría — en el medio hay alguien esperando ser
+  atendido.
+- **Solo la dirección lo lee**, ni siquiera un `profesional` sobre sus propios
+  pacientes: la lista incluye lo que hicieron sus colegas con esa historia, y es
+  información sobre el personal, no solo sobre el paciente.
+- Se consulta en las **dos direcciones**: quién vio esta historia, y qué estuvo
+  mirando esta persona. La segunda es la que se usa cuando se investiga algo.
+- **No se registra lo que hace el paciente con lo suyo.** El portal es la persona
+  mirando sus propios estudios; anotarlo sería vigilarla, no auditar el acceso de
+  terceros a su historia.
+- Sin FK a `pacientes`: si algún día se borra un paciente, el rastro de quién lo
+  miró es justamente lo que no se puede perder.
+
 ### Freno a la fuerza bruta en el login
 
 `app/antifuerzabruta.py` sobre la tabla `intentos_login`. El login **no tenía

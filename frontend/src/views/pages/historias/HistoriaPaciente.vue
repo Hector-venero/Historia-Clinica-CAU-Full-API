@@ -11,6 +11,7 @@ import DatePicker from 'primevue/datepicker';
 import { fechaBonitaClinica, fechaBonitaCompleta } from '@/utils/formatDate.js';
 import { descargarPdfDesde } from '@/utils/descargas.js';
 import SelectorPlantilla from '@/components/SelectorPlantilla.vue';
+import RegistroAccesos from '@/components/RegistroAccesos.vue';
 import { nextTick } from 'vue';
 import { computed } from 'vue';
 
@@ -367,6 +368,10 @@ onMounted(fetchHistoria);
                 </div>
             </div>
         </div>
+
+        <!-- 🔎 QUIÉN ACCEDIÓ. Solo lo ve la dirección; el componente se
+             oculta solo, y quien decide de verdad es @requiere_rol. -->
+        <RegistroAccesos :paciente-id="route.params.id" />
 
         <!-- 📝 FORMULARIO NUEVA EVOLUCIÓN -->
         <div v-if="showForm" ref="formRef" class="mt-6 border p-4 rounded-2xl bg-surface-0 dark:bg-surface-900 shadow-sm animate-fade-in">
