@@ -20,10 +20,24 @@ const paciente = usePacienteStore();
 
 const form = reactive({
     telefono: '',
+    fecha_nacimiento: '',
+    sexo: '',
     cobertura: '',
     plan_cobertura: '',
-    nro_afiliado: ''
+    nro_afiliado: '',
+    // Preferencias de aviso. Van en el mismo formulario y no en una pantalla
+    // aparte: es una casilla, no una sección.
+    avisar_documentos: true,
+    avisar_turnos: true
 });
+
+const SEXOS = [
+    { valor: '', texto: 'Prefiero no decirlo' },
+    { valor: 'F', texto: 'Femenino' },
+    { valor: 'M', texto: 'Masculino' },
+    { valor: 'X', texto: 'No binario' },
+    { valor: 'O', texto: 'Otro' }
+];
 
 const guardando = ref(false);
 const mensaje = ref('');
@@ -34,6 +48,10 @@ function volcarDesdeStore() {
     form.cobertura = paciente.cobertura || '';
     form.plan_cobertura = paciente.planCobertura || '';
     form.nro_afiliado = paciente.nroAfiliado || '';
+    form.fecha_nacimiento = (paciente.fechaNacimiento || '').slice(0, 10);
+    form.sexo = paciente.sexo || '';
+    form.avisar_documentos = paciente.avisarDocumentos !== false;
+    form.avisar_turnos = paciente.avisarTurnos !== false;
 }
 
 onMounted(async () => {
@@ -68,7 +86,7 @@ async function guardar() {
 </script>
 
 <template>
-    <div class="max-w-2xl mx-auto p-4 md:p-6 space-y-5">
+    <div class="max-w-4xl mx-auto p-4 md:p-6 space-y-5">
         <header>
             <h1 class="text-2xl md:text-3xl font-bold text-surface-900 dark:text-surface-0 m-0">Mi perfil</h1>
             <p class="text-sm text-surface-500 dark:text-surface-400 mt-1 mb-0">Los datos que ven tus profesionales cuando les sacás un turno.</p>
@@ -95,9 +113,21 @@ async function guardar() {
 
         <!-- Lo editable -->
         <form class="bg-surface-0 dark:bg-surface-900 border border-surface-200 dark:border-surface-700 rounded-2xl p-5 space-y-4" @submit.prevent="guardar">
-            <div class="flex flex-col gap-2">
-                <label class="text-sm font-semibold text-surface-700 dark:text-surface-200">Teléfono</label>
-                <input v-model="form.telefono" type="tel" placeholder="Ej: 11 5555 4444" class="campo" autocomplete="tel" />
+            <div class="grid sm:grid-cols-3 gap-4">
+                <div class="flex flex-col gap-2">
+                    <label class="text-sm font-semibold text-surface-700 dark:text-surface-200">Teléfono</label>
+                    <input v-model="form.telefono" type="tel" placeholder="Ej: 11 5555 4444" class="campo" autocomplete="tel" />
+                </div>
+                <div class="flex flex-col gap-2">
+                    <label class="text-sm font-semibold text-surface-700 dark:text-surface-200">Fecha de nacimiento</label>
+                    <input v-model="form.fecha_nacimiento" type="date" class="campo" />
+                </div>
+                <div class="flex flex-col gap-2">
+                    <label class="text-sm font-semibold text-surface-700 dark:text-surface-200">Sexo</label>
+                    <select v-model="form.sexo" class="campo">
+                        <option v-for="s in SEXOS" :key="s.valor" :value="s.valor">{{ s.texto }}</option>
+                    </select>
+                </div>
             </div>
 
             <div class="grid sm:grid-cols-2 gap-4">
@@ -115,6 +145,22 @@ async function guardar() {
                 <label class="text-sm font-semibold text-surface-700 dark:text-surface-200">Número de afiliado</label>
                 <input v-model="form.nro_afiliado" type="text" class="campo" />
             </div>
+
+            <!-- Avisos. Apagarlos no deja de guardar nada en el portal: lo que
+                 se apaga es el correo, no el envío. -->
+            <fieldset class="pt-4 border-t border-surface-200 dark:border-surface-700">
+                <legend class="text-sm font-semibold text-surface-700 dark:text-surface-200 mb-1">Avisos por correo</legend>
+                <p class="text-xs text-surface-500 dark:text-surface-400 mt-0 mb-3">Los documentos y los turnos te siguen apareciendo acá aunque apagues los correos.</p>
+
+                <label class="flex items-start gap-3 cursor-pointer py-1.5">
+                    <input v-model="form.avisar_documentos" type="checkbox" class="mt-0.5 w-4 h-4 shrink-0 accent-primary-600" />
+                    <span class="text-sm text-surface-700 dark:text-surface-200">Avisarme cuando un profesional me envía un estudio o una receta</span>
+                </label>
+                <label class="flex items-start gap-3 cursor-pointer py-1.5">
+                    <input v-model="form.avisar_turnos" type="checkbox" class="mt-0.5 w-4 h-4 shrink-0 accent-primary-600" />
+                    <span class="text-sm text-surface-700 dark:text-surface-200">Avisarme cuando confirmo o cancelo un turno</span>
+                </label>
+            </fieldset>
 
             <div v-if="mensaje" class="p-3 rounded-xl bg-green-50 dark:bg-green-950/40 text-green-700 dark:text-green-300 text-sm border border-green-200 dark:border-green-900">
                 {{ mensaje }}

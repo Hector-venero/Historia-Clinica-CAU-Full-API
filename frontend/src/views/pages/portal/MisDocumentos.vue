@@ -11,6 +11,11 @@ const cargando = ref(true);
 const error = ref('');
 const descargando = ref(null);
 const filtro = ref('todos');
+// Filtrar por consultorio y buscar por texto. Con documentos de tres lugares
+// distintos —que es el caso que el portal viene a resolver— la lista por fecha
+// deja de alcanzar para encontrar algo puntual.
+const filtroConsultorio = ref('todos');
+const busqueda = ref('');
 
 // El icono y el color salen del tipo. Son los cuatro que valida el backend, así
 // que no puede llegar uno desconocido; igual hay respaldo por las dudas.
@@ -23,7 +28,25 @@ const ESTILOS = {
 
 const estilo = (tipo) => ESTILOS[tipo] || { icono: 'pi-file', etiqueta: tipo, clase: 'text-surface-600 dark:text-surface-300 bg-surface-100 dark:bg-surface-800' };
 
-const filtrados = computed(() => (filtro.value === 'todos' ? documentos.value : documentos.value.filter((d) => d.tipo === filtro.value)));
+const filtrados = computed(() => {
+    const texto = busqueda.value.trim().toLowerCase();
+    return documentos.value.filter((d) => {
+        if (filtro.value !== 'todos' && d.tipo !== filtro.value) return false;
+        if (filtroConsultorio.value !== 'todos' && d.consultorio_nombre !== filtroConsultorio.value) return false;
+        if (!texto) return true;
+        // Se busca en lo que la persona recuerda: el título, quién se lo mandó y
+        // de dónde. No en la descripción, que es donde está el detalle clínico.
+        return [d.titulo, d.profesional_nombre, d.consultorio_nombre].filter(Boolean).join(' ').toLowerCase().includes(texto);
+    });
+});
+
+const hayFiltroPuesto = computed(() => filtro.value !== 'todos' || filtroConsultorio.value !== 'todos' || busqueda.value.trim() !== '');
+
+function limpiarFiltros() {
+    filtro.value = 'todos';
+    filtroConsultorio.value = 'todos';
+    busqueda.value = '';
+}
 
 const sinLeer = computed(() => documentos.value.filter((d) => !d.leido_en).length);
 
@@ -87,17 +110,41 @@ onMounted(cargar);
 
         <!-- Filtros. Solo aparecen si hay algo que filtrar: con tres documentos
              una barra de filtros es ruido. -->
-        <div v-if="documentos.length > 3" class="flex flex-wrap gap-2">
-            <button
-                v-for="op in ['todos', 'estudio', 'receta', 'informe', 'indicacion']"
-                :key="op"
-                type="button"
-                class="px-3 py-1.5 rounded-lg text-sm font-medium transition"
-                :class="filtro === op ? 'bg-primary-600 text-white' : 'bg-surface-100 dark:bg-surface-800 text-surface-600 dark:text-surface-300 hover:bg-surface-200 dark:hover:bg-surface-700'"
-                @click="filtro = op"
-            >
-                {{ op === 'todos' ? 'Todos' : estilo(op).etiqueta }}
-            </button>
+        <div v-if="documentos.length > 3" class="space-y-3">
+            <div class="flex flex-col sm:flex-row gap-3">
+                <div class="relative flex-1">
+                    <i class="pi pi-search absolute left-3 top-1/2 -translate-y-1/2 text-surface-400 text-sm"></i>
+                    <input
+                        v-model="busqueda"
+                        type="search"
+                        placeholder="Buscar por título o profesional"
+                        class="w-full pl-9 pr-3 py-2.5 rounded-xl border border-surface-300 dark:border-surface-600 bg-surface-0 dark:bg-surface-800 text-surface-900 dark:text-surface-0 outline-none focus:border-primary-500 transition"
+                    />
+                </div>
+                <select
+                    v-if="consultorios.length > 1"
+                    v-model="filtroConsultorio"
+                    class="sm:w-64 px-3 py-2.5 rounded-xl border border-surface-300 dark:border-surface-600 bg-surface-0 dark:bg-surface-800 text-surface-900 dark:text-surface-0 outline-none"
+                >
+                    <option value="todos">Todos los consultorios</option>
+                    <option v-for="c in consultorios" :key="c" :value="c">{{ c }}</option>
+                </select>
+            </div>
+
+            <div class="flex flex-wrap items-center gap-2">
+                <button
+                    v-for="op in ['todos', 'estudio', 'receta', 'informe', 'indicacion']"
+                    :key="op"
+                    type="button"
+                    class="px-3 py-1.5 rounded-lg text-sm font-medium transition"
+                    :class="filtro === op ? 'bg-primary-600 text-white' : 'bg-surface-100 dark:bg-surface-800 text-surface-600 dark:text-surface-300 hover:bg-surface-200 dark:hover:bg-surface-700'"
+                    @click="filtro = op"
+                >
+                    {{ op === 'todos' ? 'Todos' : estilo(op).etiqueta }}
+                </button>
+
+                <button v-if="hayFiltroPuesto" type="button" class="ml-auto text-sm text-surface-500 dark:text-surface-400 hover:underline" @click="limpiarFiltros">Limpiar filtros</button>
+            </div>
         </div>
 
         <div v-if="error" class="p-3 rounded-xl bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-300 text-sm border border-red-200 dark:border-red-900">

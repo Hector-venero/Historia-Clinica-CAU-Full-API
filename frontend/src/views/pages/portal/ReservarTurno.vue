@@ -148,7 +148,7 @@ onMounted(async () => {
 </script>
 
 <template>
-    <div class="max-w-2xl mx-auto p-4 md:p-6 space-y-5">
+    <div class="max-w-4xl mx-auto p-4 md:p-6 space-y-5">
         <!-- Confirmado -->
         <div v-if="confirmado" class="bg-surface-0 dark:bg-surface-900 border border-surface-200 dark:border-surface-700 rounded-2xl p-8 text-center">
             <i class="pi pi-check-circle text-5xl text-green-500 mb-4 block"></i>

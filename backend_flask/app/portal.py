@@ -115,6 +115,12 @@ class Paciente:
         self.cobertura = fila.get("cobertura")
         self.plan_cobertura = fila.get("plan_cobertura")
         self.nro_afiliado = fila.get("nro_afiliado")
+        self.sexo = fila.get("sexo")
+        self.foto = fila.get("foto")
+        # Vienen en 1 desde la base: quien ya tenia cuenta no puede quedarse sin
+        # avisos por un cambio que no pidio.
+        self.avisar_documentos = bool(fila.get("avisar_documentos", 1))
+        self.avisar_turnos = bool(fila.get("avisar_turnos", 1))
         self.activo = bool(fila.get("activo", 1))
 
     # --- lo que Flask-Login necesita ---
@@ -154,6 +160,11 @@ class Paciente:
             "cobertura": self.cobertura,
             "plan_cobertura": self.plan_cobertura,
             "nro_afiliado": self.nro_afiliado,
+            "fecha_nacimiento": self.fecha_nacimiento.isoformat() if self.fecha_nacimiento else None,
+            "sexo": self.sexo,
+            "foto": self.foto,
+            "avisar_documentos": self.avisar_documentos,
+            "avisar_turnos": self.avisar_turnos,
         }
 
     def __repr__(self):
@@ -371,6 +382,29 @@ def cambiar_password(cuenta_id, password):
         return cur.rowcount
 
 
+def _fecha_o_none(valor):
+    """Una fecha mal escrita no puede tirar el guardado entero del perfil."""
+    from datetime import datetime as _dt
+
+    texto = (valor or "").strip()
+    if not texto:
+        return None
+    try:
+        return _dt.strptime(texto[:10], "%Y-%m-%d").date()
+    except ValueError:
+        return None
+
+
+# Los mismos valores que usa la ficha del consultorio, para que un dato cargado
+# de un lado se entienda del otro.
+SEXOS = ("M", "F", "X", "O")
+
+
+def _sexo_valido(valor):
+    texto = (valor or "").strip().upper()
+    return texto if texto in SEXOS else None
+
+
 def actualizar_perfil(cuenta_id, datos):
     """Los datos que el paciente puede cambiar de si mismo.
 
@@ -382,7 +416,15 @@ def actualizar_perfil(cuenta_id, datos):
         "cobertura": (datos.get("cobertura") or "").strip() or None,
         "plan_cobertura": (datos.get("plan_cobertura") or "").strip() or None,
         "nro_afiliado": (datos.get("nro_afiliado") or "").strip() or None,
+        "fecha_nacimiento": _fecha_o_none(datos.get("fecha_nacimiento")),
+        "sexo": _sexo_valido(datos.get("sexo")),
     }
+
+    # Las preferencias de aviso solo se tocan si vienen: un guardado del
+    # formulario de contacto no puede apagarle los correos a nadie sin querer.
+    for preferencia in ("avisar_documentos", "avisar_turnos"):
+        if preferencia in datos:
+            campos[preferencia] = 1 if datos.get(preferencia) else 0
     asignaciones = ", ".join(f"{c} = %s" for c in campos)
 
     with cursor_portal(commit=True) as (_conn, cur):

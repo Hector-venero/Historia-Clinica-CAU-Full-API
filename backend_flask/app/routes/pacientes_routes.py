@@ -935,7 +935,11 @@ def enviar_al_portal(paciente_id):
 
     # Aviso por correo, sin adjuntar el documento: un estudio clinico en un mail
     # viaja sin cifrar y queda en la bandeja de quien sea que lo reenvie.
-    if paciente.get("email"):
+    #
+    # Y solo si el paciente lo quiere: puede compartir la casilla, o no querer
+    # que un asunto delate de que consultorio le escriben. El documento se
+    # guarda igual en el portal — lo que se apaga es el aviso, no el envio.
+    if paciente.get("email") and _quiere_aviso_de_documentos(paciente.get("email")):
         dominio = (current_app.config.get("DOMINIO_BASE") or "").strip().strip(".")
         url_portal = f"https://mi.{dominio}" if dominio else "http://mi.localhost:5173"
         mensaje = mail_documento_enviado(
@@ -958,3 +962,26 @@ def enviar_al_portal(paciente_id):
             paciente.get("tipo_documento") or "DNI", paciente["dni"]
         ) is not None,
     }), 201
+
+
+def _quiere_aviso_de_documentos(email):
+    """Si el paciente tiene cuenta en el portal y apago este aviso.
+
+    Sin cuenta no hay preferencia que respetar: el aviso es justamente lo que le
+    dice que le mandaron algo y que puede registrarse para verlo.
+
+    Un error consultando el plano del portal no puede impedir el envio: se
+    prefiere avisar de mas antes que dejar a alguien sin enterarse de un estudio.
+    """
+    try:
+        from app import portal
+
+        cuenta = portal.buscar_por_email(email)
+        if cuenta is None:
+            return True
+        return bool(getattr(cuenta, "avisar_documentos", True))
+    except Exception:
+        current_app.logger.exception(
+            "No se pudo leer la preferencia de avisos del paciente"
+        )
+        return True

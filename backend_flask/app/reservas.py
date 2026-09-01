@@ -359,10 +359,18 @@ def reservar(paciente, cliente_id, usuario_id, fecha_inicio, motivo=None):
                     "Alguien acaba de tomar ese horario. Elegi otro, por favor."
                 )
 
-    _registrar_en_portal(paciente, ficha, inicio, turno_id)
+    # El turno se anota en `turnos_reservados`, que es lo que lee Mis Turnos.
+    #
+    # Antes ademas se escribia un documento en el buzon, con la idea de que "para
+    # el paciente es una cosa mas que le llego de un consultorio". Suena bien y
+    # en la practica lo tapaba: tres turnos seguidos empujaban hacia abajo la
+    # radiografia y la receta, que es lo que la persona entra a buscar y lo unico
+    # que no tiene otra pantalla donde mirarse.
     _anotar_turno_del_paciente(
         paciente, ficha, cliente_id, usuario_id, turno_id, inicio, motivo
     )
+
+    _avisar_al_paciente(paciente, ficha, cliente, inicio, fin, motivo)
 
     return {
         "turno_id": turno_id,
@@ -564,6 +572,51 @@ def _buscar_o_crear_paciente(cur, conn, paciente):
     )
     conn.commit()
     return cur.lastrowid
+
+
+def _avisar_al_paciente(paciente, ficha, cliente, inicio, fin, motivo):
+    """Manda la confirmacion del turno reservado online.
+
+    Faltaba: un turno cargado por el consultorio manda correo desde
+    `turnos_routes`, pero uno reservado desde el portal no mandaba ninguno — y la
+    pantalla de confirmacion decia "te mandamos un correo". Prometia algo que no
+    pasaba.
+
+    Va **dentro del contexto del consultorio** porque las plantillas usan la
+    marca (nombre, direccion, pie), que se resuelve por el cliente en `flask.g`.
+    Sin eso el correo saldria firmado como Ficha Salud en lugar del consultorio.
+
+    No propaga errores: el turno ya esta reservado, y un SMTP caido no puede
+    convertir una reserva buena en un error para el paciente.
+    """
+    if not getattr(paciente, "email", None):
+        return
+    if not getattr(paciente, "avisar_turnos", True):
+        return
+
+    try:
+        from app.utils.mails_turnos import enviar_confirmacion
+
+        datos_paciente = {
+            "id": None,
+            "email": paciente.email,
+            "nombre": paciente.nombre,
+            "apellido": getattr(paciente, "apellido", ""),
+        }
+        profesional = {
+            "nombre": f"{ficha['nombre']} {ficha.get('apellido') or ''}".strip()
+        }
+
+        with como_consultorio(cliente):
+            enviar_confirmacion(
+                datos_paciente, profesional, inicio, fin, motivo
+            )
+    except Exception:
+        from flask import current_app
+
+        current_app.logger.exception(
+            "No se pudo enviar la confirmacion del turno reservado online"
+        )
 
 
 def _registrar_en_portal(paciente, ficha, inicio, turno_id):

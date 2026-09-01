@@ -254,3 +254,48 @@ def test_las_contrasenas_tienen_que_coincidir(client, monkeypatch):
 
     assert respuesta.status_code == 400
     assert "no coinciden" in respuesta.get_json()["error"]
+
+
+# ------------------------------------------- perfil y preferencias
+
+
+def test_una_fecha_mal_escrita_no_tira_el_guardado(monkeypatch):
+    """El resto del perfil se guarda igual: perder el teléfono porque la fecha
+    estaba mal escrita sería un castigo desproporcionado."""
+    assert portal._fecha_o_none("14/05/1990") is None
+    assert portal._fecha_o_none("") is None
+    assert portal._fecha_o_none(None) is None
+    assert portal._fecha_o_none("1990-05-14").isoformat() == "1990-05-14"
+
+
+def test_el_sexo_se_limita_a_los_valores_conocidos():
+    """Los mismos que usa la ficha del consultorio, para que un dato cargado de
+    un lado se entienda del otro."""
+    assert portal._sexo_valido("f") == "F"
+    assert portal._sexo_valido("inventado") is None
+    assert portal._sexo_valido("") is None
+
+
+def test_las_preferencias_solo_cambian_si_vienen(monkeypatch):
+    """Guardar el formulario de contacto no puede apagarle los avisos a nadie
+    sin querer: si el pedido no las nombra, no se tocan."""
+    guardado = {}
+
+    class _Cur:
+        def execute(self, sql, params):
+            guardado["sql"] = sql
+
+    from contextlib import contextmanager
+
+    @contextmanager
+    def _cursor(commit=False):
+        yield None, _Cur()
+
+    monkeypatch.setattr(portal, "cursor_portal", _cursor)
+    monkeypatch.setattr(portal, "buscar_por_id", lambda _id: None)
+
+    portal.actualizar_perfil(1, {"telefono": "11"})
+    assert "avisar_documentos" not in guardado["sql"]
+
+    portal.actualizar_perfil(1, {"telefono": "11", "avisar_documentos": False})
+    assert "avisar_documentos" in guardado["sql"]

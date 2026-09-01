@@ -25,6 +25,12 @@ export const usePacienteStore = defineStore('paciente', {
         cobertura: '',
         planCobertura: '',
         nroAfiliado: '',
+        fechaNacimiento: '',
+        sexo: '',
+        // Preferencias de aviso. Vienen en true: nadie se queda sin enterarse de
+        // un estudio por un cambio que no pidio.
+        avisarDocumentos: true,
+        avisarTurnos: true,
         // Evita el rebote login -> buzón mientras se está cerrando sesión.
         cerrandoSesion: false
     }),
@@ -46,6 +52,10 @@ export const usePacienteStore = defineStore('paciente', {
             this.cobertura = data.cobertura ?? '';
             this.planCobertura = data.plan_cobertura ?? '';
             this.nroAfiliado = data.nro_afiliado ?? '';
+            this.fechaNacimiento = data.fecha_nacimiento ?? '';
+            this.sexo = data.sexo ?? '';
+            this.avisarDocumentos = data.avisar_documentos ?? true;
+            this.avisarTurnos = data.avisar_turnos ?? true;
             this.cerrandoSesion = false;
         },
 

@@ -62,7 +62,7 @@ onMounted(cargar);
 </script>
 
 <template>
-    <div class="max-w-3xl mx-auto p-4 md:p-6 space-y-5">
+    <div class="max-w-4xl mx-auto p-4 md:p-6 space-y-5">
         <header class="flex items-start justify-between gap-4">
             <div>
                 <h1 class="text-2xl md:text-3xl font-bold text-surface-900 dark:text-surface-0 m-0">Mis turnos</h1>
