@@ -82,6 +82,30 @@ def validar_slug(slug):
     return slug
 
 
+# Version de los terminos que hay que aceptar para darse de alta.
+#
+# `None` significa que todavia no hay textos publicados y por lo tanto no se
+# exige nada: pedirle a alguien que acepte un borrador no consiente nada. Cuando
+# se publiquen, se pone la version y a partir de ahi el alta la exige.
+#
+# El frontend manda `terminos_version`; se valida aca porque una casilla que solo
+# vive en el navegador no prueba que nadie haya aceptado nada.
+TERMINOS_VERSION_VIGENTE = None
+
+
+def _validar_terminos(datos):
+    """Devuelve la version aceptada, o None si todavia no se exige ninguna."""
+    if not TERMINOS_VERSION_VIGENTE:
+        return None
+
+    aceptada = (datos.get("terminos_version") or "").strip()
+    if aceptada != TERMINOS_VERSION_VIGENTE:
+        raise ErrorRegistro(
+            "Hay que aceptar los terminos y condiciones para crear la cuenta."
+        )
+    return aceptada
+
+
 def _validar_datos(datos):
     nombre = (datos.get("nombre") or "").strip()
     email = (datos.get("email") or "").strip().lower()
@@ -100,6 +124,8 @@ def _validar_datos(datos):
             "La contrasena debe tener entre 8 y 64 caracteres, con mayuscula, "
             "minuscula, numero y simbolo."
         )
+
+    _validar_terminos(datos)
 
     return nombre, email, password
 

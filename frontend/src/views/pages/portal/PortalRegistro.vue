@@ -3,6 +3,7 @@ import { computed, ref } from 'vue';
 import { useRoute } from 'vue-router';
 import portalService from '@/service/portalService';
 import logo from '@/assets/logo-ficha-salud.svg';
+import { PUBLICADO as LEGALES_PUBLICADOS, VERSION as TERMINOS_VERSION } from '@/views/pages/publico/legales';
 
 const route = useRoute();
 
@@ -24,17 +25,23 @@ const form = ref({
 
 const TIPOS = ['DNI', 'CI', 'LC', 'LE', 'PASAPORTE'];
 
+// Consentimiento. `TERMINOS_VERSION` viaja al servidor junto con la aceptacion:
+// sin saber QUE version acepto cada uno, el dato no sirve el dia que el texto
+// cambie. Con los textos sin publicar arranca en true, porque todavia no hay
+// nada que aceptar.
+const aceptaTerminos = ref(!LEGALES_PUBLICADOS);
+
 const enviando = ref(false);
 const enviado = ref(false);
 const error = ref('');
 
-const puedeEnviar = computed(() => form.value.nombre.trim() && form.value.apellido.trim() && form.value.numero_documento.trim() && form.value.email.trim() && form.value.password.length >= 8 && !enviando.value);
+const puedeEnviar = computed(() => form.value.nombre.trim() && form.value.apellido.trim() && form.value.numero_documento.trim() && form.value.email.trim() && form.value.password.length >= 8 && aceptaTerminos.value && !enviando.value);
 
 async function enviar() {
     error.value = '';
     enviando.value = true;
     try {
-        await portalService.registrar({ ...form.value });
+        await portalService.registrar({ ...form.value, terminos_version: TERMINOS_VERSION });
         enviado.value = true;
     } catch (e) {
         error.value = e?.response?.data?.error || 'No pudimos completar el registro. Probá de nuevo.';
@@ -107,6 +114,19 @@ async function enviar() {
                         <label class="text-sm font-semibold text-surface-700 dark:text-surface-200">Teléfono <span class="font-normal text-surface-400">(opcional)</span></label>
                         <input v-model="form.telefono" type="tel" placeholder="11 2345-6789" class="campo" />
                     </div>
+
+                    <!-- Consentimiento. Solo aparece con los textos publicados:
+                         pedir que alguien acepte un borrador no consiente nada.
+                         La validacion que cuenta esta en el servidor. -->
+                    <label v-if="LEGALES_PUBLICADOS" class="flex items-start gap-3 cursor-pointer text-sm text-surface-600 dark:text-surface-300">
+                        <input v-model="aceptaTerminos" type="checkbox" class="mt-0.5 w-4 h-4 shrink-0 accent-primary-600" />
+                        <span>
+                            Leí y acepto los
+                            <router-link to="/legales/terminos" target="_blank" class="text-primary-600 dark:text-primary-400 font-semibold hover:underline">términos y condiciones</router-link>
+                            y la
+                            <router-link to="/legales/privacidad" target="_blank" class="text-primary-600 dark:text-primary-400 font-semibold hover:underline">política de privacidad</router-link>.
+                        </span>
+                    </label>
 
                     <div v-if="error" class="p-3 rounded-xl bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-300 text-sm border border-red-200 dark:border-red-900">
                         {{ error }}

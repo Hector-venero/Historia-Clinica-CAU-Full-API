@@ -1,6 +1,7 @@
 <script setup>
 import { computed, ref, watch } from 'vue';
 import registroService from '@/service/registroService';
+import { PUBLICADO as LEGALES_PUBLICADOS, VERSION as TERMINOS_VERSION } from './legales';
 import logo from '@/assets/logo-ficha-salud.svg';
 
 const form = ref({
@@ -25,6 +26,12 @@ const form = ref({
 // abandona el formulario a mitad. Lo que no se pregunta acá se conversa después,
 // que es lo que va a pasar igual.
 const CANALES = ['Búsqueda en Google', 'Redes sociales', 'Recomendación de otro profesional', 'Ya lo usaba en otro lugar', 'Otro'];
+
+// Consentimiento. `TERMINOS_VERSION` viaja al servidor junto con la aceptacion:
+// sin saber QUE version acepto cada uno, el dato no sirve el dia que el texto
+// cambie. Con los textos sin publicar arranca en true, porque todavia no hay
+// nada que aceptar.
+const aceptaTerminos = ref(!LEGALES_PUBLICADOS);
 
 const enviando = ref(false);
 const enviado = ref(false);
@@ -57,13 +64,15 @@ watch(
     }
 );
 
-const puedeEnviar = computed(() => form.value.nombre.trim() && form.value.email.trim() && form.value.password.length >= 8 && form.value.contacto_nombre.trim() && form.value.contacto_telefono.trim() && slugLibre.value === true && !enviando.value);
+const puedeEnviar = computed(
+    () => form.value.nombre.trim() && form.value.email.trim() && form.value.password.length >= 8 && form.value.contacto_nombre.trim() && form.value.contacto_telefono.trim() && slugLibre.value === true && aceptaTerminos.value && !enviando.value
+);
 
 async function enviar() {
     error.value = '';
     enviando.value = true;
     try {
-        await registroService.registrar({ ...form.value });
+        await registroService.registrar({ ...form.value, terminos_version: TERMINOS_VERSION });
         enviado.value = true;
     } catch (e) {
         error.value = e?.response?.data?.error || 'No pudimos enviar la solicitud. Probá de nuevo.';
@@ -198,6 +207,19 @@ async function enviar() {
                             <textarea v-model="form.comentarios" rows="3" class="campo resize-none"></textarea>
                         </div>
                     </section>
+
+                    <!-- Consentimiento. Solo aparece con los textos publicados:
+                         pedir que alguien acepte un borrador no consiente nada.
+                         La validacion que cuenta esta en el servidor. -->
+                    <label v-if="LEGALES_PUBLICADOS" class="flex items-start gap-3 cursor-pointer text-sm text-surface-600 dark:text-surface-300">
+                        <input v-model="aceptaTerminos" type="checkbox" class="mt-0.5 w-4 h-4 shrink-0 accent-primary-600" />
+                        <span>
+                            Leí y acepto los
+                            <router-link to="/legales/terminos" target="_blank" class="text-primary-600 dark:text-primary-400 font-semibold hover:underline">términos y condiciones</router-link>
+                            y la
+                            <router-link to="/legales/privacidad" target="_blank" class="text-primary-600 dark:text-primary-400 font-semibold hover:underline">política de privacidad</router-link>.
+                        </span>
+                    </label>
 
                     <div v-if="error" class="p-3 rounded-xl bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-300 text-sm border border-red-200 dark:border-red-900">
                         {{ error }}

@@ -238,6 +238,25 @@ def _validar_alta(datos):
     return tipo, numero, nombre, apellido, email, password
 
 
+# Misma idea que en registro.py: None mientras no haya textos publicados.
+# Se deja duplicada la constante a proposito — el plano del portal no importa el
+# de la plataforma, y cruzarlos por un dato de presentacion no vale el acople.
+TERMINOS_VERSION_VIGENTE = None
+
+
+def _validar_terminos(datos):
+    """Una casilla que solo vive en el navegador no prueba nada."""
+    if not TERMINOS_VERSION_VIGENTE:
+        return None
+
+    aceptada = (datos.get("terminos_version") or "").strip()
+    if aceptada != TERMINOS_VERSION_VIGENTE:
+        raise ErrorPortal(
+            "Hay que aceptar los terminos y condiciones para crear la cuenta."
+        )
+    return aceptada
+
+
 def registrar(datos):
     """Guarda la intencion de alta y devuelve el token de verificacion.
 
@@ -245,6 +264,7 @@ def registrar(datos):
     el registro de consultorios — el formulario es publico.
     """
     tipo, numero, nombre, apellido, email, password = _validar_alta(datos)
+    _validar_terminos(datos)
 
     with cursor_portal() as (_conn, cur):
         cur.execute(

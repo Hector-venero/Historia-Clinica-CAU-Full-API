@@ -64,6 +64,12 @@ const router = createRouter({
             component: () => import('@/views/pages/publico/Precios.vue')
         },
         {
+            // Un solo componente para los dos textos: ver Legales.vue.
+            path: '/legales/:documento(terminos|privacidad)',
+            name: 'Legales',
+            component: () => import('@/views/pages/publico/Legales.vue')
+        },
+        {
             path: '/ingresar',
             name: 'Ingresar',
             component: () => import('@/views/pages/publico/Ingresar.vue')
@@ -421,6 +427,8 @@ router.beforeEach(async (to) => {
         // El sitio público: se ve sin cuenta, que es todo su propósito. Una
         // página de precios detrás del login no la lee nadie.
         '/inicio',
+        '/legales/terminos',
+        '/legales/privacidad',
         '/funcionalidades',
         '/precios',
         '/ingresar',

@@ -12,6 +12,7 @@ import { useRoute } from 'vue-router';
 import { useLayout } from '@/layout/composables/layout';
 import logo from '@/assets/logo-ficha-salud.svg';
 import { AUDIENCIAS, funcionesDe } from './datos';
+import { PUBLICADO as LEGALES_PUBLICADOS } from './legales';
 
 const { toggleDarkMode, isDarkTheme } = useLayout();
 const route = useRoute();
@@ -196,6 +197,12 @@ const esActual = (ruta) => route.path === ruta;
                         <li><router-link to="/funcionalidades" class="text-slate-400 hover:text-white no-underline transition">Funcionalidades</router-link></li>
                         <li><router-link to="/precios" class="text-slate-400 hover:text-white no-underline transition">Precios</router-link></li>
                         <li><router-link to="/ingresar" class="text-slate-400 hover:text-white no-underline transition">Ingresar</router-link></li>
+                        <!-- Solo cuando los textos estén revisados. Enlazar a un
+                             texto legal sin revisar es peor que no tenerlo. -->
+                        <template v-if="LEGALES_PUBLICADOS">
+                            <li><router-link to="/legales/terminos" class="text-slate-400 hover:text-white no-underline transition">Términos y condiciones</router-link></li>
+                            <li><router-link to="/legales/privacidad" class="text-slate-400 hover:text-white no-underline transition">Privacidad</router-link></li>
+                        </template>
                     </ul>
                 </div>
 
