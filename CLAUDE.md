@@ -117,6 +117,8 @@ Eso último **pasó a escala**: el 31/08/2026 había 61 clases claras sin pareja
 
 ⚠️ Si se automatiza esa corrección, **la pareja se busca por prefijo** (`dark:text-`), no por familia exacta (`dark:text-gray`): `text-gray-800 dark:text-white` ya está resuelto a mano, y buscar la familia no lo ve y termina dejando dos `dark:text-*` en la misma clase.
 
+`scripts/revisiones/modo_oscuro.mjs` **cometía ese mismo error**: reportaba 24 hallazgos de los cuales 23 ya estaban resueltos. Corregido, y con un escape para lo deliberado — una sección que es oscura en los dos temas lleva colores claros a propósito, y se marca con `dark-ok` en la línea o en la anterior (que tiene que ser **una sola línea de comentario**). Hoy da cero. Un verificador que grita por cosas que están bien deja de mirarse, que es peor que no tenerlo.
+
 Key frontend libraries: PrimeVue 4, FullCalendar 5 (turnos/grupos), vee-validate + yup (forms), Pinia (state), Axios.
 
 **Caché del frontend en producción:** `frontend/nginx.conf` sirve `index.html` con `no-cache` y `/assets/` con un año e `immutable`. No es un detalle: sin `Cache-Control`, nginx manda solo `ETag`/`Last-Modified` y el navegador aplica **caché heurística**. Aplicado a `index.html` —el único archivo con nombre fijo, y el que apunta a los assets con hash— eso hace que después de cada deploy se siga viendo la versión anterior, y no hay rebuild que lo arregle: solo Ctrl+Shift+R.
@@ -315,6 +317,29 @@ módulos tiene, esto dice cómo los usa.
 Los ajustes viajan al frontend **con su título y su explicación**
 (`ajustes.descripcion()`): la pantalla se dibuja con lo que reciba, así que sumar
 un aviso es un solo lugar y no dos que se contradicen.
+
+### El panel, más allá de hoy
+
+`/api/dashboard/periodo?desde=&hasta=` responde cómo vinieron los turnos en un
+rango, no solo hoy: atendidos, por delante, faltó con aviso, faltó sin aviso y el
+porcentaje de ausentismo. El panel entero respondía por **hoy**, que sirve para
+arrancar el día y para nada más.
+
+- Un `profesional` ve **lo suyo**; quien dirige, el centro. Sin ese filtro un
+  profesional leería el ausentismo de sus colegas como propio.
+- ⚠️ `SUM()` sobre cero filas devuelve **NULL, no 0**. Sin convertirlo, el JSON
+  lleva `null` a las tarjetas y el porcentaje revienta al dividir.
+- El ausentismo se calcula **en el servidor** y sobre el total del período, no
+  sobre los que ya pasaron: quien mira quiere saber cuánto de lo que agendó se
+  perdió. Dos implementaciones del mismo redondeo terminan discrepando.
+- El rango se valida y tiene tope (366 días): un rango abierto invita a pedir
+  cinco años de turnos en una consulta.
+- **El gráfico se dibuja con divs, no con chart.js.** La versión instalada
+  (3.3.2) no es la que espera el componente de PrimeVue 4, y para una serie de
+  barras diarias una librería entera es más riesgo que ayuda; además sigue el
+  modo oscuro sin configurar nada.
+- Cada tarjeta tiene su `?` diciendo **qué cuenta**. Es la ayuda que habría
+  evitado que "Disponibles hoy" significara franjas configuradas durante meses.
 
 ### Plantillas de texto clínico
 

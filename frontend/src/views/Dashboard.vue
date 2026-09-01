@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted, computed, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import api from '@/api/axios';
 import { useUserStore } from '@/stores/user';
@@ -100,6 +100,78 @@ const resumenItems = computed(() => {
     ];
 });
 
+/**
+ * Qué cuenta cada tarjeta, en una palabra.
+ *
+ * Es la ayuda que habría evitado que "Disponibles hoy" significara **franjas de
+ * atención configuradas** durante meses sin que nadie lo notara: el rótulo se
+ * leía como "me quedan N lugares" y era otra cosa.
+ */
+const AYUDAS = {
+    'Turnos hoy': 'Los turnos agendados para hoy, hayan pasado o no.',
+    'Lugares libres hoy': 'Huecos que te quedan libres en el horario que falta del día. No son franjas configuradas: son lugares donde entra un turno.',
+    'Profesionales atendiendo': 'Cuánta gente atiende hoy. No cuenta franjas: un profesional que atiende en tres bloques cuenta una vez.',
+    Superpuestos: 'Turnos que se pisan entre sí en la agenda de un mismo profesional.'
+};
+
+// ------------------------------------------------------- cómo viene el período
+//
+// El panel entero respondía por HOY, que sirve para arrancar el día y para nada
+// más: no había forma de ver si el mes viene mejor o peor, ni cuánta gente
+// falta sin avisar.
+const PERIODOS = [
+    { label: '7 días', dias: 7 },
+    { label: '30 días', dias: 30 },
+    { label: '90 días', dias: 90 }
+];
+const periodoElegido = ref(30);
+const periodo = ref(null);
+const cargandoPeriodo = ref(false);
+
+// El gráfico se dibuja con divs y no con chart.js: la versión que hay instalada
+// (3.3.2) no es la que espera el componente de PrimeVue 4, y para una serie de
+// barras diarias una librería entera es más riesgo que ayuda. Además sigue el
+// modo oscuro sin configurar nada.
+const barras = computed(() => {
+    const dias = periodo.value?.por_dia || [];
+    const maximo = Math.max(1, ...dias.map((d) => d.total));
+    return dias.map((d) => ({ ...d, alto: Math.round((d.total / maximo) * 100) }));
+});
+
+const detallePeriodo = computed(() => {
+    const p = periodo.value;
+    if (!p) return [];
+    return [
+        { label: 'Atendidos', valor: p.atendidos, color: 'bg-emerald-500' },
+        { label: 'Por delante', valor: p.por_delante, color: 'bg-sky-500' },
+        { label: 'Faltó con aviso', valor: p.con_aviso, color: 'bg-amber-500' },
+        { label: 'Faltó sin aviso', valor: p.sin_aviso, color: 'bg-red-500' }
+    ];
+});
+
+function diaCorto(iso) {
+    return `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
+}
+
+async function cargarPeriodo() {
+    cargandoPeriodo.value = true;
+    try {
+        const hasta = new Date();
+        const desde = new Date(hasta.getTime() - (periodoElegido.value - 1) * 86400000);
+        const aTexto = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        const { data } = await api.get('/dashboard/periodo', { params: { desde: aTexto(desde), hasta: aTexto(hasta) }, withCredentials: true });
+        periodo.value = data;
+    } catch {
+        // Es información de contexto, no la agenda del día: que falle no puede
+        // tapar el panel entero.
+        periodo.value = null;
+    } finally {
+        cargandoPeriodo.value = false;
+    }
+}
+
+watch(periodoElegido, cargarPeriodo);
+
 const proximoEvento = computed(() => dashboard.value?.proximo_evento || null);
 const turnosHoy = computed(() => dashboard.value?.turnos || []);
 const disponibilidadHoy = computed(() => dashboard.value?.disponibilidad_hoy || []);
@@ -148,6 +220,7 @@ const horaAgenda = (fecha) => {
 
 onMounted(async () => {
     await fetchDashboard();
+    cargarPeriodo();
 
     // Solo mostramos alerta a profesionales si tienen turnos programados hoy
     if (turnosHoy.value && turnosHoy.value.length > 0) {
@@ -207,9 +280,15 @@ const cerrarAlertaHoy = () => {
                 <div class="bg-surface-0 dark:bg-surface-900 border border-surface-200 dark:border-surface-700 shadow-sm rounded-lg p-5 h-full">
                     <div class="flex items-center justify-between gap-4">
                         <div class="min-w-0">
-                            <span class="block text-gray-500 dark:text-gray-400 text-sm font-medium mb-2">{{ item.label }}</span>
-                            <div class="text-3xl font-bold text-gray-800 dark:text-white">{{ item.value }}</div>
-                            <span v-if="item.ayuda" class="block text-xs text-gray-400 dark:text-gray-500 mt-1">{{ item.ayuda }}</span>
+                            <span class="flex items-center gap-1.5 text-surface-500 dark:text-surface-400 text-sm font-medium mb-2">
+                                {{ item.label }}
+                                <!-- El `?` explica QUÉ cuenta el número. Es lo que
+                                     habría evitado que "Disponibles hoy" significara
+                                     franjas configuradas durante meses. -->
+                                <i v-if="AYUDAS[item.label]" class="pi pi-question-circle text-xs text-surface-400 dark:text-surface-500 cursor-help" :title="AYUDAS[item.label]"></i>
+                            </span>
+                            <div class="text-3xl font-bold text-surface-900 dark:text-surface-0">{{ item.value }}</div>
+                            <span v-if="item.ayuda" class="block text-xs text-surface-400 dark:text-surface-500 mt-1">{{ item.ayuda }}</span>
                         </div>
                         <div class="w-11 h-11 rounded-lg bg-surface-100 dark:bg-surface-800 flex items-center justify-center">
                             <i :class="[item.icon, 'text-xl text-blue-500']"></i>
@@ -218,10 +297,73 @@ const cerrarAlertaHoy = () => {
                 </div>
             </div>
 
+            <!-- Cómo viene el período. El panel entero respondía por HOY, que
+                 sirve para arrancar el día y para nada más. -->
+            <div v-if="periodo" class="col-span-12">
+                <div class="bg-surface-0 dark:bg-surface-900 border border-surface-200 dark:border-surface-700 shadow-sm rounded-lg p-6">
+                    <div class="flex flex-wrap items-center justify-between gap-3 mb-5">
+                        <h2 class="text-xl font-bold text-surface-900 dark:text-surface-0 flex items-center gap-2 m-0">
+                            <i class="pi pi-chart-bar text-blue-500"></i>
+                            Cómo viene
+                            <span class="text-sm font-normal text-surface-400 dark:text-surface-500">{{ periodo.propio ? 'tu agenda' : 'el consultorio' }}</span>
+                        </h2>
+                        <div class="flex gap-1 p-1 rounded-lg bg-surface-100 dark:bg-surface-800">
+                            <button
+                                v-for="p in PERIODOS"
+                                :key="p.dias"
+                                type="button"
+                                class="px-3 py-1.5 rounded-md text-sm font-medium transition"
+                                :class="periodoElegido === p.dias ? 'bg-surface-0 dark:bg-surface-900 text-surface-900 dark:text-surface-0 shadow-sm' : 'text-surface-500 dark:text-surface-400 hover:text-surface-800 dark:hover:text-surface-100'"
+                                @click="periodoElegido = p.dias"
+                            >
+                                {{ p.label }}
+                            </button>
+                        </div>
+                    </div>
+
+                    <div v-if="cargandoPeriodo" class="py-10 text-center text-surface-400"><i class="pi pi-spin pi-spinner text-2xl"></i></div>
+
+                    <div v-else-if="!periodo.total" class="py-10 text-center text-surface-500 dark:text-surface-400">
+                        <i class="pi pi-inbox text-3xl block mb-2 opacity-50"></i>
+                        No hubo turnos en este período.
+                    </div>
+
+                    <template v-else>
+                        <div class="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
+                            <div v-for="d in detallePeriodo" :key="d.label">
+                                <span class="flex items-center gap-2 text-sm text-surface-500 dark:text-surface-400"> <span class="w-2 h-2 rounded-full" :class="d.color"></span>{{ d.label }} </span>
+                                <div class="text-2xl font-bold text-surface-900 dark:text-surface-0 mt-1">{{ d.valor }}</div>
+                            </div>
+                            <div>
+                                <span class="flex items-center gap-1.5 text-sm text-surface-500 dark:text-surface-400">
+                                    Ausentismo
+                                    <i class="pi pi-question-circle text-xs cursor-help" title="Qué porcentaje de lo agendado en el período se perdió por ausencias, con aviso o sin él."></i>
+                                </span>
+                                <div class="text-2xl font-bold mt-1" :class="periodo.ausentismo > 15 ? 'text-red-600 dark:text-red-400' : 'text-surface-900 dark:text-surface-0'">{{ periodo.ausentismo }}%</div>
+                            </div>
+                        </div>
+
+                        <!-- Barras con divs, no con chart.js: la versión instalada
+                             no es la que espera PrimeVue 4, y para una serie diaria
+                             una librería entera es más riesgo que ayuda. -->
+                        <div class="flex items-end gap-0.5 h-32 overflow-x-auto pb-1">
+                            <div v-for="b in barras" :key="b.dia" class="flex-1 min-w-[6px] flex flex-col justify-end h-full group relative" :title="`${diaCorto(b.dia)}: ${b.total} turnos`">
+                                <div class="w-full rounded-sm bg-primary-500/70 group-hover:bg-primary-500 transition" :style="{ height: `${Math.max(b.alto, 3)}%` }"></div>
+                            </div>
+                        </div>
+                        <div class="flex justify-between text-xs text-surface-400 dark:text-surface-500 mt-2">
+                            <span>{{ diaCorto(periodo.desde) }}</span>
+                            <span>{{ periodo.total }} turnos en total</span>
+                            <span>{{ diaCorto(periodo.hasta) }}</span>
+                        </div>
+                    </template>
+                </div>
+            </div>
+
             <div class="col-span-12 xl:col-span-7">
                 <div class="bg-surface-0 dark:bg-surface-900 border border-surface-200 dark:border-surface-700 shadow-sm rounded-lg p-6 h-full">
                     <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
-                        <h2 class="text-xl font-bold text-gray-800 dark:text-white flex items-center gap-2">
+                        <h2 class="text-xl font-bold text-surface-900 dark:text-surface-0 flex items-center gap-2">
                             <i class="pi pi-calendar text-blue-500"></i>
                             Turnos de Hoy
                         </h2>

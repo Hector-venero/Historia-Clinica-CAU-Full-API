@@ -506,3 +506,131 @@ def get_dashboard_semanal():
         cursor.close()
         conn.close()
 
+
+
+# Cuanto se puede mirar hacia atras de una vez.
+#
+# No es una restriccion tecnica sino de sentido: el panel responde "como viene
+# la cosa", no es una herramienta de estadistica historica. Un rango abierto
+# ademas invita a pedir cinco anios de turnos en una consulta.
+DIAS_MAXIMOS_PERIODO = 366
+
+
+def _rango_pedido():
+    """Lee desde/hasta del pedido, con el mes en curso como valor por defecto.
+
+    Devuelve (desde, hasta, error).
+    """
+    from flask import request
+
+    hoy = date.today()
+    crudo_desde = request.args.get("desde")
+    crudo_hasta = request.args.get("hasta")
+
+    def _parsear(valor, defecto):
+        if not valor:
+            return defecto, None
+        try:
+            return datetime.strptime(valor, "%Y-%m-%d").date(), None
+        except ValueError:
+            return None, "Fecha invalida. Se espera AAAA-MM-DD."
+
+    desde, error = _parsear(crudo_desde, hoy - timedelta(days=29))
+    if error:
+        return None, None, error
+    hasta, error = _parsear(crudo_hasta, hoy)
+    if error:
+        return None, None, error
+
+    if hasta < desde:
+        return None, None, "El fin del periodo es anterior al inicio."
+    if (hasta - desde).days > DIAS_MAXIMOS_PERIODO:
+        return None, None, f"El periodo no puede superar los {DIAS_MAXIMOS_PERIODO} dias."
+
+    return desde, hasta, None
+
+
+@bp_dashboard.route("/api/dashboard/periodo", methods=["GET"])
+@login_required
+def get_dashboard_periodo():
+    """Como vinieron los turnos en un periodo, no solo hoy.
+
+    El panel entero respondia por **hoy**, que sirve para arrancar el dia y no
+    para nada mas: no habia forma de ver si el mes viene mejor o peor, ni cuanta
+    gente falta sin avisar.
+
+    Se responde en una sola consulta agrupada y no una por estado: son cuatro
+    numeros de la misma tabla y el mismo rango.
+
+    `ausencia` es NULL cuando el paciente vino —o cuando todavia no paso—, y por
+    eso los que faltan se separan de los que quedan por delante mirando la fecha:
+    un turno de la semana que viene sin marca no es "atendido", es futuro.
+    """
+    desde, hasta, error = _rango_pedido()
+    if error:
+        return jsonify({"error": error}), 400
+
+    rol = current_user.rol
+    propio = rol in ROLES_PERSONALES
+
+    condicion = "DATE(t.fecha_inicio) BETWEEN %s AND %s"
+    parametros = [desde, hasta]
+    if propio:
+        condicion += " AND t.usuario_id = %s"
+        parametros.append(current_user.id)
+
+    with db_cursor() as (_conn, cursor):
+        cursor.execute(
+            f"""
+            SELECT
+                COUNT(*) AS total,
+                SUM(CASE WHEN t.ausencia = 'con_aviso' THEN 1 ELSE 0 END) AS con_aviso,
+                SUM(CASE WHEN t.ausencia = 'sin_aviso' THEN 1 ELSE 0 END) AS sin_aviso,
+                SUM(CASE WHEN t.ausencia IS NULL AND t.fecha_inicio < NOW() THEN 1 ELSE 0 END) AS atendidos,
+                SUM(CASE WHEN t.ausencia IS NULL AND t.fecha_inicio >= NOW() THEN 1 ELSE 0 END) AS por_delante
+            FROM turnos t
+            WHERE {condicion}
+            """,
+            tuple(parametros),
+        )
+        fila = cursor.fetchone() or {}
+
+        # La serie por dia, para el grafico. Se pide aparte porque es otra forma
+        # de agrupar la misma tabla, no otro dato.
+        cursor.execute(
+            f"""
+            SELECT DATE(t.fecha_inicio) AS dia, COUNT(*) AS total
+            FROM turnos t
+            WHERE {condicion}
+            GROUP BY DATE(t.fecha_inicio)
+            ORDER BY dia
+            """,
+            tuple(parametros),
+        )
+        por_dia = cursor.fetchall()
+
+    def _entero(clave):
+        # SUM() sobre cero filas devuelve NULL, no 0.
+        return int(fila.get(clave) or 0)
+
+    total = _entero("total")
+    faltaron = _entero("con_aviso") + _entero("sin_aviso")
+
+    return jsonify({
+        "desde": desde.isoformat(),
+        "hasta": hasta.isoformat(),
+        "propio": propio,
+        "total": total,
+        "atendidos": _entero("atendidos"),
+        "por_delante": _entero("por_delante"),
+        "con_aviso": _entero("con_aviso"),
+        "sin_aviso": _entero("sin_aviso"),
+        # El porcentaje se calcula aca y no en la pantalla: es el numero que se
+        # lee, y dos implementaciones del mismo redondeo terminan discrepando.
+        # Sobre el total del periodo, no sobre los que ya pasaron: el que mira
+        # quiere saber cuanto de lo que agendo se perdio.
+        "ausentismo": round(faltaron * 100 / total, 1) if total else 0.0,
+        "por_dia": [
+            {"dia": f["dia"].isoformat(), "total": int(f["total"])} for f in por_dia
+        ],
+    })

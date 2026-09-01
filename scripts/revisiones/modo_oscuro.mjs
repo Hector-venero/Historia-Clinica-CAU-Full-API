@@ -15,14 +15,33 @@ const SOSPECHOSAS = /(?:^|[\s"'`])(bg-white|bg-gray-(?:50|100|200)|text-gray-(?:
 const hallazgos = [];
 for (const f of vue(process.argv[2])) {
     const texto = readFileSync(f, 'utf8');
-    texto.split('\n').forEach((linea, i) => {
+    const lineas = texto.split('\n');
+    lineas.forEach((linea, i) => {
         // Solo dentro de atributos de clase.
         if (!/class=|:class=/.test(linea)) return;
+        // Escape para lo deliberado: una seccion que es oscura en los DOS temas
+        // lleva colores claros a proposito, y el verificador no puede saberlo.
+        // Se marca con `dark-ok` en la linea o en la anterior.
+        //
+        // Sin esta salida quedaba un hallazgo permanente que no habia que
+        // arreglar, y un verificador que grita por algo que esta bien deja de
+        // mirarse — que es peor que no tenerlo.
+        if (/dark-ok/.test(linea) || /dark-ok/.test(lineas[i - 1] || '')) return;
         for (const m of linea.matchAll(SOSPECHOSAS)) {
             const clase = m[1];
             // La pareja tiene que estar en la MISMA linea: es donde vive el elemento.
-            const familia = clase.replace(/-(?:white|\d+)$/, '');
-            const tieneDark = new RegExp(`dark:${familia}[-\\w/\\[\\]]*`).test(linea);
+            //
+            // Se busca por PREFIJO (`dark:text-`) y no por familia exacta
+            // (`dark:text-gray`). CLAUDE.md avisa de este error para quien
+            // automatice la correccion, y el verificador lo estaba cometiendo:
+            // `text-gray-800 dark:text-white` ya esta resuelto a mano, y
+            // buscando la familia no se ve y se reporta igual. Eran 9 falsos
+            // positivos solo en Dashboard.vue. Con el arreglo, el total paso
+            // de 24 hallazgos a 1: casi todo lo que reportaba ya estaba
+            // resuelto. Un verificador que grita por cosas que estan bien deja
+            // de mirarse, que es peor que no tenerlo.
+            const prefijo = clase.split('-')[0]; // bg | text | border
+            const tieneDark = new RegExp(`dark:${prefijo}-[-\\w/\\[\\]]+`).test(linea);
             if (!tieneDark) hallazgos.push({ archivo: f.replace(process.argv[2] + '/', ''), linea: i + 1, clase });
         }
     });

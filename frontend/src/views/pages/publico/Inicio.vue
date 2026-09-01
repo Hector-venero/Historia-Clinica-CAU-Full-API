@@ -227,6 +227,7 @@ const GARANTIAS = [
                     <p class="mt-5 text-lg leading-relaxed text-slate-300 max-w-lg">
                         El paciente ve las recetas y los estudios que le enviaron <strong class="text-white">todos sus profesionales</strong>, aunque se atienda en consultorios distintos. Y saca turno sin llamar por teléfono.
                     </p>
+                    <!-- dark-ok: la seccion es oscura en los dos temas; el boton blanco es deliberado. -->
                     <router-link to="/portal/registro" class="mt-8 inline-flex items-center gap-2 px-6 py-3.5 rounded-xl font-semibold text-slate-900 bg-white hover:bg-slate-100 transition no-underline">
                         Crear mi cuenta de paciente
                         <i class="pi pi-arrow-right text-sm"></i>
