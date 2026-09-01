@@ -28,9 +28,30 @@ def api_login():
     if not username or not password:
         return jsonify({'error': 'Usuario y contraseña son obligatorios'}), 400
 
+    # Freno a la fuerza bruta. Esta pantalla de entrada es pública en cada
+    # subdominio y del otro lado hay historias clínicas: sin esto, probar
+    # `admin` contra las mil contraseñas más usadas es dejarlo corriendo.
+    #
+    # Va ANTES de tocar la base de usuarios: el punto es no hacer el trabajo.
+    #
+    # ⚠️ Se usa el `db_cursor` importado ARRIBA, a nivel de módulo, y no uno
+    # importado acá adentro. Los tests enganchan la base falsa al módulo
+    # (`make_db(monkeypatch, auth_routes)`), así que un import local se queda
+    # con el real: la suite pasó de 0,7 s a 120 s intentando conectarse a MySQL.
+    from app import antifuerzabruta
+
+    ip = request.remote_addr
+    try:
+        antifuerzabruta.revisar(db_cursor, username, ip)
+    except antifuerzabruta.DemasiadosIntentos as espera:
+        # 429 y no 401: es una respuesta distinta y quien la lea tiene que poder
+        # distinguirla, empezando por el propio frontend.
+        return jsonify({'error': antifuerzabruta.mensaje(espera)}), 429
+
     user = Usuario.obtener_por_username(username)
 
     if user and user.verificar_password(password):
+        antifuerzabruta.limpiar(db_cursor, username, ip)
         login_user(user)
         session.permanent = True
         return jsonify({
@@ -43,6 +64,7 @@ def api_login():
                 'rol': user.rol
             }
         })
+    antifuerzabruta.registrar_fallo(db_cursor, username, ip)
     return jsonify({'error': 'Credenciales incorrectas ❌'}), 401
 
 

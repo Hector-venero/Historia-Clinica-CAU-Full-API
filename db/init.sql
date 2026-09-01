@@ -148,6 +148,23 @@ CREATE TABLE evolucion_archivos (
   COLLATE=utf8mb4_unicode_ci;
 
 -- ==============================================
+-- INTENTOS DE ENTRADA FALLIDOS
+-- ==============================================
+-- Freno a los intentos de adivinar una contraseña. `clave` es `u:<usuario>|<ip>`
+-- o `ip:<ip>`: se cuenta por las dos, porque contar solo por usuario convierte
+-- la protección en el ataque —cualquiera deja afuera al director escribiendo
+-- mal su contraseña diez veces— y solo por IP no frena a quien sale por muchas.
+--
+-- 190 y no 255: es el tope de una PRIMARY KEY de texto en utf8mb4.
+CREATE TABLE intentos_login (
+    clave VARCHAR(190) NOT NULL PRIMARY KEY,
+    fallos INT NOT NULL DEFAULT 0,
+    ultimo_en DATETIME NOT NULL
+) ENGINE=InnoDB
+  DEFAULT CHARSET=utf8mb4
+  COLLATE=utf8mb4_unicode_ci;
+
+-- ==============================================
 -- AJUSTES DEL CONSULTORIO
 -- ==============================================
 -- Clave/valor. Los tipos y los valores por defecto viven en `app/ajustes.py`:

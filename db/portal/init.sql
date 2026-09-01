@@ -143,3 +143,20 @@ CREATE TABLE IF NOT EXISTS registros_paciente (
 ) ENGINE=InnoDB
   DEFAULT CHARSET=utf8mb4
   COLLATE=utf8mb4_unicode_ci;
+
+-- ==============================================
+-- INTENTOS DE ENTRADA FALLIDOS
+-- ==============================================
+-- Igual que en la base de cada consultorio: el portal también tiene una página
+-- de entrada pública. `clave` es `u:<usuario>|<ip>` o `ip:<ip>`.
+--
+-- Es una tabla propia y no compartida con los consultorios a propósito: son dos
+-- poblaciones distintas, y un paciente equivocándose no tiene por qué contar
+-- contra el personal de ninguna clínica.
+CREATE TABLE IF NOT EXISTS intentos_login (
+    clave VARCHAR(190) NOT NULL PRIMARY KEY,
+    fallos INT NOT NULL DEFAULT 0,
+    ultimo_en DATETIME NOT NULL
+) ENGINE=InnoDB
+  DEFAULT CHARSET=utf8mb4
+  COLLATE=utf8mb4_unicode_ci;

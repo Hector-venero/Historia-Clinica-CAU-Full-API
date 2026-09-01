@@ -601,6 +601,42 @@ TTL_CACHE_CLIENTES                  # default 60s; es lo que tarda un cambio de 
 
 ⚠️ **Sin `DOMINIO_BASE`, cualquier host que apunte al servidor se interpreta como un consultorio.** Es obligatoria en producción.
 
+### Freno a la fuerza bruta en el login
+
+`app/antifuerzabruta.py` sobre la tabla `intentos_login`. El login **no tenía
+ningún límite**: una página de entrada pública por cada subdominio, y del otro
+lado historias clínicas.
+
+- **En la base y no en memoria.** En producción corren tres workers de Gunicorn:
+  un contador en memoria vive en cada uno por separado, con lo que el límite real
+  sería el triple y dependería de a qué worker cae cada pedido.
+- **Se cuenta por `usuario|ip` y por `ip` sola.** Contar solo por usuario
+  convierte la protección en el ataque: cualquiera deja afuera al director un
+  lunes a la mañana escribiendo mal su contraseña diez veces.
+- **Entrar bien limpia el contador propio pero no el de la IP.** Si no, quien
+  tenga una cuenta válida entra con ella cada cinco intentos y sigue probando
+  con las demás.
+- **El bloqueo siempre vence** y crece al doble hasta media hora. No hay
+  desbloqueo manual: una cuenta que hay que ir a destrabar es soporte todos los
+  lunes.
+- **Ante un fallo de base no bloquea.** Romper el login porque no se pudo
+  escribir una fila de este contador es peor que el problema que resuelve.
+- Devuelve **429**, no 401, y el mensaje dice cuánto falta: "demasiados
+  intentos" a secas hace recargar cada dos segundos.
+- Hay una tabla por plano: la del consultorio y la del portal. Un paciente
+  equivocándose no cuenta contra el personal de ninguna clínica.
+
+⚠️ **MySQL redondea al guardar en un `DATETIME` sin fracción**: `13:08:46.7`
+queda como `13:08:47`, medio segundo **en el futuro**. El instante se trunca con
+`_al_segundo()` antes de escribirlo; sin eso, el último fallo quedaba después de
+"ahora" y el pedido siguiente se rechazaba con el contador en cero — se veía como
+un bloqueo de un segundo después de *cada* fallo, incluido el primero.
+
+⚠️ **Los `db_cursor` de estos caminos son los del módulo, no imports locales.**
+Los tests enganchan la base falsa al módulo (`make_db(monkeypatch, auth_routes)`),
+así que un `from app.database import db_cursor` dentro de la función se queda con
+el real: la suite pasó de 0,7 s a 120 s intentando conectarse a MySQL.
+
 ### Los avisos de producción, ahora corren
 
 `app/preflight.py` convierte esta lista de ⚠️ en algo que se ejecuta. **Solo en

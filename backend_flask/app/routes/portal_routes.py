@@ -104,13 +104,28 @@ def verificar(token):
 @bp_portal.post("/login")
 def login():
     datos = request.get_json(silent=True) or {}
-    paciente = portal.autenticar(datos.get("email"), datos.get("password"))
+    email = (datos.get("email") or "").strip()
+
+    # El mismo freno que el login del personal, contra la base del portal: son
+    # dos poblaciones distintas y un paciente equivocandose no tiene por que
+    # contar contra el personal de ninguna clinica.
+    from app import antifuerzabruta
+
+    ip = request.remote_addr
+    try:
+        antifuerzabruta.revisar(portal.cursor_portal, email, ip)
+    except antifuerzabruta.DemasiadosIntentos as espera:
+        return jsonify({"error": antifuerzabruta.mensaje(espera)}), 429
+
+    paciente = portal.autenticar(email, datos.get("password"))
 
     if paciente is None:
+        antifuerzabruta.registrar_fallo(portal.cursor_portal, email, ip)
         # Mismo mensaje para "no existe" y "clave incorrecta": distinguirlos deja
         # averiguar que correos estan registrados.
         return jsonify({"error": "Correo o contrasena incorrectos."}), 401
 
+    antifuerzabruta.limpiar(portal.cursor_portal, email, ip)
     login_user(paciente)
     return jsonify({"paciente": paciente.a_json()})
 
