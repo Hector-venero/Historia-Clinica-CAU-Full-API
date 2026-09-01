@@ -514,6 +514,7 @@ flask cliente-plan <slug> --modulos "turnos,recetas"     # override; "" lo borra
 bash scripts/backup_plataforma.sh [slug]                 # copia por consultorio
 bash scripts/restaurar_cliente.sh <slug> <archivo.sql.gz>
 
+flask verificar-produccion [--como-produccion]           # antes de desplegar
 flask solicitudes                                        instituciones a aprobar
 flask aprobar-solicitud <slug>                           crea su consultorio
 flask rechazar-solicitud <slug> --motivo "..."
@@ -599,6 +600,25 @@ TTL_CACHE_CLIENTES                  # default 60s; es lo que tarda un cambio de 
 ```
 
 ⚠️ **Sin `DOMINIO_BASE`, cualquier host que apunte al servidor se interpreta como un consultorio.** Es obligatoria en producción.
+
+### Los avisos de producción, ahora corren
+
+`app/preflight.py` convierte esta lista de ⚠️ en algo que se ejecuta. **Solo en
+producción** (`FLASK_ENV=production`); en desarrollo devuelve vacío, porque un
+chequeo que grita siempre deja de leerse.
+
+Dos niveles, y la diferencia es la decisión de diseño: **`FATAL` impide
+arrancar** y solo entra ahí lo que, dejado pasar, significa servir de forma
+insegura *y que nadie se entere* — `SECRET_KEY` con el valor del repositorio es
+que cualquiera se firme una sesión de director. `AVISO` se imprime y sigue.
+
+Es la misma política que ya aplicaba el resto del sistema: las migraciones que
+fallan tumban el contenedor, y sin `PLATAFORMA_SECRET_KEY` no se levanta. Un
+despliegue que no sube es mejor que uno que sube mal.
+
+`flask verificar-produccion` corre los mismos chequeos sin arrancar y sale con
+código distinto de cero, para encadenarlo en el despliegue. La tabla completa
+está en [`deploy/PLATAFORMA.md`](deploy/PLATAFORMA.md).
 
 ⚠️ **Sin `PLATAFORMA_SECRET_KEY` el arranque falla**, en vez de guardar las credenciales de las bases en claro. Rotarla invalida todo lo cifrado: hay que descifrar con la vieja y recifrar.
 

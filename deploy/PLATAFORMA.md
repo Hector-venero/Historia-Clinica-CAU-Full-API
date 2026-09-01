@@ -41,6 +41,39 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 El arranque aplica las migraciones del plano de control y después las de cada
 consultorio (`migrate.py --todos`). Si alguna falla, el contenedor no levanta.
 
+### Antes de levantar: revisar la configuración
+
+```bash
+FLASK_APP=app.main flask verificar-produccion
+```
+
+Sale con código distinto de cero si hay algo que impide arrancar, así que se
+puede encadenar en el script de despliegue. Son **los mismos chequeos que corren
+al arrancar**, pero sin arrancar: se pueden correr contra el `.env` de producción
+antes de levantar nada. Con `--como-produccion` los aplica aunque `FLASK_ENV`
+todavía no lo sea, que es lo que sirve para probar el `.env` desde la máquina de
+desarrollo.
+
+**Lo que impide arrancar**, y por qué cada uno:
+
+| | Qué pasa si se deja pasar |
+|---|---|
+| `SECRET_KEY` sin definir o con el valor de ejemplo | El valor de ejemplo está publicado en el repositorio: con él cualquiera se firma una cookie de sesión válida y entra como director de cualquier consultorio |
+| `FLASK_DEBUG` encendido | El depurador de Werkzeug expone una consola de Python en el navegador ante cualquier excepción: es ejecución remota de código servida por la propia aplicación |
+| `DOMINIO_BASE` vacío con `MULTI_TENANT=true` | Cualquier host que apunte al servidor se interpreta como el slug de un consultorio |
+| `PLATAFORMA_SECRET_KEY` vacía | No se puede leer la credencial de ninguna base |
+| `SESSION_COOKIE_DOMAIN` definida | Con un dominio comodín la sesión de un consultorio viaja a todos los demás |
+| `FRONTEND_URL` sin `https://` | La cookie de sesión viaja en claro |
+| `SESSION_COOKIE_SECURE` apagada a mano | Lo mismo, aunque el resto esté bien |
+
+Lo demás —`MAIL_DEFAULT_SENDER`, `QBI_BASE_URL`, la contraseña de ejemplo de la
+base, los endpoints de prueba de blockchain— **avisa y sigue**: puede ser una
+decisión deliberada.
+
+⚠️ La lista fatal es corta a propósito. Solo entra lo que, dejado pasar,
+significa que el sistema está sirviendo de forma insegura **y nadie se va a
+enterar**. Todo lo que un operador puede notar por su cuenta es un aviso.
+
 ### Variables que no pueden faltar
 
 | Variable | Por qué |

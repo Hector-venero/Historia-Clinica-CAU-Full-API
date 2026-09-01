@@ -50,6 +50,22 @@ def build_cors_origins(environment, frontend_url, configured_origins):
 
 
 # -------------------------
+# Antes de nada: que la configuracion de produccion sea servible
+# -------------------------
+# CLAUDE.md tiene una decena de avisos con la forma "si te olvidas de esto en
+# produccion, pasa algo malo en silencio". Un aviso en un archivo de texto no
+# detiene un despliegue; esto si.
+#
+# Solo exige en produccion, y solo tumba el arranque por lo que significa servir
+# de forma insegura sin que nadie se entere — SECRET_KEY de ejemplo es que
+# cualquiera se firme una sesion de director. Es la misma politica que ya aplica
+# el resto del sistema: las migraciones que fallan tumban el contenedor.
+from app import preflight  # noqa: E402
+
+for _clave, _texto in [(c, t) for _n, c, t in preflight.exigir()]:
+    print(f"[aviso de configuracion] {_clave}: {_texto}", flush=True)
+
+# -------------------------
 # Crear app Flask
 # -------------------------
 app = Flask(__name__)
@@ -303,6 +319,52 @@ def cliente_estado_command(slug, estado, motivo):
     if suscripcion.cambiar_estado(slug, estado, motivo) == 0:
         raise click.ClickException(f"No existe el consultorio '{slug}'.")
     click.echo(f"{slug}: {estado}")
+
+
+@app.cli.command("verificar-produccion")
+@click.option("--como-produccion", is_flag=True,
+              help="Revisa como si FLASK_ENV fuera production, sin serlo.")
+def verificar_produccion_command(como_produccion):
+    """Revisa que la configuracion sea servible antes de desplegar.
+
+    Los mismos chequeos que corren al arrancar, pero sin arrancar: se puede
+    correr contra el .env de produccion antes de levantar nada.
+
+    Sale con codigo distinto de cero si hay algo fatal, para poder encadenarlo
+    en un script de despliegue.
+    """
+    import os as _os
+
+    from app import preflight
+
+    entorno = dict(_os.environ)
+    if como_produccion:
+        entorno["FLASK_ENV"] = "production"
+
+    problemas = preflight.revisar(entorno)
+
+    if (entorno.get("FLASK_ENV") or "").lower() != "production":
+        click.echo("FLASK_ENV no es 'production': no hay nada que exigir.")
+        click.echo("Para revisar igual, usar --como-produccion.")
+        return
+
+    fatales = [p for p in problemas if p[0] == preflight.FATAL]
+    avisos = [p for p in problemas if p[0] == preflight.AVISO]
+
+    for _nivel, clave, texto in fatales:
+        click.echo(click.style(f"IMPIDE ARRANCAR  {clave}", fg="red", bold=True))
+        click.echo(f"    {texto}\n")
+    for _nivel, clave, texto in avisos:
+        click.echo(click.style(f"revisar          {clave}", fg="yellow"))
+        click.echo(f"    {texto}\n")
+
+    if not problemas:
+        click.echo(click.style("Todo en orden para produccion.", fg="green"))
+        return
+
+    click.echo(f"{len(fatales)} impiden arrancar, {len(avisos)} para revisar.")
+    if fatales:
+        raise SystemExit(1)
 
 
 @app.cli.command("cliente-plan")
