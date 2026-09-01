@@ -17,6 +17,12 @@ const horarios = ref([]);
 const elegido = ref('');
 const motivo = ref('');
 
+// Prestaciones del profesional. Lista vacía en un consultorio que no las use, y
+// entonces la reserva es como siempre: solo día y horario.
+const servicios = ref([]);
+const servicioId = ref(null);
+const servicioElegido = computed(() => servicios.value.find((s) => s.id === servicioId.value) || null);
+
 const cargandoHorarios = ref(false);
 const confirmando = ref(false);
 const error = ref('');
@@ -51,9 +57,24 @@ const franjas = computed(() => {
 // misma consulta que ya se hacía cuando un día quedaba vacío.
 const sugeridos = ref([]);
 
+async function cargarServicios() {
+    try {
+        const { data } = await portalService.servicios(clienteId, usuarioId);
+        servicios.value = data.servicios || [];
+    } catch {
+        // Sin la lista se reserva como siempre. No vale cortar la pantalla.
+        servicios.value = [];
+    }
+}
+
+function precioTexto(valor) {
+    if (valor === null || valor === undefined) return '';
+    return valor.toLocaleString('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 });
+}
+
 async function cargarSugeridos() {
     try {
-        const { data } = await portalService.proximoDia(clienteId, usuarioId, hoy);
+        const { data } = await portalService.proximoDia(clienteId, usuarioId, hoy, servicioId.value);
         sugeridos.value = data.dia ? [data.dia] : [];
     } catch {
         sugeridos.value = [];
@@ -78,7 +99,7 @@ async function buscarProximoDia() {
     proximoConLugar.value = null;
     buscandoProximo.value = true;
     try {
-        const { data } = await portalService.proximoDia(clienteId, usuarioId, fecha.value);
+        const { data } = await portalService.proximoDia(clienteId, usuarioId, fecha.value, servicioId.value);
         // El backend responde 200 con `dia: null` cuando no hay nada en las
         // próximas dos semanas: es una respuesta, no un error.
         proximoConLugar.value = data.dia || null;
@@ -98,7 +119,7 @@ async function cargarHorarios() {
     error.value = '';
     proximoConLugar.value = null;
     try {
-        const { data } = await portalService.horarios(clienteId, usuarioId, fecha.value);
+        const { data } = await portalService.horarios(clienteId, usuarioId, fecha.value, servicioId.value);
         horarios.value = data.horarios || [];
         if (!horarios.value.length) await buscarProximoDia();
     } catch (e) {
@@ -111,12 +132,22 @@ async function cargarHorarios() {
 
 watch(fecha, cargarHorarios);
 
+// Cambiar de servicio cambia la duración, y con ella la grilla entera: los
+// horarios de 20 minutos no sirven para un turno de 40. Se recalcula todo, y
+// también el atajo al primer día con lugar, que si no quedaría apuntando a un
+// día que ya no lo tiene.
+watch(servicioId, () => {
+    elegido.value = '';
+    cargarSugeridos();
+    cargarHorarios();
+});
+
 async function confirmar() {
     if (!elegido.value) return;
 
     // Sin cuenta: se guarda la elección y se manda a registrarse.
     if (!paciente.autenticado) {
-        sessionStorage.setItem(CLAVE_PENDIENTE, JSON.stringify({ clienteId, usuarioId, fechaInicio: elegido.value, motivo: motivo.value }));
+        sessionStorage.setItem(CLAVE_PENDIENTE, JSON.stringify({ clienteId, usuarioId, fechaInicio: elegido.value, motivo: motivo.value, servicioId: servicioId.value }));
         router.push({ path: '/portal/registro', query: { volver: route.fullPath } });
         return;
     }
@@ -128,7 +159,8 @@ async function confirmar() {
             cliente_id: clienteId,
             usuario_id: usuarioId,
             fecha_inicio: elegido.value,
-            motivo: motivo.value
+            motivo: motivo.value,
+            servicio_id: servicioId.value
         });
         confirmado.value = data;
         sessionStorage.removeItem(CLAVE_PENDIENTE);
@@ -143,6 +175,10 @@ async function confirmar() {
 }
 
 onMounted(async () => {
+    // Antes que nada: los horarios se piden con el servicio puesto, así que la
+    // lista tiene que estar antes de la primera consulta.
+    await cargarServicios();
+
     try {
         const { data } = await portalService.profesionales({});
         profesional.value = data.find((p) => p.cliente_id === clienteId && p.usuario_id === usuarioId) || null;
@@ -156,6 +192,10 @@ onMounted(async () => {
         try {
             const datos = JSON.parse(pendiente);
             if (datos.clienteId === clienteId && datos.usuarioId === usuarioId) {
+                // El servicio se restaura antes que la fecha: sin él la grilla
+                // se armaría con otra duración y el horario guardado no
+                // aparecería en la lista.
+                if (datos.servicioId && servicios.value.some((s) => s.id === datos.servicioId)) servicioId.value = datos.servicioId;
                 fecha.value = datos.fechaInicio.slice(0, 10);
                 motivo.value = datos.motivo || '';
                 await cargarHorarios();
@@ -222,7 +262,8 @@ onMounted(async () => {
                 <!-- Lo que hace falta para decidir, sin tener que volver atrás:
                      cuánto dura y dónde es. -->
                 <div v-if="profesional" class="flex flex-wrap gap-x-5 gap-y-1 mt-3 text-sm text-surface-500 dark:text-surface-400">
-                    <span v-if="profesional.duracion_turno"><i class="pi pi-clock mr-1.5"></i>Turnos de {{ profesional.duracion_turno }} minutos</span>
+                    <span v-if="servicioElegido"><i class="pi pi-clock mr-1.5"></i>{{ servicioElegido.nombre }} · {{ servicioElegido.duracion_minutos }} minutos</span>
+                    <span v-else-if="profesional.duracion_turno"><i class="pi pi-clock mr-1.5"></i>Turnos de {{ profesional.duracion_turno }} minutos</span>
                     <span v-if="profesional.lugar_direccion"><i class="pi pi-map-marker mr-1.5"></i>{{ profesional.lugar_direccion }}</span>
                 </div>
             </header>
@@ -241,6 +282,30 @@ onMounted(async () => {
                         <i class="pi pi-bolt text-xs"></i>
                         {{ fechaLarga(sugeridos[0].fecha) }}
                     </button>
+                </div>
+
+                <!-- Primero qué necesita, después cuándo: la prestación decide
+                     cuánto dura el turno y por lo tanto qué horarios existen.
+                     Solo aparece si el consultorio cargó servicios. -->
+                <div v-if="servicios.length" class="flex flex-col gap-2">
+                    <label class="text-sm font-semibold text-surface-700 dark:text-surface-200">¿Qué necesitás?</label>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <button
+                            v-for="s in servicios"
+                            :key="s.id"
+                            type="button"
+                            class="text-left px-4 py-3 rounded-xl border transition"
+                            :class="servicioId === s.id ? 'border-primary-500 bg-primary-50 dark:bg-primary-950/40' : 'border-surface-200 dark:border-surface-700 hover:bg-surface-50 dark:hover:bg-surface-800'"
+                            @click="servicioId = servicioId === s.id ? null : s.id"
+                        >
+                            <span class="block font-semibold text-surface-900 dark:text-surface-0">{{ s.nombre }}</span>
+                            <span v-if="s.descripcion" class="block text-xs text-surface-500 dark:text-surface-400 mt-0.5">{{ s.descripcion }}</span>
+                            <span class="block text-sm text-surface-500 dark:text-surface-400 mt-1">
+                                {{ s.duracion_minutos }} min<span v-if="s.precio !== null"> · {{ precioTexto(s.precio) }}</span>
+                            </span>
+                        </button>
+                    </div>
+                    <p class="text-xs text-surface-400 dark:text-surface-500 m-0">Si no estás seguro, dejalo sin elegir y contalo en el motivo.</p>
                 </div>
 
                 <div class="flex flex-col gap-2">

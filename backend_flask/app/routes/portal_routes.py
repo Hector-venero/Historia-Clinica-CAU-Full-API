@@ -235,6 +235,21 @@ def especialidades():
     return jsonify(reservas.especialidades_disponibles())
 
 
+@bp_portal.get("/profesionales/<int:cliente_id>/<int:usuario_id>/servicios")
+def servicios_del_profesional(cliente_id, usuario_id):
+    """Las prestaciones que ofrece, para elegir antes que el horario.
+
+    Sin sesion, como los horarios: saber que se puede pedir y cuanto sale es
+    parte de decidir si vale la pena registrarse.
+
+    Lista vacia si el consultorio no usa servicios. El portal lo trata como
+    "elegis horario y nada mas", que es como funcionaba antes.
+    """
+    from app import reservas
+
+    return jsonify({"servicios": reservas.servicios_publicos(cliente_id, usuario_id)})
+
+
 @bp_portal.get("/profesionales/<int:cliente_id>/<int:usuario_id>/horarios")
 def horarios(cliente_id, usuario_id):
     """Horarios libres de un profesional para un dia.
@@ -246,7 +261,8 @@ def horarios(cliente_id, usuario_id):
 
     try:
         libres = reservas.horarios_libres(
-            cliente_id, usuario_id, request.args.get("fecha")
+            cliente_id, usuario_id, request.args.get("fecha"),
+            servicio_id=request.args.get("servicio_id", type=int),
         )
     except reservas.ErrorReserva as exc:
         return jsonify({"error": str(exc)}), 400
@@ -265,7 +281,8 @@ def proximo_dia(cliente_id, usuario_id):
 
     try:
         encontrado = reservas.proximo_dia_con_lugar(
-            cliente_id, usuario_id, request.args.get("desde")
+            cliente_id, usuario_id, request.args.get("desde"),
+            servicio_id=request.args.get("servicio_id", type=int),
         )
     except reservas.ErrorReserva as exc:
         return jsonify({"error": str(exc)}), 400
@@ -305,6 +322,7 @@ def reservar():
             usuario_id=usuario_id,
             fecha_inicio=datos.get("fecha_inicio"),
             motivo=datos.get("motivo"),
+            servicio_id=datos.get("servicio_id"),
         )
     except reservas.ErrorReserva as exc:
         return jsonify({"error": str(exc)}), 409

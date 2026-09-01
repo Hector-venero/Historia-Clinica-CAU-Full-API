@@ -37,7 +37,7 @@ def _turno(desde, hasta):
 
 def _preparar(monkeypatch, franjas, ocupados, ausente=False, duracion=20):
     """Encadena las tres consultas que hace proximos_slots_libres."""
-    monkeypatch.setattr(tr, "_obtener_duracion_turno", lambda _uid: duracion)
+    monkeypatch.setattr(tr, "_obtener_duracion_turno", lambda _uid, _servicio_id=None: duracion)
     make_db(
         monkeypatch,
         tr,

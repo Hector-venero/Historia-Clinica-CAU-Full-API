@@ -165,6 +165,15 @@ const router = createRouter({
                     meta: { roles: ['profesional', 'director'] }
                 },
                 {
+                    path: 'turnos/servicios',
+                    name: 'servicios',
+                    component: () => import('@/views/pages/turnos/Servicios.vue'),
+                    // Mismos roles que el @requiere_rol del backend. El `area`
+                    // queda afuera: coordina agendas de grupo, no define las
+                    // prestaciones que factura el consultorio.
+                    meta: { roles: ['director', 'administrativo', 'profesional'] }
+                },
+                {
                     path: 'turnos/configuracion',
                     name: 'configuracionTurnos',
                     component: () => import('@/views/pages/turnos/ConfiguracionTurnos.vue'),

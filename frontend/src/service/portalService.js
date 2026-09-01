@@ -66,16 +66,28 @@ export default {
         return api.get('/portal/especialidades');
     },
 
-    horarios(clienteId, usuarioId, fecha) {
+    /**
+     * Las prestaciones del profesional, para elegir antes que el horario.
+     *
+     * Devuelve lista vacía si el consultorio no usa servicios, que es el caso
+     * por defecto: ahí la reserva es como siempre, solo con el horario.
+     */
+    servicios(clienteId, usuarioId) {
+        return api.get(`/portal/profesionales/${clienteId}/${usuarioId}/servicios`);
+    },
+
+    // `servicioId` cambia la grilla: los horarios se arman con la duración de
+    // ese servicio. Sin él, con la del profesional.
+    horarios(clienteId, usuarioId, fecha, servicioId = null) {
         return api.get(`/portal/profesionales/${clienteId}/${usuarioId}/horarios`, {
-            params: { fecha }
+            params: { fecha, servicio_id: servicioId || undefined }
         });
     },
 
     /** El primer día con lugar, para no dejar a la persona probando día por día. */
-    proximoDia(clienteId, usuarioId, desde) {
+    proximoDia(clienteId, usuarioId, desde, servicioId = null) {
         return api.get(`/portal/profesionales/${clienteId}/${usuarioId}/proximo-dia`, {
-            params: { desde }
+            params: { desde, servicio_id: servicioId || undefined }
         });
     },
 

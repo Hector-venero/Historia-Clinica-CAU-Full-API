@@ -3,6 +3,7 @@ import { ref, computed, onMounted, watch } from 'vue';
 import { useUserStore } from '@/stores/user';
 import api from '@/api/axios';
 import ausenciasService from '@/service/ausenciasService';
+import servicioService from '@/service/servicioService';
 import DatePicker from 'primevue/datepicker';
 import Button from 'primevue/button';
 
@@ -28,6 +29,11 @@ const horariosSugeridos = ref([]);
 const profesionales = ref([]);
 // Bloqueos de agenda del profesional elegido, para no ofrecer días que no atiende.
 const ausenciasProfesional = ref([]);
+// Prestaciones que puede dar el profesional elegido. Vacío en un consultorio
+// que no las use, y ahí el selector no se muestra: no tiene sentido pedir que
+// elija de una lista que no existe.
+const servicios = ref([]);
+const servicioId = ref(null);
 
 // 🔹 Campos nuevos para tanda
 const esTanda = ref(false);
@@ -35,7 +41,12 @@ const cantidad = ref(10);
 const diasSemana = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
 const diasSeleccionados = ref([]);
 
-const duracion = computed(() => userStore.duracion_turno || 30);
+const servicioElegido = computed(() => servicios.value.find((s) => s.id === servicioId.value) || null);
+
+// La duración sale del servicio cuando hay uno. Sin servicio, de la
+// configuración —el mismo orden que aplica el backend, para que lo que muestra
+// la pantalla y lo que se guarda no puedan discrepar.
+const duracion = computed(() => servicioElegido.value?.duracion_minutos || userStore.duracion_turno || 30);
 
 onMounted(async () => {
     try {
@@ -53,6 +64,7 @@ onMounted(async () => {
 
 watch(usuarioId, async (id) => {
     await cargarAusenciasProfesional(id);
+    await cargarServicios(id);
 
     // Si ya había una fecha elegida y el profesional nuevo no atiende ese día,
     // se limpia: dejarla puesta terminaría en un rechazo del backend.
@@ -61,6 +73,22 @@ watch(usuarioId, async (id) => {
         error.value = 'Ese día el profesional tiene la agenda bloqueada.';
     }
 });
+
+async function cargarServicios(profesionalId) {
+    servicioId.value = null;
+    if (!profesionalId) {
+        servicios.value = [];
+        return;
+    }
+    try {
+        const { data } = await servicioService.listar({ usuarioId: profesionalId, soloActivos: true });
+        servicios.value = data || [];
+    } catch (e) {
+        console.error('Error cargando servicios', e);
+        // Sin la lista se agenda como siempre, con la duración configurada.
+        servicios.value = [];
+    }
+}
 
 async function cargarAusenciasProfesional(profesionalId) {
     if (!profesionalId) {
@@ -239,6 +267,7 @@ async function crearTurno() {
         fecha_inicio: fechaInicioStr,
         fecha_fin: calcularFin(fecha.value, duracion.value),
         motivo: motivo.value,
+        servicio_id: servicioId.value,
         modalidad: modalidad.value,
         // Se manda solo en virtual: el backend descarta el enlace de un turno
         // presencial, y mandarlo igual seria pedirle que limpie lo nuestro.
@@ -266,6 +295,7 @@ async function crearTurno() {
         usuarioId.value = '';
         fecha.value = null;
         motivo.value = '';
+        servicioId.value = null;
         modalidad.value = 'presencial';
         enlaceVideo.value = '';
         esTanda.value = false;
@@ -295,7 +325,7 @@ function usarHorario(iso) {
     <div class="max-w-3xl mx-auto p-4 md:p-6 space-y-6">
         <header>
             <h1 class="text-2xl md:text-3xl font-bold text-surface-900 dark:text-surface-0 m-0">Nuevo turno</h1>
-            <p class="text-sm text-surface-500 dark:text-surface-400 mt-1 mb-0">Turnos de {{ duracion }} minutos, según la configuración del profesional.</p>
+            <p class="text-sm text-surface-500 dark:text-surface-400 mt-1 mb-0">Turnos de {{ duracion }} minutos<span v-if="servicioElegido">, según el servicio elegido</span><span v-else>, según la configuración del profesional</span>.</p>
         </header>
 
         <form class="space-y-6" @submit.prevent="crearTurno">
@@ -367,6 +397,17 @@ function usarHorario(iso) {
                     <span class="paso">3</span>
                     Detalle
                 </h2>
+
+                <!-- Solo si el consultorio cargó servicios: pedir que elija de
+                     una lista vacía sería pedir algo que no se puede hacer. -->
+                <template v-if="servicios.length">
+                    <label class="etiqueta">Servicio</label>
+                    <select v-model="servicioId" class="campo">
+                        <option :value="null">Sin servicio — {{ userStore.duracion_turno || 30 }} min</option>
+                        <option v-for="s in servicios" :key="s.id" :value="s.id">{{ s.nombre }} — {{ s.duracion_minutos }} min</option>
+                    </select>
+                    <p class="text-sm text-surface-500 dark:text-surface-400 mt-1 mb-4">El servicio define cuánto dura el turno.</p>
+                </template>
 
                 <label class="etiqueta">Motivo</label>
                 <textarea v-model="motivo" rows="3" placeholder="Motivo del turno (opcional)" class="campo"></textarea>

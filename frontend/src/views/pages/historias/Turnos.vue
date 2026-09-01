@@ -7,6 +7,7 @@ import interactionPlugin from '@fullcalendar/interaction';
 import tippy from 'tippy.js';
 import 'tippy.js/dist/tippy.css';
 import api from '@/api/axios';
+import servicioService from '@/service/servicioService';
 import { fechaBonitaCompleta } from '@/utils/formatDate';
 import '@/assets/calendar-medical.css';
 
@@ -126,6 +127,10 @@ const nuevoTurnoMotivo = ref('');
 const nuevoTurnoModalidad = ref('presencial');
 const nuevoTurnoEnlaceVideo = ref('');
 const nuevoTurnoObservaciones = ref('');
+// Prestaciones del profesional cuya agenda se está mirando. Vacío en un
+// consultorio que no las use, y ahí el selector no aparece.
+const serviciosDelSujeto = ref([]);
+const nuevoTurnoServicioId = ref(null);
 const nuevoTurnoFecha = ref('');
 const nuevoTurnoGuardando = ref(false);
 
@@ -589,8 +594,27 @@ async function guardarBloqueo() {
     }
 }
 
+async function cargarServiciosDelSujeto(id) {
+    nuevoTurnoServicioId.value = null;
+    if (!id) {
+        serviciosDelSujeto.value = [];
+        return;
+    }
+    try {
+        const { data } = await servicioService.listar({ usuarioId: Number(id), soloActivos: true });
+        serviciosDelSujeto.value = data || [];
+    } catch (e) {
+        console.error('Error cargando servicios', e);
+        // Sin la lista se agenda como siempre, con la duración configurada.
+        serviciosDelSujeto.value = [];
+    }
+}
+
 function abrirModalNuevoTurno(date) {
     nuevoTurnoFecha.value = toLocalDateTimeString(date);
+    // Se cargan al abrir y no al montar: la agenda cambia de profesional sin
+    // recargar la pantalla, y una lista traída una sola vez quedaría vieja.
+    cargarServiciosDelSujeto(sujetoSeleccionadoId.value);
     nuevoTurnoTipoEvento.value = 'Turno';
     limpiarPacienteSeleccionado();
     nuevoTurnoMotivo.value = '';
@@ -634,6 +658,7 @@ async function guardarNuevoTurno() {
                     fecha_inicio: nuevoTurnoFecha.value,
                     motivo: nuevoTurnoMotivo.value,
                     observaciones: nuevoTurnoObservaciones.value,
+                    servicio_id: nuevoTurnoServicioId.value,
                     modalidad: nuevoTurnoModalidad.value,
                     // Solo en virtual: el backend descarta el enlace de un turno
                     // presencial, y mandarlo igual sería pedirle que limpie lo nuestro.
@@ -818,6 +843,19 @@ onUnmounted(() => {
                             >, <span class="text-red-600 font-semibold">{{ ausenciasConteoNuevoTurno.sin_aviso }} sin aviso</span>)
                         </div>
                     </div>
+                </div>
+                <!-- Solo con servicios cargados, y solo para turnos: un bloqueo
+                     de agenda no es una prestación. -->
+                <div v-if="nuevoTurnoTipoEvento === 'Turno' && serviciosDelSujeto.length">
+                    <label class="font-heading font-semibold text-sm block mb-1.5 text-[#134E4A] dark:text-slate-200"> <i class="pi pi-list mr-1.5 text-[#0891B2]"></i>Servicio </label>
+                    <Select
+                        v-model="nuevoTurnoServicioId"
+                        :options="[{ id: null, etiqueta: `Sin servicio — ${duracionTurno || 20} min` }, ...serviciosDelSujeto.map((s) => ({ id: s.id, etiqueta: `${s.nombre} — ${s.duracion_minutos} min` }))]"
+                        optionLabel="etiqueta"
+                        optionValue="id"
+                        class="w-full"
+                    />
+                    <small class="text-slate-500">El servicio define cuánto dura el turno.</small>
                 </div>
                 <div>
                     <label class="font-heading font-semibold text-sm block mb-1.5 text-[#134E4A] dark:text-slate-200"> <i class="pi pi-comment mr-1.5 text-[#0891B2]"></i>{{ nuevoTurnoTipoEvento === 'Turno' ? 'Motivo' : 'Detalle' }} </label>

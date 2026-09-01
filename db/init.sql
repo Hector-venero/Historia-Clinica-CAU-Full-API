@@ -148,6 +148,29 @@ CREATE TABLE evolucion_archivos (
   COLLATE=utf8mb4_unicode_ci;
 
 -- ==============================================
+-- SERVICIOS (PRESTACIONES)
+-- ==============================================
+-- Cada turno puede ser *de algo*: consulta, control, urgencia, con su duracion
+-- y su precio. `usuario_id` NULL = el servicio es de todo el consultorio.
+--
+-- Es opcional: un consultorio que no cargue ninguno funciona igual que siempre,
+-- con la duracion unica de `usuarios.duracion_turno`.
+CREATE TABLE servicios (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    usuario_id INT NULL,
+    nombre VARCHAR(120) NOT NULL,
+    descripcion VARCHAR(255) NULL,
+    duracion_minutos INT NOT NULL,
+    precio DECIMAL(10,2) NULL,
+    activo TINYINT(1) NOT NULL DEFAULT 1,
+    creado_en DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE,
+    INDEX idx_servicios_usuario (usuario_id, activo)
+) ENGINE=InnoDB
+  DEFAULT CHARSET=utf8mb4
+  COLLATE=utf8mb4_unicode_ci;
+
+-- ==============================================
 -- TABLA DE TURNOS
 -- ==============================================
 CREATE TABLE turnos (
@@ -162,8 +185,15 @@ CREATE TABLE turnos (
     -- el sistema no genera ni aloja la videollamada. Ver docs/VIDEOCONSULTA.md.
     modalidad VARCHAR(20) NOT NULL DEFAULT 'presencial',
     enlace_video VARCHAR(500) NULL,
+    -- Opcional. Sin servicio, la duracion sale de usuarios.duracion_turno.
+    -- SET NULL y no CASCADE: borrar el servicio del catalogo no puede borrar los
+    -- turnos que se dieron con el.
+    servicio_id INT NULL,
     FOREIGN KEY (paciente_id) REFERENCES pacientes(id),
-    FOREIGN KEY (usuario_id) REFERENCES usuarios(id)
+    FOREIGN KEY (usuario_id) REFERENCES usuarios(id),
+    -- Con nombre y no anonima: la migracion la crea nombrada, y sin esto la
+    -- base creada desde cero y la migrada quedan con constraints distintas.
+    CONSTRAINT fk_turnos_servicio FOREIGN KEY (servicio_id) REFERENCES servicios(id) ON DELETE SET NULL
 ) ENGINE=InnoDB
   DEFAULT CHARSET=utf8mb4
   COLLATE=utf8mb4_unicode_ci;

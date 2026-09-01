@@ -241,7 +241,7 @@ def _sin_horarios_salvo(monkeypatch, fecha_con_lugar, horarios=("09:00", "09:45"
     """horarios_libres() falso: solo un dia tiene lugar."""
     llamadas = []
 
-    def falso(cliente_id, usuario_id, fecha, cantidad=20):
+    def falso(cliente_id, usuario_id, fecha, cantidad=20, servicio_id=None):
         llamadas.append(fecha)
         if fecha == fecha_con_lugar:
             return [f"{fecha}T{h}:00-03:00" for h in horarios]

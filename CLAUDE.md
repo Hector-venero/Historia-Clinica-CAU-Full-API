@@ -287,6 +287,37 @@ mentira.
   **nunca el documento**: es la llave con la que dos consultorios le envían a la
   misma persona.
 
+### Servicios (prestaciones)
+
+Un turno puede ser **de algo**: consulta, control, urgencia, cada uno con su
+duración y su precio (`routes/servicios_routes.py`, tabla `servicios`).
+
+**Son opcionales, y esa es la regla que ordena todo el módulo.** Un consultorio
+que no cargue ninguno funciona exactamente como antes: la duración sigue saliendo
+de `usuarios.duracion_turno`. Es lo que permitió soltar esto sin migrar a nadie
+ni obligar a nadie a configurar algo antes de poder agendar. Cualquier cambio acá
+se prueba con y sin servicios.
+
+- **El cálculo de horarios sigue siendo uno solo.** `proximos_slots_libres()` no
+  se duplicó: lo único que cambió es de dónde saca la duración
+  (`_obtener_duracion_turno(usuario_id, servicio_id)` — con servicio manda el
+  servicio, sin servicio el profesional, y ese orden es el mismo que aplica el
+  frontend para que la pantalla y lo guardado no puedan discrepar). Los tres
+  caminos que crean turnos —Nuevo Turno, el diálogo de la agenda y el portal—
+  pasan por ahí.
+- **El servicio se valida en el servidor**, con `servicio_del_profesional()`. El
+  id viaja en el pedido; uno de otro profesional agendaría una duración que ese
+  profesional no ofrece. Un servicio inválido se **rechaza**, no se ignora:
+  ignorarlo deja el turno mal en la agenda sin que nadie se entere hasta el día.
+- **El directorio NO los proyecta.** A diferencia del resto de la ficha pública,
+  `reservas.servicios_publicos()` los lee de la base del consultorio en el
+  momento. `profesionales_publicos` existe porque *buscar* recorriendo N bases
+  sería la consulta más usada del sitio hecha de la peor forma posible; abrir la
+  ficha de un profesional ya resolvió de qué consultorio es, así que son una base
+  y una consulta, y a cambio la lista nunca queda vieja.
+- En el portal el servicio se elige **antes** que el horario: la prestación
+  decide cuánto dura el turno y por lo tanto qué horarios existen.
+
 ### Turnos online
 
 - **Publicar exige `apellido`.** El alta crea el usuario admin con el nombre del
@@ -531,7 +562,8 @@ Key tables and non-obvious design decisions:
 - **`anclajes_blockchain`** (antes `anclajes_historia`) — **append-only**: histórico de sellados en blockchain. Nunca se actualiza ni se borra. `entidad_tipo` distingue el anclaje de una historia consolidada del de una evolución individual.
 - **`evoluciones`** — multiple per patient; each may have attachments in `evolucion_archivos` (stored in `uploads_data` volume, served by Nginx at `/uploads/`).
 - **`disponibilidades`** — franjas semanales por profesional. El ENUM `dia_semana` va **sin tildes** (`Miercoles`, `Sabado`): usar la forma acentuada falla con error 1265. `normalizar_dia()` acepta ambas y canonicaliza.
-- **`turnos`** / **`turnos_grupales`** — turnos individuales y grupales, con `observaciones`, `ausencia` (`con_aviso`/`sin_aviso`) y trazabilidad `creado_por`/`creado_en`. `modalidad` (`presencial`|`virtual`) y `enlace_video` son de la videoconsulta: el enlace lo pone el profesional y **el sistema no genera ni aloja la videollamada** (ver [`docs/VIDEOCONSULTA.md`](docs/VIDEOCONSULTA.md)). Es `VARCHAR` y no `ENUM`, como `comunicados.prioridad`. Ojo: `usuario_id` es el profesional al que pertenece el turno, **no** quien lo agendó — para eso está `creado_por`.
+- **`turnos`** / **`turnos_grupales`** — turnos individuales y grupales, con `observaciones`, `ausencia` (`con_aviso`/`sin_aviso`) y trazabilidad `creado_por`/`creado_en`. `modalidad` (`presencial`|`virtual`) y `enlace_video` son de la videoconsulta: el enlace lo pone el profesional y **el sistema no genera ni aloja la videollamada** (ver [`docs/VIDEOCONSULTA.md`](docs/VIDEOCONSULTA.md)). Es `VARCHAR` y no `ENUM`, como `comunicados.prioridad`. Ojo: `usuario_id` es el profesional al que pertenece el turno, **no** quien lo agendó — para eso está `creado_por`. `servicio_id` es **opcional** y en NULL para siempre en un consultorio que no use servicios.
+- **`servicios`** — las prestaciones del consultorio (nombre, duración, precio, `activo`). `usuario_id` NULL significa "de todo el consultorio"; con valor, es de ese profesional. Se descartó una tabla de unión `servicio_profesionales`: el caso real es que casi todos los servicios los ofrece todo el mundo, y el que no, lo ofrece uno solo — una tabla de unión son dos consultas y una pantalla más, todos los días, para cubrir el caso raro. La baja es **lógica** (`activo = 0`), y `turnos.servicio_id` es `ON DELETE SET NULL`: borrar una prestación del catálogo no puede borrar los turnos que se dieron con ella.
 - **`comunicados`** / **`grupo_posteos`** — avisos institucionales y posteos internos por grupo. `comunicados.prioridad` (`normal` | `importante`) decide los canales: **normal solo llega por la campana de la barra superior; importante además manda un mail** a todos los usuarios activos. La distinción es deliberada — un mail por cada aviso convierte la casilla en ruido y logra que no se lean los que sí importan. Es `VARCHAR` y no `ENUM`, y se valida en la aplicación.
 - **`comunicado_lecturas`** — estado de leído **por usuario**. La ausencia de fila significa no leído: no se escribe una fila por cada usuario al publicar. El autor se marca como lector en el mismo INSERT, si no el contador le queda en 1 apenas publica.
 - **`grupos_profesionales`** / **`grupo_miembros`** — grupos para agendas compartidas; `es_rehabilitacion` los distingue en la agenda. Los roles `director` y `area` gestionan la membresía.

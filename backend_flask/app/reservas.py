@@ -180,16 +180,69 @@ def sincronizar_directorio(cliente):
     return len(profesionales)
 
 
+# -------------------------------------------------------------- servicios
+
+
+def servicios_publicos(cliente_id, usuario_id):
+    """Las prestaciones que ese profesional ofrece, para que el paciente elija.
+
+    **No se proyectan al directorio**, a diferencia del resto de la ficha, y no
+    es un olvido. `profesionales_publicos` existe porque *buscar* recorriendo N
+    bases seria la consulta mas usada del sitio hecha de la peor forma posible.
+    Abrir la ficha de un profesional ya resolvio de que consultorio es: son una
+    base y una consulta, y a cambio la lista nunca queda vieja.
+
+    Vacia si el consultorio no usa servicios, que es el caso por defecto. Ahi el
+    portal ofrece el turno como siempre, con la duracion unica del profesional.
+    """
+    ficha = profesional_publico(cliente_id, usuario_id)
+    if ficha is None:
+        return []
+
+    cliente = plataforma.buscar_por_slug(ficha["consultorio_slug"])
+    if cliente is None or not cliente.activo:
+        return []
+
+    from app.database import db_cursor
+
+    with como_consultorio(cliente):
+        with db_cursor() as (_conn, cur):
+            cur.execute(
+                """
+                SELECT id, nombre, descripcion, duracion_minutos, precio
+                FROM servicios
+                WHERE activo = 1 AND (usuario_id IS NULL OR usuario_id = %s)
+                ORDER BY nombre
+                """,
+                (usuario_id,),
+            )
+            filas = cur.fetchall()
+
+    return [
+        {
+            "id": f["id"],
+            "nombre": f["nombre"],
+            "descripcion": f["descripcion"],
+            "duracion_minutos": f["duracion_minutos"],
+            "precio": float(f["precio"]) if f["precio"] is not None else None,
+        }
+        for f in filas
+    ]
+
+
 # --------------------------------------------------------------- horarios
 
 
-def horarios_libres(cliente_id, usuario_id, fecha, cantidad=20):
+def horarios_libres(cliente_id, usuario_id, fecha, cantidad=20, servicio_id=None):
     """Horarios disponibles de un profesional para un dia.
 
     Se calcula con `proximos_slots_libres()`, la misma funcion que usa el
     sistema del consultorio: si fueran dos implementaciones distintas, el portal
     y la pantalla del profesional ofrecerian horarios distintos para la misma
     agenda.
+
+    Con `servicio_id` la grilla se arma con la duracion de ese servicio. Sin el,
+    con la del profesional, igual que antes de que existieran los servicios.
     """
     ficha = profesional_publico(cliente_id, usuario_id)
     if ficha is None:
@@ -226,7 +279,9 @@ def horarios_libres(cliente_id, usuario_id, fecha, cantidad=20):
     from app.routes.turnos_routes import proximos_slots_libres
 
     with como_consultorio(cliente):
-        slots = proximos_slots_libres(usuario_id, desde, cantidad=cantidad)
+        slots = proximos_slots_libres(
+            usuario_id, desde, cantidad=cantidad, servicio_id=servicio_id
+        )
 
     # proximos_slots_libres busca hacia adelante y puede saltar al dia siguiente
     # si el que se pidio esta lleno. Aca interesa solo el dia consultado.
@@ -244,7 +299,7 @@ def horarios_libres(cliente_id, usuario_id, fecha, cantidad=20):
 DIAS_QUE_SE_MIRAN_ADELANTE = 14
 
 
-def proximo_dia_con_lugar(cliente_id, usuario_id, desde=None):
+def proximo_dia_con_lugar(cliente_id, usuario_id, desde=None, servicio_id=None):
     """El primer dia, a partir de `desde`, en el que el profesional tiene lugar.
 
     Existe porque el portal dejaba a la persona en un callejon sin salida: si el
@@ -270,7 +325,9 @@ def proximo_dia_con_lugar(cliente_id, usuario_id, desde=None):
 
     for corrimiento in range(DIAS_QUE_SE_MIRAN_ADELANTE):
         dia = inicio + timedelta(days=corrimiento)
-        libres = horarios_libres(cliente_id, usuario_id, dia.strftime("%Y-%m-%d"))
+        libres = horarios_libres(
+            cliente_id, usuario_id, dia.strftime("%Y-%m-%d"), servicio_id=servicio_id
+        )
         if libres:
             return {"fecha": dia.strftime("%Y-%m-%d"), "horarios": libres}
 
@@ -280,7 +337,8 @@ def proximo_dia_con_lugar(cliente_id, usuario_id, desde=None):
 # ---------------------------------------------------------------- reserva
 
 
-def reservar(paciente, cliente_id, usuario_id, fecha_inicio, motivo=None):
+def reservar(paciente, cliente_id, usuario_id, fecha_inicio, motivo=None,
+             servicio_id=None):
     """Crea el turno en la base del consultorio y lo anota en el portal.
 
     Los cuatro pasos, en orden y con su razon:
@@ -302,10 +360,22 @@ def reservar(paciente, cliente_id, usuario_id, fecha_inicio, motivo=None):
         raise ErrorReserva("El consultorio no esta disponible en este momento.")
 
     from app.database import db_cursor
-    from app.routes.turnos_routes import _alinear_turno_individual, medico_disponible
+    from app.routes.turnos_routes import (
+        _alinear_turno_individual,
+        medico_disponible,
+        servicio_del_profesional,
+    )
 
     with como_consultorio(cliente):
-        inicio, fin, _ajuste, error = _alinear_turno_individual(usuario_id, fecha_inicio)
+        # El servicio llega en el pedido y se comprueba contra la base del
+        # consultorio: sin esto, un id cualquiera agendaria con otra duracion.
+        servicio = servicio_del_profesional(usuario_id, servicio_id) if servicio_id else None
+        if servicio_id and not servicio:
+            raise ErrorReserva("Ese servicio no esta disponible.")
+
+        inicio, fin, _ajuste, error = _alinear_turno_individual(
+            usuario_id, fecha_inicio, servicio_id
+        )
         if error:
             raise ErrorReserva(error)
 
@@ -335,13 +405,18 @@ def reservar(paciente, cliente_id, usuario_id, fecha_inicio, motivo=None):
                     """
                     INSERT INTO turnos
                         (paciente_id, usuario_id, fecha_inicio, fecha_fin, motivo,
-                         observaciones)
-                    VALUES (%s, %s, %s, %s, %s, %s)
+                         observaciones, servicio_id)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
                     """,
                     (
                         paciente_local_id, usuario_id, inicio, fin,
-                        (motivo or "Turno solicitado online").strip()[:255],
+                        # Con servicio, el motivo es el servicio: es lo que el
+                        # profesional quiere ver en su agenda, y mas util que
+                        # "Turno solicitado online" repetido en cada fila.
+                        (motivo or (servicio["nombre"] if servicio else None)
+                         or "Turno solicitado online").strip()[:255],
                         "Reservado por el paciente desde el portal",
+                        servicio_id or None,
                     ),
                 )
                 conn.commit()

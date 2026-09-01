@@ -134,7 +134,46 @@ def _build_ajuste_payload(aplicado, inicio_original, inicio_ajustado, fin_ajusta
     }
 
 
-def _obtener_duracion_turno(usuario_id):
+def servicio_del_profesional(usuario_id, servicio_id):
+    """El servicio, si existe, esta activo y ese profesional puede darlo.
+
+    Un servicio con `usuario_id` NULL es del consultorio entero; con valor, es de
+    ese profesional. Se comprueba en el servidor y no se confia en lo que mande
+    la pantalla: el id viaja en el pedido y con otro se agendaria una duracion
+    que ese profesional no ofrece.
+
+    Devuelve None si no aplica, y quien llama decide si eso es un error o si
+    simplemente sigue sin servicio.
+    """
+    if not servicio_id:
+        return None
+    try:
+        servicio_id = int(servicio_id)
+    except (TypeError, ValueError):
+        return None
+    with db_cursor() as (_conn, cursor):
+        cursor.execute(
+            """
+            SELECT id, nombre, duracion_minutos, precio
+            FROM servicios
+            WHERE id = %s AND activo = 1 AND (usuario_id IS NULL OR usuario_id = %s)
+            """,
+            (servicio_id, usuario_id),
+        )
+        return cursor.fetchone()
+
+
+def _obtener_duracion_turno(usuario_id, servicio_id=None):
+    """Los minutos que dura el turno.
+
+    Con servicio manda el servicio; sin servicio, la duracion unica del
+    profesional. Ese orden es lo que hace que sumar servicios no cambie nada para
+    quien no los use.
+    """
+    servicio = servicio_del_profesional(usuario_id, servicio_id)
+    if servicio and servicio.get("duracion_minutos"):
+        return int(servicio["duracion_minutos"])
+
     with db_cursor() as (_conn, cursor):
         cursor.execute("SELECT duracion_turno FROM usuarios WHERE id = %s", (usuario_id,))
         row = cursor.fetchone()
@@ -143,12 +182,12 @@ def _obtener_duracion_turno(usuario_id):
     return 20
 
 
-def _alinear_turno_individual(usuario_id, fecha_inicio_raw):
+def _alinear_turno_individual(usuario_id, fecha_inicio_raw, servicio_id=None):
     inicio_original = _normalize_datetime(_parse_iso_datetime(fecha_inicio_raw))
     if not inicio_original:
         return None, None, None, "Formato de fecha invalido"
 
-    duracion = _obtener_duracion_turno(usuario_id)
+    duracion = _obtener_duracion_turno(usuario_id, servicio_id)
     inicio_ajustado = _ceil_to_slot(inicio_original, duracion)
     fin_ajustado = inicio_ajustado + timedelta(minutes=duracion)
     ajuste = _build_ajuste_payload(inicio_ajustado != inicio_original, inicio_original, inicio_ajustado, fin_ajustado)
@@ -368,7 +407,7 @@ DIAS_EN_A_ES = {
 }
 
 
-def proximos_slots_libres(usuario_id, desde_dt, cantidad=3):
+def proximos_slots_libres(usuario_id, desde_dt, cantidad=3, servicio_id=None):
     """Devuelve los proximos horarios libres del profesional ese mismo dia.
 
     Rechazar un turno con "el profesional no esta disponible" y nada mas obliga a
@@ -377,8 +416,12 @@ def proximos_slots_libres(usuario_id, desde_dt, cantidad=3):
 
     Solo mira el dia pedido: si no hay lugar, la respuesta vacia ya dice que hay
     que probar otro dia.
+
+    Con `servicio_id` la grilla se arma con la duracion de ese servicio: ofrecer
+    horarios de 20 minutos para un turno que dura 40 seria ofrecer lugar que no
+    existe.
     """
-    duracion = _obtener_duracion_turno(usuario_id) or 30
+    duracion = _obtener_duracion_turno(usuario_id, servicio_id) or 30
     dia_es = DIAS_EN_A_ES.get(desde_dt.strftime("%A"))
     if not dia_es:
         return []
@@ -536,6 +579,7 @@ def api_turnos():
     fecha_inicio_raw = data.get("fecha_inicio")
     motivo = data.get("motivo")
     observaciones = data.get("observaciones")
+    servicio_id = data.get("servicio_id")
 
     modalidad, enlace_video, err_modalidad = _leer_modalidad(data)
     if err_modalidad:
@@ -552,7 +596,15 @@ def api_turnos():
     if current_user.rol == "profesional" and usuario_id != current_user.id:
         return jsonify({"error": "No puede asignar turnos a otros profesionales"}), 403
 
-    fecha_inicio_dt, fecha_fin_dt, ajuste, err = _alinear_turno_individual(usuario_id, fecha_inicio_raw)
+    # Un servicio que no existe o que ese profesional no da se rechaza en vez de
+    # ignorarse: ignorarlo agenda con otra duracion sin decirlo, y el turno queda
+    # mal en la agenda sin que nadie se entere hasta el dia.
+    if servicio_id and not servicio_del_profesional(usuario_id, servicio_id):
+        return jsonify({"error": "El servicio no existe o no lo ofrece ese profesional"}), 400
+
+    fecha_inicio_dt, fecha_fin_dt, ajuste, err = _alinear_turno_individual(
+        usuario_id, fecha_inicio_raw, servicio_id
+    )
     if err:
         return jsonify({"error": err}), 400
 
@@ -568,7 +620,7 @@ def api_turnos():
         fecha_fin,
         permitir_solape=current_user.rol in ["administrativo", "area"],
     ):
-        libres = proximos_slots_libres(usuario_id, fecha_inicio_dt)
+        libres = proximos_slots_libres(usuario_id, fecha_inicio_dt, servicio_id=servicio_id)
         respuesta = {"error": "El profesional no está disponible en ese horario"}
         if libres:
             respuesta["horarios_disponibles"] = libres
@@ -580,8 +632,8 @@ def api_turnos():
     with db_cursor(commit=True) as (_conn, cursor):
         cursor.execute(
             """
-            INSERT INTO turnos (paciente_id, usuario_id, fecha_inicio, fecha_fin, motivo, observaciones, modalidad, enlace_video, creado_por, creado_en)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            INSERT INTO turnos (paciente_id, usuario_id, fecha_inicio, fecha_fin, motivo, observaciones, modalidad, enlace_video, servicio_id, creado_por, creado_en)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """,
             (
                 paciente_id,
@@ -592,6 +644,7 @@ def api_turnos():
                 observaciones,
                 modalidad,
                 enlace_video,
+                servicio_id or None,
                 current_user.id,
                 datetime.now(),
             ),
@@ -659,7 +712,7 @@ def editar_turno(id):
     # conexion. Anidarlas tendria dos tomadas para un solo pedido.
     with db_cursor() as (_conn, cursor):
         cursor.execute(
-            "SELECT usuario_id, fecha_inicio, fecha_fin, motivo, observaciones, modalidad, enlace_video FROM turnos WHERE id=%s",
+            "SELECT usuario_id, fecha_inicio, fecha_fin, motivo, observaciones, modalidad, enlace_video, servicio_id FROM turnos WHERE id=%s",
             (id,),
         )
         turno = cursor.fetchone()
@@ -674,7 +727,15 @@ def editar_turno(id):
     if not fecha_inicio_raw:
         fecha_inicio_raw = turno["fecha_inicio"].strftime("%Y-%m-%dT%H:%M:%S")
 
-    inicio_dt, fin_dt, ajuste, err = _alinear_turno_individual(turno["usuario_id"], fecha_inicio_raw)
+    # Igual que la modalidad: si el pedido no lo nombra se conserva el que tenia.
+    # Cambiar de servicio cambia la duracion, asi que se alinea con el nuevo.
+    servicio_id = data.get("servicio_id", turno.get("servicio_id")) or None
+    if servicio_id and not servicio_del_profesional(turno["usuario_id"], servicio_id):
+        return jsonify({"error": "El servicio no existe o no lo ofrece ese profesional"}), 400
+
+    inicio_dt, fin_dt, ajuste, err = _alinear_turno_individual(
+        turno["usuario_id"], fecha_inicio_raw, servicio_id
+    )
     if err:
         return jsonify({"error": err}), 400
 
@@ -701,7 +762,7 @@ def editar_turno(id):
         turno_excluir_id=id,
         permitir_solape=current_user.rol in ["administrativo", "area"],
     ):
-        libres = proximos_slots_libres(turno["usuario_id"], inicio_dt)
+        libres = proximos_slots_libres(turno["usuario_id"], inicio_dt, servicio_id=servicio_id)
         respuesta = {"error": "El profesional no está disponible en ese horario"}
         if libres:
             respuesta["horarios_disponibles"] = libres
@@ -714,10 +775,10 @@ def editar_turno(id):
         cursor.execute(
             """
             UPDATE turnos
-            SET fecha_inicio=%s, fecha_fin=%s, motivo=%s, observaciones=%s, modalidad=%s, enlace_video=%s
+            SET fecha_inicio=%s, fecha_fin=%s, motivo=%s, observaciones=%s, modalidad=%s, enlace_video=%s, servicio_id=%s
             WHERE id=%s
         """,
-            (fecha_inicio, fecha_fin, motivo, observaciones, modalidad, enlace_video, id),
+            (fecha_inicio, fecha_fin, motivo, observaciones, modalidad, enlace_video, servicio_id, id),
         )
 
     payload = {"message": "Turno actualizado correctamente."}
@@ -758,16 +819,25 @@ def crear_turnos_tanda():
         if current_user.rol == "profesional" and usuario_id != current_user.id:
             return jsonify({"error": "No puede asignar turnos a otros profesionales"}), 403
 
+        # El servicio se resuelve antes de abrir la transaccion: pide su propia
+        # conexion, y toda la tanda escribe dentro de una sola.
+        servicio_id = data.get("servicio_id") or None
+        servicio = servicio_del_profesional(usuario_id, servicio_id) if servicio_id else None
+        if servicio_id and not servicio:
+            return jsonify({"error": "El servicio no existe o no lo ofrece ese profesional"}), 400
+
         # Los turnos de la tanda entran todos o no entra ninguno: van en una
         # sola transaccion. Los `return` de validacion que hay mas abajo salen
         # antes de escribir nada, asi que lo que confirman esta vacio.
         with db_cursor(commit=True) as (_conn, cursor):
-            cursor.execute("SELECT duracion_turno FROM usuarios WHERE id=%s", (usuario_id,))
-            profesional = cursor.fetchone()
-            if not profesional or not profesional["duracion_turno"]:
-                return jsonify({"error": "El profesional no tiene duracion de turno configurada"}), 400
-
-            dur = profesional["duracion_turno"]
+            if servicio:
+                dur = int(servicio["duracion_minutos"])
+            else:
+                cursor.execute("SELECT duracion_turno FROM usuarios WHERE id=%s", (usuario_id,))
+                profesional = cursor.fetchone()
+                if not profesional or not profesional["duracion_turno"]:
+                    return jsonify({"error": "El profesional no tiene duracion de turno configurada"}), 400
+                dur = profesional["duracion_turno"]
             dias_map = {"Lunes": 0, "Martes": 1, "Miercoles": 2, "Jueves": 3, "Viernes": 4, "Sabado": 5, "Domingo": 6}
             dias_indices = [dias_map[d] for d in dias_semana if d in dias_map]
             if not dias_indices:
@@ -797,8 +867,8 @@ def crear_turnos_tanda():
                         continue
                     cursor.execute(
                         """
-                        INSERT INTO turnos (paciente_id, usuario_id, fecha_inicio, fecha_fin, motivo, observaciones, modalidad, enlace_video, creado_por, creado_en)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        INSERT INTO turnos (paciente_id, usuario_id, fecha_inicio, fecha_fin, motivo, observaciones, modalidad, enlace_video, servicio_id, creado_por, creado_en)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     """,
                         (
                             paciente_id,
@@ -809,6 +879,7 @@ def crear_turnos_tanda():
                             observaciones,
                             modalidad,
                             enlace_video,
+                            servicio_id,
                             current_user.id,
                             datetime.now(),
                         ),

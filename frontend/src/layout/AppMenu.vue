@@ -94,6 +94,14 @@ const model = computed(() => {
                             visible: ['profesional', 'director'].includes(rol)
                         },
                         {
+                            label: 'Servicios',
+                            icon: 'pi pi-fw pi-list',
+                            to: '/turnos/servicios',
+                            // Los mismos roles que la ruta y que el backend: el
+                            // `area` no define las prestaciones del consultorio.
+                            visible: ['director', 'administrativo', 'profesional'].includes(rol)
+                        },
+                        {
                             label: 'Duración de turnos',
                             icon: 'pi pi-fw pi-sliders-h',
                             to: '/turnos/configuracion',
