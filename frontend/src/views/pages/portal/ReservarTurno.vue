@@ -36,6 +36,30 @@ function horaDe(iso) {
     return iso.slice(11, 16);
 }
 
+// Mañana y tarde, en vez de una grilla corrida de veinte botones. Es como la
+// gente piensa el día cuando elige un turno: primero el rato, después la hora.
+const franjas = computed(() => {
+    const manana = horarios.value.filter((h) => Number(h.slice(11, 13)) < 13);
+    const tarde = horarios.value.filter((h) => Number(h.slice(11, 13)) >= 13);
+    return [
+        { nombre: 'Mañana', icono: 'pi-sun', horas: manana },
+        { nombre: 'Tarde', icono: 'pi-moon', horas: tarde }
+    ].filter((f) => f.horas.length);
+});
+
+// Los próximos días con lugar, para elegir sin abrir el calendario. Sale de la
+// misma consulta que ya se hacía cuando un día quedaba vacío.
+const sugeridos = ref([]);
+
+async function cargarSugeridos() {
+    try {
+        const { data } = await portalService.proximoDia(clienteId, usuarioId, hoy);
+        sugeridos.value = data.dia ? [data.dia] : [];
+    } catch {
+        sugeridos.value = [];
+    }
+}
+
 function fechaLarga(valor) {
     if (!valor) return '';
     // Se agrega la hora para que el navegador no lo interprete como UTC y
@@ -144,6 +168,7 @@ onMounted(async () => {
     }
 
     fecha.value = hoy;
+    cargarSugeridos();
 });
 </script>
 
@@ -193,9 +218,31 @@ onMounted(async () => {
                     {{ nombreProfesional || 'Elegí un horario' }}
                 </h1>
                 <p v-if="profesional" class="text-sm text-surface-500 dark:text-surface-400 mt-1 mb-0">{{ profesional.especialidad }} · {{ profesional.consultorio_nombre }}</p>
+
+                <!-- Lo que hace falta para decidir, sin tener que volver atrás:
+                     cuánto dura y dónde es. -->
+                <div v-if="profesional" class="flex flex-wrap gap-x-5 gap-y-1 mt-3 text-sm text-surface-500 dark:text-surface-400">
+                    <span v-if="profesional.duracion_turno"><i class="pi pi-clock mr-1.5"></i>Turnos de {{ profesional.duracion_turno }} minutos</span>
+                    <span v-if="profesional.lugar_direccion"><i class="pi pi-map-marker mr-1.5"></i>{{ profesional.lugar_direccion }}</span>
+                </div>
             </header>
 
             <section class="bg-surface-0 dark:bg-surface-900 border border-surface-200 dark:border-surface-700 rounded-2xl p-5 space-y-4">
+                <!-- Un atajo al primer día con lugar. El calendario nativo no
+                     sabe qué días tienen horarios, así que sin esto hay que ir
+                     probando de a uno. -->
+                <div v-if="sugeridos.length && fecha !== sugeridos[0].fecha" class="flex flex-wrap items-center gap-2 -mt-1">
+                    <span class="text-sm text-surface-500 dark:text-surface-400">Primer día con lugar:</span>
+                    <button
+                        type="button"
+                        class="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-semibold bg-primary-50 dark:bg-primary-950/40 text-primary-700 dark:text-primary-300 hover:bg-primary-100 dark:hover:bg-primary-950/70 transition"
+                        @click="fecha = sugeridos[0].fecha"
+                    >
+                        <i class="pi pi-bolt text-xs"></i>
+                        {{ fechaLarga(sugeridos[0].fecha) }}
+                    </button>
+                </div>
+
                 <div class="flex flex-col gap-2">
                     <label class="text-sm font-semibold text-surface-700 dark:text-surface-200">¿Qué día?</label>
                     <input
@@ -225,19 +272,26 @@ onMounted(async () => {
                     <p v-else class="text-sm text-surface-500 dark:text-surface-400 m-0">No encontramos horarios en las próximas dos semanas. Probá más adelante o comunicate con el consultorio.</p>
                 </div>
 
-                <div v-else-if="horarios.length" class="space-y-2">
+                <div v-else-if="horarios.length" class="space-y-4">
                     <label class="text-sm font-semibold text-surface-700 dark:text-surface-200 block">{{ horarios.length }} horarios el {{ fechaLarga(fecha) }}</label>
-                    <div class="grid grid-cols-3 sm:grid-cols-4 gap-2">
-                        <button
-                            v-for="h in horarios"
-                            :key="h"
-                            type="button"
-                            class="px-3 py-2.5 rounded-lg text-sm font-semibold transition"
-                            :class="elegido === h ? 'bg-primary-600 text-white' : 'bg-surface-100 dark:bg-surface-800 text-surface-700 dark:text-surface-200 hover:bg-surface-200 dark:hover:bg-surface-700'"
-                            @click="elegido = h"
-                        >
-                            {{ horaDe(h) }}
-                        </button>
+
+                    <div v-for="franja in franjas" :key="franja.nombre" class="space-y-2">
+                        <p class="text-xs font-semibold uppercase tracking-wide text-surface-400 dark:text-surface-500 m-0"><i class="pi mr-1" :class="franja.icono"></i>{{ franja.nombre }}</p>
+                        <!-- Más columnas en pantalla ancha: el portal usa todo el
+                             ancho del layout y estirar la página hacia abajo con
+                             tres botones por fila era desaprovecharlo. -->
+                        <div class="grid grid-cols-3 sm:grid-cols-5 lg:grid-cols-6 gap-2">
+                            <button
+                                v-for="h in franja.horas"
+                                :key="h"
+                                type="button"
+                                class="px-3 py-2.5 rounded-lg text-sm font-semibold transition"
+                                :class="elegido === h ? 'bg-primary-600 text-white' : 'bg-surface-100 dark:bg-surface-800 text-surface-700 dark:text-surface-200 hover:bg-surface-200 dark:hover:bg-surface-700'"
+                                @click="elegido = h"
+                            >
+                                {{ horaDe(h) }}
+                            </button>
+                        </div>
                     </div>
                 </div>
 
