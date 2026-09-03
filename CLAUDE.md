@@ -601,6 +601,27 @@ TTL_CACHE_CLIENTES                  # default 60s; es lo que tarda un cambio de 
 
 ⚠️ **Sin `DOMINIO_BASE`, cualquier host que apunte al servidor se interpreta como un consultorio.** Es obligatoria en producción.
 
+### El logo del consultorio y el prefijo `/api`
+
+⚠️ **Una ruta `/static/...` a secas NO llega al backend.** nginx solo enruta
+`/api/` y el servidor de desarrollo solo proxea `/api`, así que
+`/static/marcas/x.jpg` cae en el catch-all de la aplicación y devuelve el
+`index.html`: **200 con `text/html` donde el navegador espera una imagen**. Se ve
+como una imagen rota y parece un problema de formato del archivo subido.
+
+Por eso `marca.PREFIJO_ESTATICO` y `_url_servible()`: lo que se guarda lleva
+`/api/static/marcas/...`, y lo guardado antes del arreglo se normaliza **al
+leerlo** —no con una migración— para que un logo ya subido empiece a verse sin
+volver a subirlo. `logo_archivo()` no se ve afectado: toma el `basename`.
+
+Vale para cualquier archivo nuevo que se sirva desde Flask. `utils/fotoUrl.js` ya
+usaba `/api/static/fotos_usuarios/...` por esta misma razón.
+
+**Formato:** PNG o WEBP con transparencia. Un JPG no la tiene y el fondo blanco
+queda como un recuadro sobre la barra, sobre todo en modo oscuro. Se dibuja a
+40 px de alto (`AppTopbar.vue`), así que un logo apaisado se lee mejor que uno
+cuadrado.
+
 ### Quién abrió la historia de quién
 
 `app/accesos.py` sobre la tabla `accesos_historia`, una por consultorio. **No

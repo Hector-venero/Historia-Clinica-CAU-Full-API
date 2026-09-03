@@ -136,9 +136,38 @@ def nombre_corto():
     return os.getenv("MARCA_NOMBRE_CORTO") or NOMBRE_PRODUCTO
 
 
+# Prefijo con el que la ruta del logo llega de verdad al backend.
+#
+# ⚠️ `/static/...` a secas NO llega. Ni nginx ni el servidor de desarrollo lo
+# mandan a Flask: nginx solo enruta `/api/` y Vite solo proxea `/api`, asi que
+# `/static/marcas/x.jpg` cae en el catch-all de la aplicacion y devuelve el
+# index.html — **200 con text/html donde el navegador espera una imagen**. El
+# logo se veia como una imagen rota y parecia un problema de formato.
+PREFIJO_ESTATICO = "/api"
+
+
+def _url_servible(ruta):
+    """Normaliza la ruta del logo para que el navegador pueda pedirla.
+
+    Los logos subidos antes de este arreglo quedaron guardados como
+    `/static/marcas/...`, que no resuelve. Se corrige al leer y no con una
+    migracion: asi el logo que alguien ya subio empieza a verse sin tener que
+    volver a subirlo.
+    """
+    if not ruta:
+        return ruta
+    texto = str(ruta)
+    if texto.startswith("/static/"):
+        return f"{PREFIJO_ESTATICO}{texto}"
+    return texto
+
+
 def logo():
-    """Ruta del logo del consultorio, o None para usar el del sistema."""
-    return _valor("logo", "MARCA_LOGO")
+    """Ruta del logo del consultorio, o None para usar el del sistema.
+
+    Es lo que va en un `<img src>`, ya normalizado: ver `_url_servible()`.
+    """
+    return _url_servible(_valor("logo", "MARCA_LOGO"))
 
 
 # Logo de la instalacion de un solo centro: el CAU.

@@ -374,7 +374,10 @@ const eliminarFoto = async () => {
                                 <input type="file" accept=".png,.jpg,.jpeg,.webp" class="hidden" :disabled="subiendoLogo" @change="subirLogo" />
                             </label>
                             <button v-if="marcaStore.logo" type="button" class="text-sm text-red-600 dark:text-red-400 hover:underline text-left" :disabled="subiendoLogo" @click="quitarLogo">Quitar logo</button>
-                            <span class="text-xs text-surface-500 dark:text-surface-400">PNG, JPG o WEBP, hasta 2 MB.</span>
+                            <span class="text-xs text-surface-500 dark:text-surface-400"
+                                >PNG o WEBP con fondo transparente, hasta 2 MB. Un JPG no tiene transparencia: el fondo blanco se ve como un recuadro sobre la barra, sobre todo en modo oscuro. Se muestra a 40 px de alto, así que un logo apaisado se
+                                lee mejor que uno cuadrado.</span
+                            >
                         </div>
                     </div>
 

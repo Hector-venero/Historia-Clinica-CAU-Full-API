@@ -98,7 +98,10 @@ def subir_logo():
 
     archivo.save(destino)
 
-    url = f"/static/{CARPETA}/{nombre_archivo}"
+    # Con el prefijo /api, que es el unico que llega a Flask: ni nginx ni el
+    # servidor de desarrollo enrutan `/static/` al backend. Sin el, el navegador
+    # recibia el index.html con 200 y la imagen se veia rota.
+    url = f"{marca.PREFIJO_ESTATICO}/static/{CARPETA}/{nombre_archivo}"
     plataforma.guardar_config(cliente.id, logo=url)
 
     # El catalogo esta cacheado en memoria: sin invalidar, el logo nuevo tarda
